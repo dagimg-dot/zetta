@@ -1,0 +1,20 @@
+# Zig
+.zig-cache/
+zig-out/
+
+# Web
+node_modules/
+web/dist/
+*.tsbuildinfo
+
+# Local reference docs
+/docs/
+*.md
+!README.md
+!AGENTS.md
+!CLAUDE.md
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/

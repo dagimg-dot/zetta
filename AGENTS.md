@@ -1,0 +1,94 @@
+# zetta
+
+A single-binary database explorer. Point it at Postgres or SQLite, browse and query in the browser, or script it from the shell.
+
+The design lives in `docs/DESIGN.md`. It is local reference and not tracked. Nothing in it is decided until it lands in code.
+
+## Stack
+
+- **Zig 0.16.0 only.** The global `zig` on this machine may point at another version, so check `zig version`. Use `~/.zvm/0.16.0/zig` when they differ.
+- **Postgres** goes through libpq. **SQLite** is the official amalgamation in `vendor/sqlite3`, compiled into the binary. Keep `EXPLAIN` and the introspection pragmas enabled, because an explorer needs them.
+- **Web UI:** Solid 1.x, Vite and TypeScript in `web/`, built with bun into one `index.html` that the binary embeds.
+  - There's no router. View state lives in the URL search params.
+  - CSS is plain and icons are hand-drawn SVG.
+  - Use bun only, never npm or pnpm.
+
+## Rules
+
+- **Orchestration.** `src/main.zig` parses argv, resolves settings, dispatches to a command in `src/commands/` and maps the result to an exit code. Logic goes in the layer that owns it, never in `main.zig`.
+- **Layering.**
+  - Imports go one way: `commands → server → db`, and `commands → cli`.
+  - `db` never imports HTTP code. `server` never names libpq, sqlite3 or a concrete adapter. `cli` knows nothing about databases.
+  - Each module directory has a `root.zig` that re-exports its public API and pulls in its tests.
+- **Adapters.**
+  - Each database is a folder in `src/db/<name>/` that implements the `Adapter` vtable in `src/db/Adapter.zig`.
+  - Only `src/db/open.zig` names concrete adapters.
+  - Dialect SQL, identifier quoting and catalog queries stay inside the adapter.
+  - Every adapter passes `src/db/conformance.zig`. A new adapter behaviour gets a conformance case first.
+- **CLI.**
+  - Commands, flags, args, env vars, defaults and help text are declared once in the comptime spec, in the style of jdx's usage framework.
+  - The parser, `-h`, `--help`, completions and `zetta __spec` are generated from that spec. Never hand-write help text or completion scripts.
+  - Every flag has an env var. Precedence is argv, then env, then config file, then the default. Help shows env var names, never their values.
+  - Exit codes: `0` success, `1` runtime error, `2` usage error.
+  - Results go to stdout, and diagnostics and logs go to stderr.
+- **Errors.**
+  - Functions return Zig errors plus a `Diagnostic` the caller passes in. Only `main.zig` and the HTTP handlers print or serialise errors.
+  - No `catch {}`. Every error is propagated, logged with its value through a scoped logger, or has a comment saying why it can't happen.
+  - The HTTP API answers errors as `{ "error": "<code>", "message": "<text>" }`.
+- **Memory.**
+  - Every request and every command gets an arena. Adapters copy rows into the caller's allocator, so nothing owned by libpq or sqlite3 outlives a call.
+  - Argument parsing never touches the heap.
+- **Security.**
+  - `serve` binds to `127.0.0.1` by default and refuses a non-loopback host without `--token`.
+  - `--read-only` is enforced inside each adapter, not in the UI.
+  - Never log tokens, cookies or passwords. Redact the password in any DSN before printing it.
+- **Web.**
+  - The UI talks to the server only through `web/src/api.ts`, whose types mirror the server's JSON.
+  - Runtime dependencies are `solid-js` and nothing else. Ask before adding any dependency on either side.
+
+## Zig 0.16 idioms
+
+- `std.ArrayList(T)` is unmanaged. Initialise it with `.empty` and pass the allocator per call.
+- Every list and duped string in a fallible builder gets its own `errdefer` before the next fallible call.
+- `std.StringHashMap` keys are borrowed. Dupe them when the source outlives the map.
+- `@memcpy` requires equal lengths, so compute both in one place.
+- Use `std.Io.Writer`/`std.Io.Reader` and the `std.Io` passed from `main`. Never reach for globals.
+- Use `std.process.Init` in `main` for the allocator, the `Io`, args and the environment.
+- When debugging a crash, reproduce it with batch GDB before adding prints:
+  ```bash
+  gdb -batch -ex "r" -ex "bt full" -ex "thread apply all bt" --args ./zig-out/bin/zetta serve <dsn>
+  ```
+
+## Code style
+
+- Format Zig with `zig fmt` and the web code with the project's formatter.
+- A file that is a struct is named in TitleCase (`Adapter.zig`, `Server.zig`). Other files are snake_case.
+- No comments that restate the code. Write a doc comment only when the code can't say it itself.
+- Name tests for the behaviour they check ("empty schema still lists"), not for the function.
+
+## Verification
+
+Run both before reporting a change as done. Both must pass with 0 failures and 0 leaks:
+
+```bash
+zig build check   # zig fmt --check + full build
+zig build test
+```
+
+Once `web/` exists, `bun run check` in `web/` also has to pass. A change in behaviour comes with a test in the module that owns it. When a test is deleted, port it rather than dropping it.
+
+## Docs
+
+- Documents are Markdown in `docs/`, which is gitignored. Only `README.md`, `AGENTS.md` and `CLAUDE.md` are tracked, and `CLAUDE.md` is a symlink to this file.
+- Write plain prose and tables. No em-dashes and no emojis.
+- Put decisions to the user as choices, not as open lists inside documents.
+
+## Commits
+
+- Commit only when asked and push only when asked. Keep each commit atomic.
+- Use present tense with a semantic prefix (`feat:`, `fix:`, `refactor:`, `docs:`, `build:`, `chore:`). The body is 2 or 3 sentences at most.
+- No `Co-authored-by:` or attribution footers.
+
+## Reports
+
+Say what changed, what was verified and how, and what was left out and why. Lead with anything that couldn't be verified. Give numbers only when they change what the reader does next.
