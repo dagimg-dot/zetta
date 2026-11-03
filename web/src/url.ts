@@ -21,9 +21,11 @@ export interface View {
 	order: string;
 	offset: number;
 	limit: number;
+	/** Columns hidden in the rows view, by name, one `hide` parameter each. */
+	hide: string[];
 }
 
-function parse(search: string): View {
+export function parse(search: string): View {
 	const p = new URLSearchParams(search);
 	const offset = Number.parseInt(p.get("offset") ?? "", 10);
 	const limit = Number.parseInt(p.get("limit") ?? "", 10);
@@ -37,10 +39,11 @@ function parse(search: string): View {
 		order: p.get("order") ?? "",
 		offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
 		limit: pageSizes.find((n) => n === limit) ?? defaultPageSize,
+		hide: [...new Set(p.getAll("hide").filter(Boolean))],
 	};
 }
 
-function serialize(v: View): string {
+export function serialize(v: View): string {
 	const p = new URLSearchParams();
 	if (v.schema !== null) p.set("schema", v.schema);
 	if (v.table !== null) p.set("table", v.table);
@@ -51,6 +54,7 @@ function serialize(v: View): string {
 	if (v.order) p.set("order", v.order);
 	if (v.offset) p.set("offset", String(v.offset));
 	if (v.limit !== defaultPageSize) p.set("limit", String(v.limit));
+	for (const name of v.hide) p.append("hide", name);
 	const s = p.toString();
 	return s ? `?${s}` : location.pathname;
 }
@@ -80,7 +84,7 @@ export function openTable(schema: string, table: string): void {
 	setView(
 		same
 			? { tab: "data" }
-			: { schema, table, tab: "data", q: "", filter: "", order: "", offset: 0 },
+			: { schema, table, tab: "data", q: "", filter: "", order: "", offset: 0, hide: [] },
 		same ? "replace" : "push",
 	);
 }
@@ -98,7 +102,7 @@ export function openRowsWhere(
 		sorts: [],
 	});
 	setView(
-		{ schema, table, tab: "data", pane: "rows", q, filter: "", order: "", offset: 0 },
+		{ schema, table, tab: "data", pane: "rows", q, filter: "", order: "", offset: 0, hide: [] },
 		"push",
 	);
 }

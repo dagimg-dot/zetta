@@ -29,6 +29,8 @@ export interface HeaderActions {
 	hide: (col: string) => void;
 	copy: (col: string) => void;
 	open: (schema: string, table: string) => void;
+	/** Opens the list of every column, to show or hide many at once. */
+	columns?: () => void;
 }
 
 /**
@@ -88,6 +90,7 @@ export function HeaderMenu(props: {
 		else if (verb === "null") props.actions.filter({ c: t.name, op: "is_null", v: "" });
 		else if (verb === "notnull") props.actions.filter({ c: t.name, op: "not_null", v: "" });
 		else if (verb === "hide") props.actions.hide(t.name);
+		else if (verb === "columns") props.actions.columns?.();
 		else if (verb === "copy") props.actions.copy(t.name);
 		else if (verb === "open" && t.link) props.actions.open(t.link.schema, t.link.table);
 	};
@@ -156,6 +159,7 @@ export function HeaderMenu(props: {
 										<Show when={t().link}>{(l) => item("open", `Open ${l().table}`, "go")}</Show>
 										{item("copy", "Copy name", "copy")}
 										{item("hide", "Hide column", "fold")}
+										<Show when={props.actions.columns}>{item("columns", "Choose columns…")}</Show>
 									</>
 								)}
 							</Show>

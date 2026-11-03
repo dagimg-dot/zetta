@@ -18,15 +18,9 @@ import { openRowsWhere, openTable, setView, view } from "../url";
 import { closest, unknownColumn } from "../value";
 import { Button } from "./Button";
 import type { ColumnChoice } from "./ColumnPicker";
+import { Columns } from "./Columns";
 import { ErrorBox } from "./ErrorBox";
-import {
-	createHidden,
-	createSelection,
-	Grid,
-	HiddenButton,
-	type Links,
-	SelectionNote,
-} from "./Grid";
+import { createSelection, Grid, type Hidden, type Links, SelectionNote } from "./Grid";
 import { Loader } from "./icons";
 import { Loading } from "./Loading";
 import { Pager } from "./Pager";
@@ -40,7 +34,10 @@ export function RowsPane(props: {
 	approxRows: number | null;
 	filterRef?: (el: HTMLInputElement) => void;
 }) {
-	const hidden = createHidden();
+	/** Hidden columns live in the URL, so a link keeps them and opening another table drops them. */
+	const hiddenNames = createMemo(() => new Set(view().hide));
+	const hidden: Hidden = { hidden: hiddenNames, set: (next) => setView({ hide: [...next] }) };
+	const [choosing, setChoosing] = createSignal(false);
 	const selection = createSelection();
 	const applied = createMemo(() => decodeBuilder(view().q));
 	const raw = createMemo(() => !view().q && (view().filter !== "" || view().order !== ""));
@@ -72,13 +69,6 @@ export function RowsPane(props: {
 		on(
 			() => view().order,
 			(o) => setRawOrder(o),
-		),
-	);
-	createEffect(
-		on(
-			() => `${props.schema}\u0000${props.table}`,
-			() => hidden.clear(),
-			{ defer: true },
 		),
 	);
 
@@ -206,6 +196,7 @@ export function RowsPane(props: {
 			applyBuilder({ ...base, filters: [...base.filters.filter((x) => x.c !== f.c), f] });
 		},
 		open: (schema: string, table: string) => openTable(schema, table),
+		columns: () => setChoosing(true),
 	};
 
 	/** Single-column foreign keys out of this table, and references into it, for the grid and inspector. */
@@ -539,7 +530,14 @@ export function RowsPane(props: {
 				</Show>
 				<SelectionNote selection={selection} total={result()?.rows.length ?? 0} />
 				<span class="spacer" />
-				<HiddenButton hidden={hidden} />
+				<Show when={result()?.columns.length}>
+					<Columns
+						columns={result()?.columns ?? []}
+						hidden={hidden}
+						open={choosing()}
+						onOpenChange={setChoosing}
+					/>
+				</Show>
 				<Show when={result()}>
 					{(r) => (
 						<Pager

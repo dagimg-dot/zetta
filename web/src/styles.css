@@ -924,6 +924,22 @@ th.collapsed .ico.fold {
 	opacity: 1;
 }
 
+/* A run of several hidden columns: one stub that says how many it holds. */
+.grid th.collapsed:has(.many) {
+	width: auto;
+	max-width: none;
+}
+
+th.collapsed .ico.fold.many {
+	gap: 2px;
+	padding: 3px 4px;
+}
+
+.run-n {
+	font: var(--text-xs) var(--font-sans);
+	font-variant-numeric: tabular-nums;
+}
+
 .grid td {
 	padding: 5px var(--space-3);
 	border-bottom: 1px solid var(--border-subtle);
@@ -2749,6 +2765,75 @@ button.rel-node:hover,
 
 .pop-item[data-state="open"] {
 	background: var(--surface-hover);
+}
+
+/* The column checklist: a search, one checkbox per column, and the bulk actions under it. */
+.cols-pop {
+	display: flex;
+	flex-direction: column;
+	width: min(340px, calc(100vw - 32px));
+	max-height: min(460px, var(--available-height, 460px));
+}
+
+/* Ark hides a closed popover with the hidden attribute, which the display above would override. */
+.cols-pop[hidden] {
+	display: none;
+}
+
+.cols-find {
+	display: block;
+	flex: none;
+	margin: 0 var(--space-1) var(--space-1);
+}
+
+.cols-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.cols-list fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	min-width: 0;
+}
+
+.cols-item input {
+	flex: none;
+	margin: 0;
+	accent-color: var(--accent);
+}
+
+.cols-type {
+	flex: none;
+	max-width: 40%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-secondary);
+	font: var(--text-xs) var(--font-mono);
+}
+
+.cols-item:hover,
+.cols-item:has(input:focus-visible) {
+	background: var(--surface-hover);
+}
+
+.cols-foot {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--space-1-5);
+	margin: var(--space-1) calc(-1 * var(--space-1)) calc(-1 * var(--space-1));
+	padding: var(--space-1-5) var(--space-2);
+	border-top: 1px solid var(--border-subtle);
+}
+
+.cols-foot .note {
+	min-width: 0;
+	color: var(--text-warning);
+	font-size: var(--text-xs);
 }
 
 .pop-empty {

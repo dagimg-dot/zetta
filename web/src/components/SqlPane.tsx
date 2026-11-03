@@ -13,8 +13,9 @@ import {
 	statements,
 } from "../value";
 import { Button } from "./Button";
+import { Columns } from "./Columns";
 import { ErrorBox } from "./ErrorBox";
-import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
+import { createHidden, createSelection, Grid, SelectionNote } from "./Grid";
 import { Loader } from "./icons";
 import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
@@ -91,7 +92,8 @@ export function SqlPane(props: {
 	createEffect(
 		on(sql, (s) => props.database !== undefined && save(storageKey(), s), { defer: true }),
 	);
-	createEffect(on(query.data, () => hidden.clear(), { defer: true }));
+	const [choosing, setChoosing] = createSignal(false);
+	createEffect(on(query.data, () => hidden.set(new Set()), { defer: true }));
 	createEffect(
 		on(
 			() => props.active,
@@ -359,7 +361,14 @@ export function SqlPane(props: {
 				</Show>
 				<SelectionNote selection={selection} total={query.data()?.rows.length ?? 0} />
 				<span class="spacer" />
-				<HiddenButton hidden={hidden} />
+				<Show when={query.data()?.columns.length}>
+					<Columns
+						columns={query.data()?.columns ?? []}
+						hidden={hidden}
+						open={choosing()}
+						onOpenChange={setChoosing}
+					/>
+				</Show>
 			</div>
 		</section>
 	);

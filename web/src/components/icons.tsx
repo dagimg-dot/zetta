@@ -13,6 +13,12 @@ const paths = {
 	bolt: () => <path d="M6.8 1.2 2.8 6.6h3l-.6 4.2 4-5.4h-3Z" />,
 	fold: () => <path d="M2 3l2.5 3L2 9M10 3 7.5 6 10 9" />,
 	unfold: () => <path d="M4.5 3 2 6l2.5 3M7.5 3 10 6 7.5 9" />,
+	columns: () => (
+		<>
+			<rect x="1.5" y="2" width="9" height="8" rx="1" />
+			<path d="M4.5 2v8M7.5 2v8" />
+		</>
+	),
 	key: () => (
 		<>
 			<circle cx="3.8" cy="6" r="2.2" />

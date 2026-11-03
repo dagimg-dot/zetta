@@ -12,6 +12,7 @@ import {
 import { announce } from "../announce";
 import type { Column, ResultColumn, ResultSet } from "../api";
 import { copyRich, copyText } from "../clipboard";
+import { hiddenRuns } from "../columns";
 import { type FormatId, fileName, format, htmlTable, pick } from "../copy";
 import { plural } from "../format";
 import { whitespace } from "../marks";
@@ -43,34 +44,18 @@ export interface Links {
 	filterBy: (column: string, value: string | null) => void;
 }
 
-export function createHidden() {
-	const [hidden, setHidden] = createSignal<ReadonlySet<number>>(new Set());
-	return {
-		hidden,
-		toggle(i: number) {
-			const next = new Set(hidden());
-			if (!next.delete(i)) next.add(i);
-			setHidden(next);
-		},
-		clear() {
-			if (hidden().size) setHidden(new Set<number>());
-		},
-	};
+/**
+ * Which columns are hidden, by name, so the choice survives a new page of rows and can live in the
+ * URL. The rows view keeps it there; the SQL tab keeps it in memory with `createHidden`.
+ */
+export interface Hidden {
+	hidden: () => ReadonlySet<string>;
+	set: (next: ReadonlySet<string>) => void;
 }
 
-export type Hidden = ReturnType<typeof createHidden>;
-
-export function HiddenButton(props: { hidden: Hidden }) {
-	const n = () => props.hidden.hidden().size;
-	return (
-		<Show when={n()}>
-			<Button variant="quiet" size="sm" onClick={() => props.hidden.clear()}>
-				<span class="wide-only">Show </span>
-				{n()} hidden
-				<span class="wide-only"> column{n() > 1 ? "s" : ""}</span>
-			</Button>
-		</Show>
-	);
+export function createHidden(): Hidden {
+	const [hidden, set] = createSignal<ReadonlySet<string>>(new Set());
+	return { hidden, set };
 }
 
 /**
@@ -236,7 +221,7 @@ export function Grid(props: {
 	columnInfo?: (name: string) => Column | undefined;
 	links?: Links;
 	/** Turns on the column menu: sort, filter, hide and copy, from a header button or a right-click. */
-	actions?: Pick<HeaderActions, "sort" | "filter" | "open">;
+	actions?: Pick<HeaderActions, "sort" | "filter" | "open" | "columns">;
 	stale?: boolean;
 }) {
 	const id = `g${++gridSeq}`;
@@ -284,9 +269,19 @@ export function Grid(props: {
 
 	const numeric = createMemo(() => props.result.columns.map((c) => isNumericType(c.type)));
 	const linked = createMemo(() => props.result.columns.map((c) => !!props.links?.outgoing(c.name)));
+	const hiddenIdx = createMemo(() => {
+		const h = props.hidden.hidden();
+		return new Set(props.result.columns.flatMap((c, i) => (h.has(c.name) ? [i] : [])));
+	});
 	const visibleCols = createMemo(() =>
-		props.result.columns.map((_, i) => i).filter((i) => !props.hidden.hidden().has(i)),
+		props.result.columns.map((_, i) => i).filter((i) => !hiddenIdx().has(i)),
 	);
+	const runs = createMemo(() => hiddenRuns(props.result.columns.map((_, i) => hiddenIdx().has(i))));
+	/** The run a hidden column belongs to, by the index of its stub. */
+	const runOf = (i: number) => {
+		for (const [start, members] of runs()) if (members.includes(i)) return start;
+		return -1;
+	};
 
 	/**
 	 * Bumps whenever drawn rows go stale: a new result, or links and number columns that arrive after
@@ -823,29 +818,56 @@ export function Grid(props: {
 
 	/** Hides or shows a column. The last one shown stays, so the grid never goes blank. */
 	const flipColumn = (i: number): boolean => {
-		const hiding = !props.hidden.hidden().has(i);
+		const name = props.result.columns[i]?.name;
+		if (name === undefined) return false;
+		const hiding = !hiddenIdx().has(i);
 		if (hiding && visibleCols().length <= 1) {
 			props.selection.tell("The last column stays shown");
 			return false;
 		}
-		props.hidden.toggle(i);
+		const next = new Set(props.hidden.hidden());
+		if (hiding) next.add(name);
+		else next.delete(name);
+		props.hidden.set(next);
 		return true;
 	};
 
+	/** A hidden column lands in a run, so focus goes to that run's stub. */
 	const toggleColumn = (i: number, name: string, collapsing: boolean) => {
 		if (!flipColumn(i)) return;
-		queueMicrotask(() => focusHeader(name, collapsing ? "expand" : "label"));
+		queueMicrotask(() => {
+			const stub = props.result.columns[runOf(i)]?.name;
+			if (collapsing && stub !== undefined) focusHeader(stub, "expand");
+			else focusHeader(name);
+		});
 	};
 
-	const collapseCss = () =>
-		[...props.hidden.hidden()]
-			.map((i) => `table[data-grid="${id}"] td:nth-child(${i + 2})`)
-			.join(",")
-			.concat(
-				props.hidden.hidden().size
-					? "{width:30px;min-width:30px;max-width:30px;padding:0;font-size:0;background:var(--surface-chrome)}"
-					: "",
-			);
+	const runLabel = (members: number[], name: string) =>
+		members.length > 1
+			? `Show ${members.length} hidden columns: ${members.map((m) => props.result.columns[m]?.name).join(", ")}`
+			: `Show column ${name}`;
+
+	/** Shows every column in the run whose stub is at `start`. */
+	const showRun = (start: number) => {
+		const members = runs().get(start) ?? [];
+		const names = new Set(members.map((i) => props.result.columns[i]?.name));
+		const first = props.result.columns[start]?.name;
+		props.hidden.set(new Set([...props.hidden.hidden()].filter((n) => !names.has(n))));
+		if (first !== undefined) queueMicrotask(() => focusHeader(first));
+	};
+
+	/** A run draws as one narrow stub at its first column; the rest of it collapses to nothing. */
+	const collapseCss = () => {
+		const at = (i: number, part: string) => `table[data-grid="${id}"] ${part}:nth-child(${i + 2})`;
+		const stubs = [...runs().keys()].map((i) => at(i, "td"));
+		const rest = [...runs().values()].flatMap((m) => m.slice(1).map((i) => at(i, "col")));
+		return [
+			stubs.length
+				? `${stubs.join(",")}{width:30px;min-width:30px;max-width:30px;padding:0;font-size:0;background:var(--surface-chrome)}`
+				: "",
+			rest.length ? `${rest.join(",")}{visibility:collapse}` : "",
+		].join("");
+	};
 
 	onCleanup(() => cells.clear());
 
@@ -898,7 +920,7 @@ export function Grid(props: {
 								{(_, i) => (
 									<col
 										style={{
-											width: props.hidden.hidden().has(i())
+											width: hiddenIdx().has(i())
 												? undefined
 												: `calc(${colChars()[i()] ?? 0}ch + 24px)`,
 										}}
@@ -916,7 +938,8 @@ export function Grid(props: {
 								<For each={props.result.columns}>
 									{(c, i) => {
 										const info = () => props.columnInfo?.(c.name);
-										const off = () => props.hidden.hidden().has(i());
+										const off = () => hiddenIdx().has(i());
+										const run = () => runs().get(i());
 										const sortAt = () => props.sorts?.findIndex((s) => s.c === c.name) ?? -1;
 										const sorted = () => props.sorts?.[sortAt()] ?? null;
 										return (
@@ -949,14 +972,26 @@ export function Grid(props: {
 													<Show
 														when={!off()}
 														fallback={
-															<Button
-																variant="bare"
-																class="ico fold"
-																icon="unfold"
-																label={`Show column ${c.name}`}
-																data-expand={c.name}
-																onClick={() => toggleColumn(i(), c.name, false)}
-															/>
+															<Show when={run()}>
+																{(members) => (
+																	<Button
+																		variant="bare"
+																		class="ico fold"
+																		classList={{ many: members().length > 1 }}
+																		icon="unfold"
+																		// The count makes this a button with text, so it is named and tipped directly.
+																		aria-label={runLabel(members(), c.name)}
+																		tip={runLabel(members(), c.name)}
+																		tipSide="bottom"
+																		data-expand={c.name}
+																		onClick={() => showRun(i())}
+																	>
+																		<Show when={members().length > 1}>
+																			<span class="run-n">{members().length}</span>
+																		</Show>
+																	</Button>
+																)}
+															</Show>
 														}
 													>
 														<Show
@@ -1137,6 +1172,7 @@ export function Grid(props: {
 								const i = props.result.columns.findIndex((c) => c.name === name);
 								if (i >= 0) toggleColumn(i, name, true);
 							},
+							columns: a().columns,
 							copy: async (name) => {
 								props.selection.tell(
 									(await copyText(name)) ? `Copied the name ${name}` : "Copy failed",
