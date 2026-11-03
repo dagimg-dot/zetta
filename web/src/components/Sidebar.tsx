@@ -1,10 +1,12 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "../api";
+import { sidebarWidth } from "../layout";
 import { openTable, view } from "../url";
 import { ErrorBox } from "./ErrorBox";
 import { Icon, Mark } from "./icons";
 import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
+import { Splitter } from "./Splitter";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { IconButton, tip } from "./Tip";
 
@@ -93,9 +95,7 @@ export function Sidebar(props: {
 					<span class="badge">{kind}</span>
 				</Show>
 				<Show when={showRows() && p.t.approxRows !== null}>
-					<span class="rows">
-						{approx(p.t.approxRows ?? 0)}
-					</span>
+					<span class="rows">{approx(p.t.approxRows ?? 0)}</span>
 				</Show>
 			</button>
 		);
@@ -207,6 +207,7 @@ export function Sidebar(props: {
 				<span class="label">Theme</span>
 				<ThemeSwitch />
 			</footer>
+			<Splitter width={sidebarWidth} edge="right" label="Resize the sidebar" />
 		</aside>
 	);
 }

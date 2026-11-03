@@ -142,6 +142,7 @@ button:focus-visible,
 /* Sidebar */
 
 aside {
+	position: relative;
 	background: var(--surface-chrome);
 	border-right: 1px solid var(--border);
 	display: flex;
@@ -935,6 +936,7 @@ th.collapsed .ico.fold {
 /* Inspector */
 
 .inspector {
+	position: relative;
 	width: var(--inspector-width);
 	flex: none;
 	display: flex;
@@ -1152,6 +1154,56 @@ th.collapsed .ico.fold {
 	display: none;
 }
 
+/* Splitter: a panel edge you drag, or focus and move with the arrow keys */
+
+.splitter {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 9px;
+	/* Above the grid's sticky header, which the grab area overlaps by a few pixels. */
+	z-index: var(--z-overlay);
+	cursor: col-resize;
+	touch-action: none;
+	outline: none;
+}
+
+.splitter.right {
+	right: -5px;
+}
+
+.splitter.left {
+	left: -5px;
+}
+
+/* The visible line is thin and sits on the panel border; the grab area around it is wider. */
+.splitter::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 4px;
+	width: 1px;
+	background: transparent;
+	transition:
+		background-color var(--duration) var(--ease-out),
+		box-shadow var(--duration) var(--ease-out);
+}
+
+.splitter:hover::after,
+.splitter:focus-visible::after,
+.splitter.dragging::after {
+	background: var(--accent);
+	box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* While dragging, the pointer keeps the resize cursor over everything and text stays unselected. */
+body.resizing,
+body.resizing * {
+	cursor: col-resize !important;
+	user-select: none;
+}
+
 /* Narrow windows: the sidebar becomes a drawer, the inspector covers the grid. */
 
 .scrim {
@@ -1191,6 +1243,10 @@ th.collapsed .ico.fold {
 		display: inline-flex;
 		align-self: center;
 		margin-right: var(--space-1);
+	}
+
+	.splitter {
+		display: none;
 	}
 
 	.inspector {

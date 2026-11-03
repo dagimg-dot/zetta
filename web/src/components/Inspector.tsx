@@ -1,8 +1,10 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { announce } from "../announce";
+import { inspectorWidth } from "../layout";
 import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
 import { Icon, type IconName } from "./icons";
 import { Kbd } from "./Kbd";
+import { Splitter } from "./Splitter";
 import { IconButton, tip } from "./Tip";
 
 export interface InspectorAction {
@@ -190,6 +192,7 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 				<Kbd keys="Esc" />
 				<span>close</span>
 			</footer>
+			<Splitter width={inspectorWidth} edge="left" label="Resize the inspector" />
 		</section>
 	);
 }
