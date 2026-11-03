@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { clamp, sidebarWidth } from "./layout";
+import { clamp, inspectorWidth, sidebarWidth } from "./layout";
 
 test("a dragged width stays between its limits", () => {
 	expect(clamp(100, 180, 560)).toBe(180);
@@ -16,4 +16,16 @@ test("resetting a panel returns it to its first width", () => {
 	expect(sidebarWidth.value()).toBe(sidebarWidth.min);
 	sidebarWidth.reset();
 	expect(sidebarWidth.value()).toBe(sidebarWidth.initial);
+});
+
+test("a narrow window shrinks the inspector without forgetting its width", () => {
+	inspectorWidth.set(700);
+	const wide = globalThis.innerWidth;
+	globalThis.innerWidth = 1000;
+	globalThis.dispatchEvent(new Event("resize"));
+	expect(inspectorWidth.value()).toBe(1000 - sidebarWidth.value() - 240);
+	globalThis.innerWidth = wide;
+	globalThis.dispatchEvent(new Event("resize"));
+	expect(inspectorWidth.value()).toBe(700);
+	inspectorWidth.reset();
 });

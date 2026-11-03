@@ -62,7 +62,9 @@ export function HiddenButton(props: { hidden: Hidden }) {
 	return (
 		<Show when={n()}>
 			<Button variant="quiet" onClick={() => props.hidden.clear()}>
-				Show {n()} hidden column{n() > 1 ? "s" : ""}
+				<span class="wide-only">Show </span>
+				{n()} hidden
+				<span class="wide-only"> column{n() > 1 ? "s" : ""}</span>
 			</Button>
 		</Show>
 	);
@@ -279,6 +281,9 @@ export function Grid(props: {
 	 * Column widths from every row, not just the drawn ones, so columns hold still while scrolling.
 	 * Cells are monospace, so a character count in `ch` is the width; long values stop at the cap.
 	 */
+	/** The row-number column fits the largest number on the page, so spare width goes to the filler. */
+	const rnDigits = () => String((props.offset ?? 0) + props.result.rows.length).length;
+
 	const colChars = createMemo(() => {
 		const { columns, rows } = props.result;
 		const widest = columns.map(() => 0);
@@ -704,7 +709,8 @@ export function Grid(props: {
 	const cellAt = (target: EventTarget | null): Cursor | null => {
 		const td = (target as HTMLElement | null)?.closest?.("td");
 		const tr = td?.parentElement as HTMLTableRowElement | null;
-		if (!td || !tr?.dataset.row || td.classList.contains("rn")) return null;
+		if (!td || !tr?.dataset.row || td.classList.contains("rn") || td.classList.contains("fill"))
+			return null;
 		const row = Number(tr.dataset.row);
 		const col = td.cellIndex - 1;
 		return col >= 0 && row >= 0 ? { row, col } : null;
@@ -843,7 +849,7 @@ export function Grid(props: {
 						onFocus={onFocus}
 					>
 						<colgroup>
-							<col />
+							<col style={{ width: `calc(${rnDigits()}ch + 24px)` }} />
 							<For each={props.result.columns}>
 								{(_, i) => (
 									<col
@@ -855,6 +861,7 @@ export function Grid(props: {
 									/>
 								)}
 							</For>
+							<col />
 						</colgroup>
 						<thead>
 							<tr>
@@ -994,6 +1001,8 @@ export function Grid(props: {
 										);
 									}}
 								</For>
+								{/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: header cells take no focus; this one only holds the width a narrow table leaves. */}
+								<th class="fill" aria-hidden="true" />
 							</tr>
 						</thead>
 						<tbody>
@@ -1021,6 +1030,7 @@ export function Grid(props: {
 										>
 											<td class="rn">{(props.offset ?? 0) + r + 1}</td>
 											{tds}
+											<td class="fill" aria-hidden="true" />
 										</tr>
 									);
 								}}

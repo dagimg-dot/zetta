@@ -49,6 +49,9 @@ body {
 
 .sr-only {
 	position: absolute;
+	/* Pinned to its container's corner: left at its static place, it can sit far below a scroller's fold and stretch the page. */
+	top: 0;
+	left: 0;
 	width: 1px;
 	height: 1px;
 	margin: -1px;
@@ -677,6 +680,10 @@ textarea.editor:focus-visible {
 	line-height: 1.6;
 }
 
+.empty .mono {
+	overflow-wrap: anywhere;
+}
+
 .empty strong {
 	display: block;
 	color: var(--text);
@@ -796,6 +803,9 @@ textarea.editor:focus-visible {
 }
 
 .th .sort-ind {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
 	color: var(--text-secondary);
 	opacity: 0.6;
 }
@@ -903,6 +913,12 @@ th.collapsed .ico.fold {
 .grid tr.cur-row td.rn {
 	color: var(--text-accent);
 	font-weight: var(--weight-semibold);
+}
+
+/* Takes the width a narrow table leaves, so the row numbers keep theirs. */
+.grid .fill {
+	max-width: none;
+	padding: 0;
 }
 
 .grid td.rn,
@@ -1249,6 +1265,11 @@ body.resizing * {
 		display: none;
 	}
 
+	/* The inspector lays over the rows only, so the tabs, filters and pager stay in reach. */
+	.work {
+		position: relative;
+	}
+
 	.inspector {
 		position: absolute;
 		inset: 0 0 0 auto;
@@ -1256,9 +1277,18 @@ body.resizing * {
 		z-index: var(--z-overlay);
 		box-shadow: var(--shadow-overlay);
 	}
+
+	/* Keeps the cursor cell out from under the inspector when it scrolls into view. */
+	.work:has(> .inspector) .grid {
+		scroll-padding-right: min(380px, 100%);
+	}
 }
 
 @media (max-width: 560px) {
+	.inspector {
+		width: 100%;
+	}
+
 	.bar .grow,
 	.bar .ord {
 		flex: 1 1 100%;
@@ -1438,6 +1468,26 @@ body.resizing * {
 	margin: var(--space-1) 0 -1px calc(-1 * var(--space-2));
 	overflow-x: auto;
 	scrollbar-width: none;
+	--fade: 32px;
+}
+
+/* A narrow window scrolls the tabs; the hidden side fades so the strip reads as scrollable. */
+.subtabs.more-right {
+	mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+}
+
+.subtabs.more-left {
+	mask-image: linear-gradient(to left, #000 calc(100% - var(--fade)), transparent);
+}
+
+.subtabs.more-left.more-right {
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 var(--fade),
+		#000 calc(100% - var(--fade)),
+		transparent
+	);
 }
 
 .subtab {
@@ -1512,6 +1562,9 @@ body.resizing * {
 .q-grid {
 	display: grid;
 	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	/* Many filters scroll here, so the grid and the Apply bar stay in view. */
+	max-height: 40vh;
+	overflow-y: auto;
 }
 
 .q-filters,
@@ -1666,7 +1719,6 @@ body.resizing * {
 	font-weight: var(--weight-semibold);
 	color: var(--text-accent);
 	font-variant-numeric: tabular-nums;
-	margin-left: -2px;
 }
 
 /* Inspector: actions on the value */
@@ -1776,10 +1828,11 @@ body.resizing * {
 /* Information panes: structure, indexes, relationships, triggers, DDL */
 
 .sheet {
+	--sheet-pad: var(--space-4);
 	flex: 1;
 	min-height: 0;
 	overflow: auto;
-	padding: var(--space-4) var(--space-4) var(--space-8);
+	padding: var(--sheet-pad) var(--sheet-pad) var(--space-8);
 	background: var(--surface);
 	display: flex;
 	flex-direction: column;
@@ -2271,6 +2324,7 @@ button.rel-node:hover,
 .rel-list .cname {
 	font-size: var(--text-xs);
 	color: var(--text-tertiary);
+	overflow-wrap: anywhere;
 }
 
 .rel-list .line {
@@ -2317,7 +2371,8 @@ button.rel-node:hover,
 	}
 
 	.sheet {
-		padding: var(--space-3);
+		--sheet-pad: var(--space-3);
+		padding: var(--sheet-pad);
 	}
 }
 
@@ -2907,11 +2962,11 @@ th:focus-within .ico.more,
 		color var(--duration-fast) var(--ease-out);
 }
 
-.pg-btn:first-child {
+.pg-btn:first-of-type {
 	border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
-.pg-btn:last-child {
+.pg-btn:last-of-type {
 	border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
@@ -2963,9 +3018,25 @@ th:focus-within .ico.more,
 	.page-size,
 	.st-time,
 	.st-sep,
-	.pg-btn:first-child,
-	.pg-btn:last-child {
+	.pg-btn:first-of-type,
+	.pg-btn:last-of-type,
+	.status .wide-only {
 		display: none;
+	}
+
+	.status {
+		gap: var(--space-2);
+		padding-left: var(--space-3);
+	}
+
+	/* A selection says more than the page range, and there is room for only one. */
+	.status:has(.st-selected) .st-summary {
+		display: none;
+	}
+
+	.st-selected,
+	.st-copied {
+		margin-left: 0;
 	}
 }
 
@@ -3008,10 +3079,10 @@ th:focus-within .ico.more,
 
 .rel-tools {
 	position: sticky;
-	top: calc(-1 * var(--space-4));
+	top: calc(-1 * var(--sheet-pad));
 	z-index: var(--z-sticky);
-	margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-3));
-	padding: var(--space-2) var(--space-4);
+	margin: 0 calc(-1 * var(--sheet-pad)) calc(-1 * var(--space-3));
+	padding: var(--space-2) var(--sheet-pad);
 	background: var(--surface);
 	border-bottom: 1px solid var(--border-subtle);
 }
@@ -3042,8 +3113,9 @@ th:focus-within .ico.more,
 	font: var(--weight-semibold) var(--text-xs) var(--font-mono);
 	letter-spacing: 0.02em;
 	position: sticky;
-	top: 40px;
-	z-index: 1;
+	/* --tools-h is the filter bar's height, set from Relationships.tsx; without the bar it is 0. */
+	top: calc(var(--tools-h, 0px) - var(--sheet-pad));
+	z-index: var(--z-sticky);
 }
 
 .rel-list .schema {

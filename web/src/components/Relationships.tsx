@@ -202,6 +202,18 @@ export function Relationships(props: { detail: TableDetail }) {
 	});
 	createEffect(on([left, right], () => queueMicrotask(layout)));
 
+	/** The filter bar's height, so schema headings stick right under it. */
+	const watchTools = (el: HTMLDivElement) => {
+		const seen = new ResizeObserver(() =>
+			lists?.style.setProperty("--tools-h", `${el.getBoundingClientRect().height}px`),
+		);
+		seen.observe(el);
+		onCleanup(() => {
+			seen.disconnect();
+			lists?.style.removeProperty("--tools-h");
+		});
+	};
+
 	const total = () => incoming().length + outgoing().length;
 
 	/** Narrows the lists to one schema, from a schema box in the diagram. */
@@ -456,7 +468,7 @@ export function Relationships(props: { detail: TableDetail }) {
 
 				<div class="rel-lists" ref={lists}>
 					<Show when={total() > PER_SIDE}>
-						<div class="rel-tools">
+						<div class="rel-tools" ref={watchTools}>
 							<span class="rel-search">
 								<Icon name="search" />
 								<input

@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { getTable, type TableDetail } from "../api";
 import { createRequest } from "../request";
 import { type Pane, setView, view } from "../url";
@@ -84,6 +84,39 @@ export function DataPane(props: {
 		return out;
 	};
 
+	let strip: HTMLDivElement | undefined;
+
+	/** Marks the ends of the tab strip that hide tabs, so they fade there. */
+	const edges = () => {
+		if (!strip) return;
+		const max = strip.scrollWidth - strip.clientWidth;
+		strip.classList.toggle("more-left", strip.scrollLeft > 1);
+		strip.classList.toggle("more-right", strip.scrollLeft < max - 1);
+	};
+
+	const watchStrip = (el: HTMLDivElement) => {
+		strip = el;
+		const seen = new ResizeObserver(edges);
+		seen.observe(el);
+		// The tabs widen when their counts arrive, which the strip's own size does not show.
+		queueMicrotask(() => {
+			for (const tab of el.children) seen.observe(tab);
+		});
+		onCleanup(() => seen.disconnect());
+	};
+
+	createEffect(
+		on(
+			() => [view().pane, view().table, current()],
+			() => {
+				document
+					.getElementById(`subtab-${view().pane}`)
+					?.scrollIntoView({ block: "nearest", inline: "nearest" });
+				edges();
+			},
+		),
+	);
+
 	const select = (pane: Pane) => {
 		if (view().pane !== pane) setView({ pane }, "push");
 	};
@@ -139,10 +172,12 @@ export function DataPane(props: {
 								<p class="table-comment">{current()?.comment}</p>
 							</Show>
 							<div
+								ref={watchStrip}
 								class="subtabs"
 								role="tablist"
 								aria-label={`${t().table} views`}
 								onKeyDown={onTabKey}
+								onScroll={edges}
 							>
 								<For each={tabs}>
 									{(tab) => (

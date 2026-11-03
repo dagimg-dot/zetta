@@ -1,10 +1,11 @@
-import { type Accessor, createSignal } from "solid-js";
+import { type Accessor, createEffect, createRoot, createSignal } from "solid-js";
 
 /**
  * A panel width the viewer drags, kept in this browser like the theme. It is written to a CSS
  * variable on the root, so the stylesheet keeps doing the layout.
  */
 export interface Width {
+	/** The width on screen: the one asked for, within what the window allows now. */
 	value: Accessor<number>;
 	min: number;
 	/** The widest it may go now; it follows the window. */
@@ -33,10 +34,14 @@ function createWidth(
 			return initial;
 		}
 	};
-	const [value, setValue] = createSignal(clamp(load(), min, max()));
-	const apply = (px: number) =>
-		globalThis.document?.documentElement.style.setProperty(cssVar, `${px}px`);
-	apply(value());
+	const [wanted, setWanted] = createSignal(load());
+	const value = () => clamp(wanted(), min, max());
+	// Follows the window and, for the inspector, the sidebar; lives as long as the page.
+	createRoot(() =>
+		createEffect(() =>
+			globalThis.document?.documentElement.style.setProperty(cssVar, `${value()}px`),
+		),
+	);
 
 	const save = (px: number) => {
 		try {
@@ -49,8 +54,7 @@ function createWidth(
 
 	const set = (px: number) => {
 		const next = clamp(px, min, max());
-		setValue(next);
-		apply(next);
+		setWanted(next);
 		save(next);
 	};
 
@@ -58,12 +62,17 @@ function createWidth(
 }
 
 /** The window's width, or no limit where there is no window, as in tests. */
-const viewport = () => globalThis.innerWidth ?? Number.POSITIVE_INFINITY;
+const windowWidth = () => globalThis.innerWidth ?? Number.POSITIVE_INFINITY;
+const [viewport, setViewport] = createSignal(windowWidth());
+globalThis.addEventListener?.("resize", () => setViewport(windowWidth()));
+
+/** The grid keeps at least this much beside an open inspector. */
+const MIN_GRID = 240;
 
 export const sidebarWidth = createWidth("zetta.sidebar", "--sidebar-width", 264, 180, () =>
 	Math.min(560, viewport() * 0.5),
 );
 
 export const inspectorWidth = createWidth("zetta.inspector", "--inspector-width", 380, 260, () =>
-	Math.min(960, viewport() * 0.7),
+	Math.min(960, viewport() - sidebarWidth.value() - MIN_GRID),
 );
