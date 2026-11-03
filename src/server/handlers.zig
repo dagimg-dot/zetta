@@ -184,7 +184,7 @@ fn browse(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !
         .limit = std.math.clamp(limit, 1, 1000),
         .offset = offset,
     }, &diag) catch |err| return dbFail(req, err, &diag);
-    return respondResult(ctx, arena, req, rs, started);
+    return respondResult(ctx, req, rs, started);
 }
 
 /// Which rows browse and count look at: the raw `filter` and `order`, or the builder in `q`.
@@ -239,14 +239,17 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status 
     const started = std.Io.Timestamp.now(ctx.io, .awake);
     var diag: db.Diagnostic = .{};
     const rs = ctx.adapter.query(arena, sql, .{}, &diag) catch |err| return dbFail(req, err, &diag);
-    return respondResult(ctx, arena, req, rs, started);
+    return respondResult(ctx, req, rs, started);
 }
 
-fn respondResult(ctx: *const Context, arena: Allocator, req: *Request, rs: db.ResultSet, started: std.Io.Timestamp) !std.http.Status {
+/// Writes the JSON straight to the socket in chunks, so a large result is never also held as one
+/// string. The rows are already in memory, so once the status line is out only a write can fail.
+fn respondResult(ctx: *const Context, req: *Request, rs: db.ResultSet, started: std.Io.Timestamp) !std.http.Status {
     const elapsed: u64 = @intCast(@max(0, started.untilNow(ctx.io, .awake).toNanoseconds()));
-    var out: std.Io.Writer.Allocating = .init(arena);
-    try render.json.resultSet(&out.writer, rs, elapsed);
-    try http.respondJson(req, .ok, out.written());
+    var buf: [16 * 1024]u8 = undefined;
+    var body = try req.respondStreaming(&buf, .{ .respond_options = .{ .extra_headers = &http.json_headers } });
+    try render.json.resultSet(&body.writer, rs, elapsed);
+    try body.end();
     return .ok;
 }
 
@@ -292,14 +295,30 @@ const Response = struct { status: std.http.Status, body: []const u8 };
 fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response {
     const raw = try std.fmt.allocPrint(arena, "GET {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\n\r\n", .{ target, auth.cookie_name, ctx.token });
     var in: std.Io.Reader = .fixed(raw);
-    const out_buf = try arena.alloc(u8, 16 * 1024);
-    var out: std.Io.Writer = .fixed(out_buf);
-    var server: std.http.Server = .init(&in, &out);
+    var out: std.Io.Writer.Allocating = .init(arena);
+    var server: std.http.Server = .init(&in, &out.writer);
     var req = try server.receiveHead();
     const status = try handle(ctx, arena, &req);
-    const written = out.buffered();
+    try out.writer.flush();
+    const written = out.written();
     const split = std.mem.indexOf(u8, written, "\r\n\r\n") orelse return error.TestNoBody;
-    return .{ .status = status, .body = written[split + 4 ..] };
+    const head = written[0..split];
+    const body = written[split + 4 ..];
+    const chunked = std.ascii.indexOfIgnoreCase(head, "transfer-encoding: chunked") != null;
+    return .{ .status = status, .body = if (chunked) try dechunk(arena, body) else body };
+}
+
+fn dechunk(arena: Allocator, body: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var rest = body;
+    while (true) {
+        const eol = std.mem.indexOf(u8, rest, "\r\n") orelse return error.TestBadChunk;
+        const len = try std.fmt.parseInt(usize, rest[0..eol], 16);
+        if (len == 0) return out.items;
+        rest = rest[eol + 2 ..];
+        try out.appendSlice(arena, rest[0..len]);
+        rest = rest[len + 2 ..];
+    }
 }
 
 /// Percent-encodes everything outside the unreserved set.
@@ -411,4 +430,23 @@ test "browse and count take q and bind its values" {
     const unknown = try app.get("/api/count?schema=main&table=t", "{\"filters\":[{\"c\":\"nope\",\"op\":\"eq\",\"v\":\"1\"}]}");
     try testing.expectEqual(std.http.Status.bad_request, unknown.status);
     try testing.expect(std.mem.indexOf(u8, unknown.body, "\"db_error\"") != null);
+}
+
+test "a result larger than one chunk arrives whole and in order" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    var diag: db.Diagnostic = .{};
+    _ = try app.ctx.adapter.query(app.arena_state.allocator(),
+        \\create table big (n integer, pad text);
+        \\insert into big with recursive r(n) as (select 1 union all select n + 1 from r where n < 1000)
+        \\select n, printf('%080d', n) from r;
+    , .{}, &diag);
+
+    const res = try app.get("/api/browse?schema=main&table=big&limit=1000", null);
+    try testing.expectEqual(std.http.Status.ok, res.status);
+    try testing.expect(res.body.len > 64 * 1024);
+    const parsed = try std.json.parseFromSliceLeaky(struct { rows: []const [2][]const u8 }, app.arena_state.allocator(), res.body, .{ .ignore_unknown_fields = true });
+    try testing.expectEqual(1000, parsed.rows.len);
+    for (parsed.rows, 1..) |row, n| try testing.expectEqual(n, try std.fmt.parseInt(usize, row[0], 10));
 }

@@ -8,7 +8,7 @@ const render = @import("render");
 
 pub const max_body = 1 << 20;
 
-const json_headers = [_]std.http.Header{
+pub const json_headers = [_]std.http.Header{
     .{ .name = "content-type", .value = "application/json" },
     .{ .name = "cache-control", .value = "no-store" },
 };
