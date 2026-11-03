@@ -44,6 +44,8 @@ const vtable: Adapter.VTable = .{
     .info = info,
     .catalog = catalog,
     .columns = columns,
+    .detail = detail,
+    .count = count,
     .browse = browse,
     .query = query,
     .deinit = deinit,
@@ -132,6 +134,16 @@ fn columns(ptr: *anyopaque, arena: Allocator, table: types.TableRef, diag: *Diag
         };
     }
     return out;
+}
+
+fn detail(_: *anyopaque, _: Allocator, _: types.TableRef, diag: *Diagnostic) types.Error!types.TableDetail {
+    diag.set("table detail is not implemented in the libpq oracle");
+    return error.NotFound;
+}
+
+fn count(_: *anyopaque, _: Allocator, _: types.CountRequest, diag: *Diagnostic) types.Error!u64 {
+    diag.set("row counting is not implemented in the libpq oracle");
+    return error.NotFound;
 }
 
 fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Diagnostic) types.Error!types.ResultSet {

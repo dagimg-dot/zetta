@@ -20,7 +20,7 @@ pub const Context = struct {
     version: []const u8,
 };
 
-const Route = enum { index, meta, catalog, columns, browse, query, not_found };
+const Route = enum { index, meta, catalog, columns, table, count, browse, query, not_found };
 
 fn route(method: std.http.Method, path: []const u8) Route {
     const eql = std.mem.eql;
@@ -28,6 +28,8 @@ fn route(method: std.http.Method, path: []const u8) Route {
     if (method == .GET and eql(u8, path, "/api/meta")) return .meta;
     if (method == .GET and eql(u8, path, "/api/catalog")) return .catalog;
     if (method == .GET and eql(u8, path, "/api/columns")) return .columns;
+    if (method == .GET and eql(u8, path, "/api/table")) return .table;
+    if (method == .GET and eql(u8, path, "/api/count")) return .count;
     if (method == .GET and eql(u8, path, "/api/browse")) return .browse;
     if (method == .POST and eql(u8, path, "/api/query")) return .query;
     return .not_found;
@@ -50,6 +52,8 @@ pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.St
         .meta => meta(ctx, arena, req),
         .catalog => catalog(ctx, arena, req),
         .columns => columns(ctx, arena, req, target.query),
+        .table => tableDetail(ctx, arena, req, target.query),
+        .count => count(ctx, arena, req, target.query),
         .browse => browse(ctx, arena, req, target.query),
         .query => query(ctx, arena, req),
         .not_found => fail(req, .not_found, "not_found", "no such route"),
@@ -126,6 +130,31 @@ fn columns(ctx: *const Context, arena: Allocator, req: *Request, query_string: [
     return .ok;
 }
 
+fn tableDetail(ctx: *const Context, arena: Allocator, req: *Request, query_string: []const u8) !std.http.Status {
+    const ref = try tableRef(arena, query_string) orelse return fail(req, .bad_request, "bad_request", "schema and table are required");
+    var diag: db.Diagnostic = .{};
+    const d = ctx.adapter.detail(arena, ref, &diag) catch |err| return dbFail(req, err, &diag);
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try render.json.tableDetail(&out.writer, d);
+    try http.respondJson(req, .ok, out.written());
+    return .ok;
+}
+
+fn count(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !std.http.Status {
+    const table = try tableRef(arena, q) orelse return fail(req, .bad_request, "bad_request", "schema and table are required");
+    const started = std.Io.Timestamp.now(ctx.io, .awake);
+    var diag: db.Diagnostic = .{};
+    const n = ctx.adapter.count(arena, .{
+        .table = table,
+        .filter = try http.queryParam(arena, q, "filter"),
+    }, &diag) catch |err| return dbFail(req, err, &diag);
+    const elapsed: u64 = @intCast(@max(0, started.untilNow(ctx.io, .awake).toNanoseconds()));
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try render.json.count(&out.writer, n, elapsed);
+    try http.respondJson(req, .ok, out.written());
+    return .ok;
+}
+
 fn browse(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !std.http.Status {
     const table = try tableRef(arena, q) orelse return fail(req, .bad_request, "bad_request", "schema and table are required");
     const limit = if (try http.queryParam(arena, q, "limit")) |s| std.fmt.parseInt(u32, s, 10) catch
@@ -189,6 +218,7 @@ fn dbFail(req: *Request, err: db.Error, diag: *const db.Diagnostic) !std.http.St
         error.QueryFailed => .{ .bad_request, "db_error" },
         error.ReadOnly => .{ .forbidden, "read_only" },
         error.NotFound => .{ .not_found, "not_found" },
+        error.Timeout => .{ .gateway_timeout, "timeout" },
         error.OutOfMemory => .{ .internal_server_error, "internal" },
     };
     return fail(req, status, code, if (diag.message().len > 0) diag.message() else @errorName(err));
@@ -197,6 +227,8 @@ fn dbFail(req: *Request, err: db.Error, diag: *const db.Diagnostic) !std.http.St
 test "routes" {
     try std.testing.expectEqual(Route.index, route(.GET, "/"));
     try std.testing.expectEqual(Route.query, route(.POST, "/api/query"));
+    try std.testing.expectEqual(Route.table, route(.GET, "/api/table"));
+    try std.testing.expectEqual(Route.count, route(.GET, "/api/count"));
     try std.testing.expectEqual(Route.not_found, route(.GET, "/api/query"));
     try std.testing.expectEqual(Route.not_found, route(.DELETE, "/api/catalog"));
 }

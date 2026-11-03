@@ -9,12 +9,17 @@ pub const catalog =
     \\order by n.nspname, c.relname
 ;
 
+/// The last four columns (comment, quoted name, identity, generated) feed the table detail.
 pub const columns =
     \\select a.attname,
     \\       format_type(a.atttypid, a.atttypmod),
     \\       not a.attnotnull,
     \\       coalesce(i.indisprimary, false),
-    \\       pg_get_expr(d.adbin, d.adrelid)
+    \\       pg_get_expr(d.adbin, d.adrelid),
+    \\       col_description(c.oid, a.attnum),
+    \\       quote_ident(a.attname),
+    \\       a.attidentity::text,
+    \\       a.attgenerated::text
     \\from pg_attribute a
     \\join pg_class c on c.oid = a.attrelid
     \\join pg_namespace n on n.oid = c.relnamespace
@@ -22,6 +27,105 @@ pub const columns =
     \\left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
     \\where n.nspname = $1 and c.relname = $2 and a.attnum > 0 and not a.attisdropped
     \\order by a.attnum
+;
+
+pub const relation_exists =
+    \\select 1 from pg_class c
+    \\join pg_namespace n on n.oid = c.relnamespace
+    \\where n.nspname = $1 and c.relname = $2 and c.relkind in ('r', 'p', 'v', 'm', 'f')
+;
+
+/// Every detail query takes the schema as $1 and the table as $2.
+pub const detail_table =
+    \\select n.nspname, c.relname, c.relkind::text,
+    \\       case when c.relkind in ('r', 'p', 'm') and c.reltuples >= 0 then c.reltuples::bigint end,
+    \\       case when c.relkind in ('r', 'p', 'm') then pg_total_relation_size(c.oid) end,
+    \\       case when c.relkind in ('r', 'p', 'm') then pg_relation_size(c.oid) end,
+    \\       case when c.relkind in ('r', 'p', 'm') then pg_indexes_size(c.oid) end,
+    \\       obj_description(c.oid, 'pg_class'),
+    \\       case when c.relkind in ('v', 'm') then pg_get_viewdef(c.oid, true) end,
+    \\       format('%I.%I', n.nspname, c.relname),
+    \\       case when c.relkind = 'p' then pg_get_partkeydef(c.oid) end
+    \\from pg_class c
+    \\join pg_namespace n on n.oid = c.relnamespace
+    \\where n.nspname = $1 and c.relname = $2 and c.relkind in ('r', 'p', 'v', 'm', 'f')
+;
+
+/// A JSON array of the names of attribute numbers `keys` on relation `rel`, in key order.
+fn attnames(comptime keys: []const u8, comptime rel: []const u8) []const u8 {
+    return "coalesce((select json_agg(a.attname order by k.ord) from unnest(" ++ keys ++
+        ") with ordinality k(attnum, ord) join pg_attribute a on a.attrelid = " ++ rel ++
+        " and a.attnum = k.attnum), '[]')::text";
+}
+
+pub const detail_constraints =
+    \\select con.conname, con.contype::text, pg_get_constraintdef(con.oid, true),
+++ "       " ++ attnames("con.conkey", "con.conrelid") ++ ",\n" ++
+    \\       quote_ident(con.conname)
+    \\from pg_constraint con
+    \\join pg_class c on c.oid = con.conrelid
+    \\join pg_namespace n on n.oid = c.relnamespace
+    \\where n.nspname = $1 and c.relname = $2 and con.contype in ('p', 'u', 'f', 'c', 'x')
+    \\order by case con.contype when 'p' then 0 when 'u' then 1 when 'f' then 2 when 'c' then 3 else 4 end, con.conname
+;
+
+pub const detail_foreign_keys =
+    \\select con.conname, rn.nspname, rc.relname,
+++ "       " ++ attnames("con.conkey", "con.conrelid") ++ ",\n" ++
+    "       " ++ attnames("con.confkey", "con.confrelid") ++ ",\n" ++
+    \\       con.confupdtype::text, con.confdeltype::text
+    \\from pg_constraint con
+    \\join pg_class c on c.oid = con.conrelid
+    \\join pg_namespace n on n.oid = c.relnamespace
+    \\join pg_class rc on rc.oid = con.confrelid
+    \\join pg_namespace rn on rn.oid = rc.relnamespace
+    \\where con.contype = 'f' and n.nspname = $1 and c.relname = $2
+    \\order by con.conname
+;
+
+/// Constraints copied onto partitions (conparentid <> 0) would list one reference many times.
+pub const detail_referenced_by =
+    \\select con.conname, cn.nspname, cc.relname,
+++ "       " ++ attnames("con.conkey", "con.conrelid") ++ ",\n" ++
+    "       " ++ attnames("con.confkey", "con.confrelid") ++ ",\n" ++
+    \\       con.confupdtype::text, con.confdeltype::text
+    \\from pg_constraint con
+    \\join pg_class t on t.oid = con.confrelid
+    \\join pg_namespace tn on tn.oid = t.relnamespace
+    \\join pg_class cc on cc.oid = con.conrelid
+    \\join pg_namespace cn on cn.oid = cc.relnamespace
+    \\where con.contype = 'f' and con.conparentid = 0 and tn.nspname = $1 and t.relname = $2
+    \\order by cn.nspname, cc.relname, con.conname
+;
+
+/// The last column says whether a constraint owns the index, so the DDL leaves it out.
+pub const detail_indexes =
+    \\select ic.relname, i.indisunique, i.indisprimary, am.amname,
+    \\       pg_get_expr(i.indpred, i.indrelid, true),
+    \\       pg_get_indexdef(i.indexrelid),
+    \\       pg_relation_size(i.indexrelid),
+    \\       s.idx_scan,
+    \\       (select json_agg(pg_get_indexdef(i.indexrelid, k, true) order by k)
+    \\          from generate_series(1, i.indnkeyatts::int) k)::text,
+    \\       exists (select 1 from pg_constraint con where con.conindid = i.indexrelid
+    \\               and con.conrelid = i.indrelid and con.contype in ('p', 'u', 'x'))
+    \\from pg_index i
+    \\join pg_class c on c.oid = i.indrelid
+    \\join pg_namespace n on n.oid = c.relnamespace
+    \\join pg_class ic on ic.oid = i.indexrelid
+    \\join pg_am am on am.oid = ic.relam
+    \\left join pg_stat_user_indexes s on s.indexrelid = i.indexrelid
+    \\where n.nspname = $1 and c.relname = $2
+    \\order by i.indisprimary desc, ic.relname
+;
+
+pub const detail_triggers =
+    \\select t.tgname, t.tgtype::int, t.tgfoid::regproc::text, pg_get_triggerdef(t.oid, true), t.tgenabled <> 'D'
+    \\from pg_trigger t
+    \\join pg_class c on c.oid = t.tgrelid
+    \\join pg_namespace n on n.oid = c.relnamespace
+    \\where n.nspname = $1 and c.relname = $2 and not t.tgisinternal
+    \\order by t.tgname
 ;
 
 pub const type_name_lookup = "select format_type($1::oid, null)";

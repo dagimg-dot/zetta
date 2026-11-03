@@ -165,7 +165,6 @@ fn addSqlite(
             "-DSQLITE_ENABLE_MATH_FUNCTIONS",
             // C-level features zetta never calls. Parser-changing omits are left
             // alone: they do not work with the amalgamation.
-            "-DSQLITE_OMIT_PROGRESS_CALLBACK",
             "-DSQLITE_OMIT_UTF16",
             "-DSQLITE_OMIT_TRACE",
             "-DSQLITE_OMIT_COMPLETE",

@@ -448,6 +448,8 @@ fn serverError(diag: *Diagnostic, body: []const u8, query: ?[]const u8, fallback
     notice.format(query, &w) catch {};
     diag.len = std.mem.trimEnd(u8, w.buffered(), "\n").len;
     if (mem.eql(u8, notice.code, "25006")) return error.ReadOnly;
+    // query_canceled: zetta never cancels, so this is statement_timeout firing.
+    if (mem.eql(u8, notice.code, "57014")) return error.Timeout;
     return fallback;
 }
 

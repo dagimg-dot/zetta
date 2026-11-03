@@ -1,5 +1,7 @@
 -- A sample shop for working on the UI: several tables, NULLs, long and
--- multi-line text, JSON, blobs, unicode and a few thousand rows.
+-- multi-line text, JSON, blobs, unicode and a few thousand rows, plus the
+-- structure the table detail shows: checks, cascading foreign keys, partial
+-- and expression indexes, and triggers.
 -- Build it with: sqlite3 dev/sample.db < dev/seed.sql
 
 pragma foreign_keys = on;
@@ -40,13 +42,14 @@ create table orders (
     status text not null check (status in ('pending', 'paid', 'shipped', 'cancelled')),
     total_cents integer not null default 0,
     placed_at text not null,
-    shipped_at text
+    shipped_at text,
+    updated_at text
 );
 
 create table order_items (
-    order_id integer not null references orders(id),
-    product_id integer not null references products(id),
-    quantity integer not null,
+    order_id integer not null references orders(id) on delete cascade,
+    product_id integer not null references products(id) on update cascade on delete cascade,
+    quantity integer not null check (quantity > 0),
     unit_cents integer not null,
     primary key (order_id, product_id)
 );
@@ -126,5 +129,19 @@ group by c.id
 order by spent desc;
 
 create index orders_customer on orders (customer_id);
+create index orders_pending on orders (placed_at) where status = 'pending';
+create index customers_email_lower on customers (lower(email));
 create index events_kind on events (kind, at);
+
+-- Created after the bulk load so the seed itself does not fire them.
+create trigger orders_touch after update on orders for each row
+begin
+    update orders set updated_at = datetime('now') where id = new.id;
+end;
+
+create trigger orders_audit after insert on orders for each row
+begin
+    insert into events (kind, payload, at)
+    values ('order.created', json_object('order', new.id, 'customer', new.customer_id), datetime('now'));
+end;
 analyze;

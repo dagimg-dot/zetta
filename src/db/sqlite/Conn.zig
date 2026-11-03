@@ -73,6 +73,16 @@ pub fn quoteIdent(arena: Allocator, ident: []const u8) Allocator.Error![]const u
     return out.items;
 }
 
+/// `name` as is when it needs no quotes, otherwise quoted like `quoteIdent`.
+pub fn quoteIfNeeded(arena: Allocator, name: []const u8) Allocator.Error![]const u8 {
+    const plain = name.len > 0 and !std.ascii.isDigit(name[0]) and
+        for (name) |ch| {
+            if (!std.ascii.isAlphanumeric(ch) and ch != '_') break false;
+        } else true;
+    if (plain and c.sqlite3_keyword_check(name.ptr, @intCast(name.len)) == 0) return name;
+    return quoteIdent(arena, name);
+}
+
 /// Runs every statement in `text` and returns the result of the last one.
 pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, max_rows: usize, diag: *Diagnostic) Error!types.ResultSet {
     var rest = text;
@@ -94,18 +104,56 @@ pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, max_rows: usize, 
     return last;
 }
 
-/// Runs one statement with text parameters bound to ?1, ?2, ...
+/// Runs one statement with text parameters bound to ?1, ?2, ... Text after the
+/// first statement is refused rather than ignored.
 pub fn runBound(self: *Conn, arena: Allocator, text: [:0]const u8, params: []const []const u8, diag: *Diagnostic) Error!types.ResultSet {
     var stmt: ?*c.sqlite3_stmt = null;
-    const rc = c.sqlite3_prepare_v2(self.raw, text.ptr, @intCast(text.len + 1), &stmt, null);
+    var tail: [*c]const u8 = null;
+    const rc = c.sqlite3_prepare_v2(self.raw, text.ptr, @intCast(text.len + 1), &stmt, &tail);
     if (rc != c.SQLITE_OK) return self.fail(rc, diag);
-    const s = stmt.?;
+    const s = stmt orelse {
+        diag.set("the statement is empty");
+        return error.QueryFailed;
+    };
     defer _ = c.sqlite3_finalize(s);
+    const rest = text[@intFromPtr(tail) - @intFromPtr(text.ptr) ..];
+    if (std.mem.trim(u8, rest, " \t\r\n;").len > 0) {
+        diag.set("only one statement is allowed here");
+        return error.QueryFailed;
+    }
     for (params, 1..) |p, i| {
         const brc = c.sqlite3_bind_text(s, @intCast(i), p.ptr, @intCast(p.len), c.SQLITE_STATIC);
         if (brc != c.SQLITE_OK) return self.fail(brc, diag);
     }
     return self.collect(arena, s, std.math.maxInt(usize), diag);
+}
+
+pub const Deadline = struct {
+    io: std.Io,
+    at: std.Io.Timestamp,
+
+    pub fn after(io: std.Io, ms: u32) Deadline {
+        return .{ .io = io, .at = std.Io.Timestamp.now(io, .awake).addDuration(.fromMilliseconds(ms)) };
+    }
+
+    fn passed(d: *const Deadline) bool {
+        return std.Io.Timestamp.now(d.io, .awake).nanoseconds >= d.at.nanoseconds;
+    }
+};
+
+/// VM steps between deadline checks: often enough to stop within a millisecond or so.
+const progress_steps = 10_000;
+
+/// `runBound` that stops with error.Timeout once `deadline` passes.
+pub fn runBoundUntil(self: *Conn, arena: Allocator, text: [:0]const u8, params: []const []const u8, deadline: *const Deadline, diag: *Diagnostic) Error!types.ResultSet {
+    c.sqlite3_progress_handler(self.raw, progress_steps, onProgress, @constCast(deadline));
+    defer c.sqlite3_progress_handler(self.raw, 0, null, null);
+    return self.runBound(arena, text, params, diag);
+}
+
+fn onProgress(ctx: ?*anyopaque) callconv(.c) c_int {
+    const deadline: *const Deadline = @ptrCast(@alignCast(ctx.?));
+    return @intFromBool(deadline.passed());
 }
 
 fn collect(self: *Conn, arena: Allocator, stmt: *c.sqlite3_stmt, max_rows: usize, diag: *Diagnostic) Error!types.ResultSet {
@@ -206,6 +254,8 @@ fn fail(self: *Conn, rc: c_int, diag: *Diagnostic) Error {
     return switch (rc & 0xff) {
         c.SQLITE_READONLY => error.ReadOnly,
         c.SQLITE_NOMEM => error.OutOfMemory,
+        // Only the progress handler in `runBoundUntil` interrupts a statement.
+        c.SQLITE_INTERRUPT => error.Timeout,
         else => error.QueryFailed,
     };
 }
@@ -214,6 +264,15 @@ test "identifiers are quoted with embedded quotes doubled" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     try std.testing.expectEqualStrings("\"we\"\"ird\"", try quoteIdent(arena_state.allocator(), "we\"ird"));
+}
+
+test "identifiers are quoted only when they need it" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    try std.testing.expectEqualStrings("order_id", try quoteIfNeeded(arena, "order_id"));
+    try std.testing.expectEqualStrings("\"order\"", try quoteIfNeeded(arena, "order"));
+    try std.testing.expectEqualStrings("\"two words\"", try quoteIfNeeded(arena, "two words"));
 }
 
 test "the leading keyword skips whitespace" {
