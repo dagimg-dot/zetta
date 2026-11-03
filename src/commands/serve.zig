@@ -1,0 +1,101 @@
+const std = @import("std");
+const cli = @import("cli");
+const server = @import("server");
+const common = @import("common.zig");
+const Context = @import("Context.zig");
+
+pub const Args = struct {
+    dsn: ?[]const u8 = null,
+    host: []const u8 = "127.0.0.1",
+    port: u16 = 7777,
+    token: ?[]const u8 = null,
+    read_only: bool = false,
+    open: ?bool = null,
+
+    pub const about =
+        \\Serve the web UI
+        \\
+        \\Opens the database, prints a URL with a one-time token, and serves the UI
+        \\and the JSON API until stopped. The token is traded for a session cookie
+        \\the first time the URL is opened.
+    ;
+    pub const options = [_]cli.Option{
+        common.dsn,
+        .{ .field = "host", .short = 'H', .value_name = "ADDR", .env = &.{"ZETTA_HOST"}, .help =
+        \\Address to listen on
+        \\
+        \\Anything other than a loopback address needs --token.
+        },
+        .{ .field = "port", .short = 'p', .env = &.{"ZETTA_PORT"}, .help = "Port to listen on" },
+        .{ .field = "token", .env = &.{"ZETTA_TOKEN"}, .help =
+        \\Access token instead of a random one
+        \\
+        \\Useful in containers, where the URL is not visible.
+        },
+        common.read_only,
+        .{ .field = "open", .negatable = true, .help = "Open the UI in a browser (default: when stdout is a terminal)" },
+    };
+    pub const examples = [_]cli.Example{
+        .{ .command = "zetta ./app.db", .help = "Browse a SQLite file" },
+        .{ .command = "zetta serve postgres://me@localhost/app --read-only", .help = "Browse Postgres without writes" },
+        .{ .command = "DATABASE_URL=postgres://me@localhost/app zetta", .help = "Take the database from the environment" },
+    };
+};
+
+pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
+    if (!server.auth.isLoopback(args.host) and args.token == null) {
+        return ctx.usageError("--host {s} is reachable from other machines; set --token (or ZETTA_TOKEN) as well", .{args.host});
+    }
+
+    const adapter = switch (ctx.openDatabase(args.dsn.?, .{ .read_only = args.read_only })) {
+        .ok => |a| a,
+        .exit => |code| return code,
+    };
+    defer adapter.deinit();
+
+    const random = server.auth.randomToken(ctx.io);
+    const token = args.token orelse &random;
+
+    var srv = server.Server.listen(ctx.gpa, ctx.io, adapter, .{
+        .host = args.host,
+        .port = args.port,
+        .token = token,
+        .name = "zetta",
+        .version = ctx.version,
+    }) catch |err| return switch (err) {
+        error.InvalidAddress => ctx.usageError("'{s}' is not an IP address", .{args.host}),
+        error.AddressInUse => ctx.fail("port {d} is already in use; pick another with --port", .{args.port}),
+        else => ctx.fail("cannot listen on {s}:{d}: {t}", .{ args.host, args.port, err }),
+    };
+    defer srv.deinit();
+
+    const info = adapter.info();
+    const shown_host = if (std.mem.indexOfScalar(u8, args.host, ':') != null) "[::1]" else args.host;
+    const url = try std.fmt.allocPrint(ctx.arena, "http://{s}:{d}/?token={s}", .{ shown_host, args.port, token });
+    try ctx.stderr.print("zetta {s}: {t} database {s}{s}\n", .{ ctx.version, info.name, info.database, if (info.read_only) ", read-only" else "" });
+    try ctx.stderr.flush();
+    try ctx.stdout.print("{s}\n", .{url});
+    try ctx.stdout.flush();
+
+    if (args.open orelse ctx.color_stdout) openBrowser(ctx, url);
+
+    srv.run() catch {};
+    return .success;
+}
+
+fn openBrowser(ctx: *Context, url: []const u8) void {
+    const opener = switch (@import("builtin").os.tag) {
+        .macos => "open",
+        else => "xdg-open",
+    };
+    var child = std.process.spawn(ctx.io, .{
+        .argv = &.{ opener, url },
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+    }) catch |err| {
+        std.log.scoped(.serve).info("could not run {s}: {t}", .{ opener, err });
+        return;
+    };
+    _ = child.wait(ctx.io) catch {};
+}
