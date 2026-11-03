@@ -7,8 +7,9 @@ node_modules/
 web/dist/
 *.tsbuildinfo
 
-# Local reference docs
+# Local reference docs and design work
 /docs/
+/design/
 *.md
 !README.md
 !AGENTS.md
