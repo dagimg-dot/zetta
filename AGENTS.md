@@ -43,7 +43,11 @@ The architecture lives in `docs/ARCHITECTURE.md` and the product brief in `docs/
   - `--read-only` is enforced inside each adapter, not in the UI.
   - Never log tokens, cookies or passwords. Redact the password in any DSN before printing it.
 - **Web.**
-  - The UI talks to the server only through `web/src/api.ts`, whose types mirror the server's JSON.
+  - The UI talks to the server only through `web/src/lib/api.ts`, whose types mirror the server's JSON.
+  - `web/src` has shared code in `lib` (helpers, no components), `stores` (app-wide signals, the URL view among them), `styles` (fonts, tokens and base rules) and `components` (`ui` for basic controls, `layout` for the frame, `grid` for the result grid both tabs use). Each tab lives in `features/<tab>`. `App.tsx` composes the features.
+  - Imports go one way: `lib → stores → components → features → App.tsx`. Features never import each other.
+  - A component imports its own kebab-case stylesheet, with its narrow-window rules in that file. `styles/index.css` holds only what belongs to no component, and `main.tsx` imports it before anything else.
+  - A module with logic has its test beside it. No two files in a folder differ only by case.
   - Runtime dependencies are `solid-js` and `@ark-ui/solid`. Ark is headless and is used only for Combobox, Menu, Popover, Select and Tooltip, imported per component (`@ark-ui/solid/menu`), and styled by its `data-part` attributes with our tokens. Ask before adding any other dependency, or another Ark component, on either side.
 
 ## Zig 0.16 idioms
