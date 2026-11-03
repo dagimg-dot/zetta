@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	changesSchema,
 	closest,
+	edges,
 	errorRange,
 	hexDump,
 	isNumericType,
@@ -20,11 +21,42 @@ describe("kindOf", () => {
 		expect(kindOf("{not json")).toBe("text");
 	});
 
+	test("empty and whitespace-only text are kinds of their own, apart from NULL", () => {
+		expect(kindOf("")).toBe("empty");
+		expect(kindOf(" ")).toBe("blank");
+		expect(kindOf("\t \n ")).toBe("blank");
+		expect(kindOf(" a ")).toBe("text");
+	});
+
 	test("text shaped like a blob stays text when its column says so", () => {
 		expect(kindOf("\\x41", "text")).toBe("text");
 		expect(kindOf("\\x41", "bytea")).toBe("blob");
 		expect(kindOf("\\x41", "BLOB")).toBe("blob");
 		expect(kindOf("\\x41", "")).toBe("blob");
+	});
+});
+
+describe("edges", () => {
+	test("splits off leading and trailing spaces and tabs", () => {
+		expect(edges("  abc\t")).toEqual({ lead: "  ", body: "abc", trail: "\t" });
+		expect(edges("abc")).toEqual({ lead: "", body: "abc", trail: "" });
+		expect(edges("a  b")).toEqual({ lead: "", body: "a  b", trail: "" });
+	});
+
+	test("whitespace-only text is all lead", () => {
+		expect(edges("   ")).toEqual({ lead: "   ", body: "", trail: "" });
+		expect(edges("")).toEqual({ lead: "", body: "", trail: "" });
+	});
+
+	test("line breaks stay in the body, so only the first and last lines get marks", () => {
+		expect(edges(" a \n b ")).toEqual({ lead: " ", body: "a \n b", trail: " " });
+		expect(edges("a \n")).toEqual({ lead: "", body: "a \n", trail: "" });
+		expect(edges("  \n  ")).toEqual({ lead: "  ", body: "\n", trail: "  " });
+	});
+
+	test("a long run between words stays linear", () => {
+		const v = `a${" ".repeat(200_000)}b`;
+		expect(edges(v).body).toBe(v);
 	});
 });
 

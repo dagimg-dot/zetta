@@ -14,9 +14,10 @@ import type { Column, ResultColumn, ResultSet } from "../api";
 import { copyRich, copyText } from "../clipboard";
 import { type FormatId, fileName, format, htmlTable, pick } from "../copy";
 import { plural } from "../format";
+import { whitespace } from "../marks";
 import type { SortKey } from "../query";
 import { refName } from "../refs";
-import { blobBytes, formatBytes, isBlob, isNumericType } from "../value";
+import { blobBytes, edges, formatBytes, isBlob, isNumericType } from "../value";
 import { Button } from "./Button";
 import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu";
 import { Inspector, type InspectorAction } from "./Inspector";
@@ -168,8 +169,12 @@ function cell(
 		return td;
 	}
 	if (numeric) td.className = "num";
-	if (v.includes("\n")) {
-		v.split("\n").forEach((line, i) => {
+	const { lead, body, trail } = edges(v);
+	if (!lead && !trail && !v.includes("\n")) {
+		td.textContent = v;
+	} else {
+		if (lead) td.append(whitespace(lead));
+		body.split("\n").forEach((line, i) => {
 			if (i > 0) {
 				const nl = document.createElement("span");
 				nl.className = "nl";
@@ -178,8 +183,7 @@ function cell(
 			}
 			td.append(line);
 		});
-	} else {
-		td.textContent = v;
+		if (trail) td.append(whitespace(trail));
 	}
 	if (v.length > 40) td.dataset.tip = v.length > 400 ? `${v.slice(0, 400)}…` : v;
 	if (link) {

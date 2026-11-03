@@ -1,7 +1,7 @@
 import { categoryOf } from "./query";
 
 /** What a cell holds, for inline markers in the grid and the inspector. */
-export type ValueKind = "null" | "blob" | "json" | "multiline" | "text";
+export type ValueKind = "null" | "empty" | "blank" | "blob" | "json" | "multiline" | "text";
 
 /** Numbers are right-aligned. Types like interval or int4range only start like numbers. */
 export function isNumericType(type: string): boolean {
@@ -34,10 +34,26 @@ export function parseJson(v: string): unknown | undefined {
 
 export function kindOf(v: string | null, type = ""): ValueKind {
 	if (v === null) return "null";
+	if (v === "") return "empty";
+	if (v.trim() === "") return "blank";
 	if (isBlob(v, type)) return "blob";
 	if (parseJson(v) !== undefined) return "json";
 	if (v.includes("\n")) return "multiline";
 	return "text";
+}
+
+const isSpace = (ch: string | undefined) => ch !== undefined && ch !== "\n" && /\s/.test(ch);
+
+/**
+ * Splits off the spaces and tabs a value starts and ends with, which a cell would otherwise hide.
+ * Line breaks are not included: they already draw as ↵.
+ */
+export function edges(v: string): { lead: string; body: string; trail: string } {
+	let a = 0;
+	while (isSpace(v[a])) a++;
+	let b = v.length;
+	while (b > a && isSpace(v[b - 1])) b--;
+	return { lead: v.slice(0, a), body: v.slice(a, b), trail: v.slice(b) };
 }
 
 export function formatBytes(n: number): string {

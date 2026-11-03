@@ -1,7 +1,8 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { inspectorWidth } from "../layout";
+import { whitespace } from "../marks";
 import { matchRefs } from "../refs";
-import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
+import { blobBytes, edges, formatBytes, hexDump, kindOf, parseJson } from "../value";
 import { Button } from "./Button";
 import { CopyButton } from "./CopyButton";
 import { Icon, type IconName } from "./icons";
@@ -49,6 +50,18 @@ function withBreaks(text: string) {
 			)}
 		</>
 	));
+}
+
+/** Line breaks as ↵, and the spaces and tabs a value starts or ends with as · and →. */
+function withMarks(text: string) {
+	const { lead, body, trail } = edges(text);
+	return (
+		<>
+			{lead && whitespace(lead)}
+			{withBreaks(body)}
+			{trail && whitespace(trail)}
+		</>
+	);
 }
 
 function action(a: InspectorAction) {
@@ -111,6 +124,13 @@ export function Inspector(props: {
 		const lines = v.split("\n").length;
 		if (lines > 1) out.push(`${lines.toLocaleString()} lines`);
 		if (kind() === "json") out.push("JSON");
+		if (kind() === "blank") out.push("whitespace only");
+		else {
+			const { lead, trail } = edges(v);
+			if (lead && trail) out.push("whitespace at both ends");
+			else if (lead) out.push("leading whitespace");
+			else if (trail) out.push("trailing whitespace");
+		}
 		return out;
 	};
 
@@ -178,9 +198,11 @@ export function Inspector(props: {
 				// biome-ignore lint/a11y/noNoninteractiveTabindex: a long value scrolls, and a scrollable region must be reachable by keyboard.
 				tabIndex={0}
 			>
-				{kind() === "multiline" || (kind() === "json" && mode() === "raw")
-					? withBreaks(shown())
-					: shown()}
+				{kind() === "text" || kind() === "multiline" || kind() === "blank"
+					? withMarks(shown())
+					: kind() === "json" && mode() === "raw"
+						? withBreaks(shown())
+						: shown()}
 			</pre>
 			<Show when={props.cell.actions?.length || refs().length}>
 				<nav class="actions" aria-label="Go to related rows">

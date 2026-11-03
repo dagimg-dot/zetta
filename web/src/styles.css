@@ -918,7 +918,9 @@ th.collapsed .ico.fold {
 	max-width: 420px;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	white-space: nowrap;
+	/* Runs of spaces and tabs inside a value stay as they are; line breaks are already drawn as ↵. */
+	white-space: pre;
+	tab-size: 4;
 	cursor: default;
 }
 
@@ -935,6 +937,31 @@ th.collapsed .ico.fold {
 .grid .mark {
 	color: var(--text-tertiary);
 	font-style: italic;
+}
+
+/*
+ * The spaces and tabs a value starts or ends with. Each keeps its real character, so copying and
+ * selecting still get it, and the mark is drawn over it with alt text for screen readers.
+ */
+.ws {
+	white-space: pre;
+}
+
+.ws > span {
+	position: relative;
+}
+
+.ws > span::before {
+	position: absolute;
+	inset: 0;
+	color: var(--text-tertiary);
+	text-align: center;
+	content: "·" / "space";
+}
+
+.ws > .tab::before {
+	text-align: start;
+	content: "→" / "tab";
 }
 
 .grid .nl {
@@ -1068,6 +1095,7 @@ th.collapsed .ico.fold {
 	padding: var(--space-3);
 	font: var(--text-sm) / var(--leading-relaxed) var(--font-mono);
 	white-space: pre-wrap;
+	tab-size: 4;
 	overflow-wrap: anywhere;
 	user-select: text;
 }
