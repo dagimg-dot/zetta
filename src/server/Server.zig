@@ -1,7 +1,6 @@
 //! Accepts connections and runs each one as a concurrent task.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const db = @import("db");
 const handlers = @import("handlers.zig");
@@ -10,7 +9,6 @@ const log = std.log.scoped(.server);
 
 const Server = @This();
 
-gpa: Allocator,
 ctx: handlers.Context,
 listener: Io.net.Server,
 group: Io.Group = .init,
@@ -25,11 +23,10 @@ pub const Config = struct {
 
 pub const ListenError = error{InvalidAddress} || Io.net.IpAddress.ListenError;
 
-pub fn listen(gpa: Allocator, io: Io, adapter: db.Adapter, config: Config) ListenError!Server {
+pub fn listen(io: Io, adapter: db.Adapter, config: Config) ListenError!Server {
     const address = Io.net.IpAddress.parse(config.host, config.port) catch return error.InvalidAddress;
     const listener = try address.listen(io, .{ .reuse_address = true });
     return .{
-        .gpa = gpa,
         .ctx = .{ .io = io, .adapter = adapter, .token = config.token, .name = config.name, .version = config.version },
         .listener = listener,
     };
@@ -67,10 +64,11 @@ fn serveConnection(self: *Server, stream: Io.net.Stream) void {
     var writer = stream.writer(io, &write_buf);
     var http: std.http.Server = .init(&reader.interface, &writer.interface);
 
-    var arena_state: std.heap.ArenaAllocator = .init(self.gpa);
+    // Pages rather than malloc, so what a large result used goes back to the OS on reset.
+    var arena_state: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer arena_state.deinit();
     while (true) {
-        _ = arena_state.reset(.retain_capacity);
+        _ = arena_state.reset(.{ .retain_with_limit = keep_between_requests });
         var req = http.receiveHead() catch return;
         const method = req.head.method;
         var path_buf: [128]u8 = undefined;
@@ -85,6 +83,10 @@ fn serveConnection(self: *Server, stream: Io.net.Stream) void {
         log.info("{t} {s} {d} {d}ms", .{ method, path, @intFromEnum(status), ms });
     }
 }
+
+/// What an idle keep-alive connection holds on to. A browser keeps several open, so keeping
+/// each one's largest result would hold that memory for as long as the tab is open.
+const keep_between_requests = 256 * 1024;
 
 /// The path without the query string, which can hold the token or a filter.
 fn copyPath(buf: []u8, target: []const u8) []const u8 {

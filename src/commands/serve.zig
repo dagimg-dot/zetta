@@ -56,7 +56,7 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
     const random = server.auth.randomToken(ctx.io);
     const token = args.token orelse &random;
 
-    var srv = server.Server.listen(ctx.gpa, ctx.io, adapter, .{
+    var srv = server.Server.listen(ctx.io, adapter, .{
         .host = args.host,
         .port = args.port,
         .token = token,
