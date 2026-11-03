@@ -1,6 +1,14 @@
+<p align="center"><img src="assets/icon.svg" width="96" height="96" alt="zetta"></p>
+
 # zetta
 
 A small database explorer for Postgres and SQLite that runs as a single binary. Point it at a database to browse, filter and query it in your browser, or run SQL from the shell.
+
+![Browsing the rows of a table](assets/screenshot-rows.png)
+
+![The foreign keys around a table](assets/screenshot-relationships.png)
+
+The screenshots show the sample shop from `dev/seed.sql`, opened with `--read-only`.
 
 ## Status
 
