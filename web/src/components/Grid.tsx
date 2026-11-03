@@ -656,9 +656,11 @@ export function Grid(props: {
 				break;
 			case "Home":
 				move(mod ? -1 : 0, -1, true);
+				if (mod) extend();
 				break;
 			case "End":
 				move(mod ? 1 : 0, 1, true);
+				if (mod) extend();
 				break;
 			case "PageDown":
 				move(pageRows(), 0);
@@ -705,8 +707,7 @@ export function Grid(props: {
 			case "h": {
 				const cur = cursor();
 				if (!cur || mod) return;
-				props.hidden.toggle(cur.col);
-				move(0, 0);
+				if (flipColumn(cur.col)) move(0, 0);
 				break;
 			}
 			case "o": {
@@ -803,8 +804,19 @@ export function Grid(props: {
 		table?.focus({ preventScroll: true });
 	};
 
-	const toggleColumn = (i: number, name: string, collapsing: boolean) => {
+	/** Hides or shows a column. The last one shown stays, so the grid never goes blank. */
+	const flipColumn = (i: number): boolean => {
+		const hiding = !props.hidden.hidden().has(i);
+		if (hiding && visibleCols().length <= 1) {
+			props.selection.tell("The last column stays shown");
+			return false;
+		}
 		props.hidden.toggle(i);
+		return true;
+	};
+
+	const toggleColumn = (i: number, name: string, collapsing: boolean) => {
+		if (!flipColumn(i)) return;
 		queueMicrotask(() => focusHeader(name, collapsing ? "expand" : "label"));
 	};
 
@@ -1068,7 +1080,15 @@ export function Grid(props: {
 					</Show>
 				</Show>
 			</div>
-			<Show when={inspected()}>{(c) => <Inspector cell={c()} onClose={closeInspector} />}</Show>
+			<Show when={inspected()}>
+				{(c) => (
+					<Inspector
+						cell={c()}
+						onClose={closeInspector}
+						onMove={(dRow, dCol) => move(dRow, dCol)}
+					/>
+				)}
+			</Show>
 			<RowMenu
 				target={rowMenu()}
 				actions={{

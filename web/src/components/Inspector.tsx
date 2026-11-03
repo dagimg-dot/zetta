@@ -99,7 +99,19 @@ function action(a: InspectorAction) {
 	);
 }
 
-export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
+/** Arrow keys move the grid's cursor while the inspector has focus, as its footer says. */
+const arrows: Record<string, [number, number]> = {
+	ArrowUp: [-1, 0],
+	ArrowDown: [1, 0],
+	ArrowLeft: [0, -1],
+	ArrowRight: [0, 1],
+};
+
+export function Inspector(props: {
+	cell: InspectedCell;
+	onClose: () => void;
+	onMove: (dRow: number, dCol: number) => void;
+}) {
 	const [mode, setMode] = createSignal<Mode>("pretty");
 	const [copied, setCopied] = createSignal(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -139,6 +151,21 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 		return out;
 	};
 
+	const onKeyDown = (e: KeyboardEvent) => {
+		if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+		if (e.key === "Escape") {
+			e.preventDefault();
+			props.onClose();
+			return;
+		}
+		// Text fields and the value keep their arrows for the caret and for scrolling.
+		const at = e.target as HTMLElement;
+		const step = arrows[e.key];
+		if (!step || e.shiftKey || at.closest("input, textarea, .value")) return;
+		e.preventDefault();
+		props.onMove(step[0], step[1]);
+	};
+
 	const copy = async () => {
 		const ok = await copyText(props.cell.value ?? "");
 		if (!ok) return;
@@ -149,7 +176,11 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 	};
 
 	return (
-		<section class="inspector" aria-label={`Value of ${props.cell.column}, row ${props.cell.row}`}>
+		<section
+			class="inspector"
+			aria-label={`Value of ${props.cell.column}, row ${props.cell.row}`}
+			onKeyDown={onKeyDown}
+		>
 			<header>
 				<span class="col" {...tip(props.cell.column, undefined, "bottom")}>
 					{props.cell.column}

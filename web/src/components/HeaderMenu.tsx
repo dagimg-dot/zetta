@@ -44,6 +44,8 @@ export function HeaderMenu(props: {
 	const [op, setOp] = createSignal<Op>("eq");
 	const [value, setValue] = createSignal("");
 	let valueInput: HTMLInputElement | undefined;
+	/** Takes focus when the condition needs no value, such as "is true". */
+	let applyButton: HTMLButtonElement | undefined;
 
 	createEffect(
 		on(filtering, (t) => {
@@ -175,7 +177,7 @@ export function HeaderMenu(props: {
 						return r ? { x: r.left, y: r.top, width: r.width, height: r.height } : null;
 					},
 				}}
-				initialFocusEl={() => valueInput ?? null}
+				initialFocusEl={() => (valueInput?.isConnected ? valueInput : (applyButton ?? null))}
 			>
 				<Portal>
 					<Popover.Positioner>
@@ -220,7 +222,7 @@ export function HeaderMenu(props: {
 										<div class="filter-foot">
 											<span class="note">Adds to the filters above the grid.</span>
 											<span class="spacer" />
-											<Button type="submit" variant="primary" kbd="Enter">
+											<Button ref={applyButton} type="submit" variant="primary" kbd="Enter">
 												Apply
 											</Button>
 										</div>
