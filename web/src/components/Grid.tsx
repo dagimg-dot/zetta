@@ -302,7 +302,7 @@ export function Grid(props: {
 			.join(",")
 			.concat(
 				props.hidden.hidden().size
-					? "{width:30px;min-width:30px;max-width:30px;padding:0;font-size:0;background:var(--chrome)}"
+					? "{width:30px;min-width:30px;max-width:30px;padding:0;font-size:0;background:var(--surface-chrome)}"
 					: "",
 			);
 

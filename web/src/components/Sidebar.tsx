@@ -3,6 +3,7 @@ import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "
 import { openTable, view } from "../url";
 import { ErrorBox } from "./ErrorBox";
 import { Icon, Mark } from "./icons";
+import { ThemeSwitch } from "./ThemeSwitch";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,
@@ -200,6 +201,10 @@ export function Sidebar(props: {
 					</For>
 				</Show>
 			</div>
+			<footer class="sidebar-foot">
+				<span class="label">Theme</span>
+				<ThemeSwitch />
+			</footer>
 		</aside>
 	);
 }

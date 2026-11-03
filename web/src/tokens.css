@@ -1,0 +1,162 @@
+/*
+ * zetta design tokens. Three tiers:
+ *
+ *   1. Primitives: raw ramps and scales. Never used by components directly.
+ *   2. Semantic tokens: what a value is for (surface, border, text, accent).
+ *      Each color is defined once with light-dark(), so a theme is just a
+ *      color-scheme: the OS decides by default, and [data-theme] overrides it.
+ *   3. Components use semantic tokens only (styles.css).
+ *
+ * Neutrals carry a trace of the brand hue (50). Ember #ea580c is the brand;
+ * text in Ember uses the 600 step in light (5.2:1) and Glow, the 400 step, on dark.
+ * Every text pair below clears WCAG AA; control borders clear 3:1.
+ */
+
+:root {
+	color-scheme: light dark;
+
+	/* 1. Primitives */
+
+	--neutral-0: oklch(1 0 0);
+	--neutral-25: oklch(0.99 0.002 50);
+	--neutral-50: oklch(0.977 0.003 50);
+	--neutral-100: oklch(0.962 0.004 50);
+	--neutral-150: oklch(0.944 0.005 50);
+	--neutral-200: oklch(0.915 0.006 50);
+	--neutral-300: oklch(0.86 0.007 50);
+	--neutral-400: oklch(0.71 0.008 50);
+	--neutral-450: oklch(0.65 0.008 50);
+	--neutral-500: oklch(0.6 0.009 50);
+	--neutral-600: oklch(0.5 0.009 50);
+	--neutral-700: oklch(0.4 0.008 50);
+	--neutral-800: oklch(0.29 0.006 50);
+	--neutral-850: oklch(0.245 0.005 50);
+	--neutral-900: oklch(0.205 0.004 50);
+	--neutral-925: oklch(0.185 0.004 50);
+	--neutral-950: oklch(0.165 0.004 50);
+
+	--ember-50: oklch(0.975 0.018 55);
+	--ember-100: oklch(0.945 0.042 55);
+	--ember-200: oklch(0.885 0.085 52);
+	--ember-400: #fb923c;
+	--ember-500: #ea580c;
+	--ember-600: #c2410c;
+	--ember-700: oklch(0.47 0.15 37);
+	--ember-900: oklch(0.33 0.085 42);
+	--ember-950: oklch(0.27 0.05 46);
+
+	--red-50: oklch(0.971 0.016 25);
+	--red-300: #f87171;
+	--red-600: #b91c1c;
+	--red-950: oklch(0.255 0.045 25);
+
+	--amber-50: oklch(0.975 0.03 80);
+	--amber-400: #fbbf24;
+	--amber-700: #a3460a;
+	--amber-950: oklch(0.265 0.045 75);
+
+	--green-50: oklch(0.975 0.025 150);
+	--green-300: oklch(0.82 0.13 150);
+	--green-700: oklch(0.47 0.11 150);
+	--green-950: oklch(0.26 0.04 150);
+
+	--space-0-5: 2px;
+	--space-1: 4px;
+	--space-1-5: 6px;
+	--space-2: 8px;
+	--space-2-5: 10px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-8: 32px;
+	--space-10: 40px;
+
+	--radius-xs: 3px;
+	--radius-sm: 4px;
+	--radius-md: 6px;
+	--radius-lg: 10px;
+	--radius-full: 999px;
+
+	--font-sans: "Lexend", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-mono: "Source Code Pro", ui-monospace, Menlo, monospace;
+	--text-xs: 11.5px;
+	--text-sm: 12.5px;
+	--text-md: 13px;
+	--text-lg: 14px;
+	--text-xl: 16px;
+	--leading-tight: 1.25;
+	--leading: 1.4;
+	--leading-relaxed: 1.6;
+	--weight-regular: 400;
+	--weight-medium: 500;
+	--weight-semibold: 600;
+
+	--duration-fast: 120ms;
+	--duration: 160ms;
+	--duration-slow: 220ms;
+	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+	--control-height: 30px;
+	--bar-height: 41px;
+	--sidebar-width: 264px;
+	--inspector-width: 380px;
+
+	--z-sticky: 1;
+	--z-sticky-corner: 2;
+	--z-overlay: 10;
+	--z-drawer: 11;
+	--z-popover: 20;
+
+	/* 2. Semantic tokens */
+
+	/* The app behind every pane, the chrome around content, and content itself. */
+	--surface-canvas: light-dark(var(--neutral-100), var(--neutral-950));
+	--surface-chrome: light-dark(var(--neutral-50), var(--neutral-925));
+	--surface: light-dark(var(--neutral-0), var(--neutral-900));
+	--surface-raised: light-dark(var(--neutral-0), var(--neutral-850));
+	--surface-field: light-dark(var(--neutral-0), var(--neutral-950));
+	--surface-hover: light-dark(var(--neutral-100), var(--neutral-850));
+	--surface-pressed: light-dark(var(--neutral-150), var(--neutral-800));
+	--surface-selected: light-dark(var(--ember-50), var(--ember-950));
+	--surface-cursor: light-dark(var(--ember-100), var(--ember-900));
+	--surface-danger: light-dark(var(--red-50), var(--red-950));
+	--surface-warning: light-dark(var(--amber-50), var(--amber-950));
+	--surface-success: light-dark(var(--green-50), var(--green-950));
+	--surface-scrim: light-dark(oklch(0.2 0.01 50 / 0.28), oklch(0 0 0 / 0.5));
+
+	--border-subtle: light-dark(var(--neutral-150), var(--neutral-850));
+	--border: light-dark(var(--neutral-200), var(--neutral-800));
+	--border-strong: light-dark(var(--neutral-300), var(--neutral-700));
+	/* The same step clears 3:1 against every surface in both themes. */
+	--border-control: var(--neutral-500);
+	--border-focus: light-dark(var(--ember-500), var(--ember-400));
+
+	--text: light-dark(var(--neutral-900), var(--neutral-50));
+	--text-secondary: light-dark(var(--neutral-700), var(--neutral-400));
+	--text-tertiary: light-dark(var(--neutral-600), var(--neutral-450));
+	--text-accent: light-dark(var(--ember-600), var(--ember-400));
+	--text-on-accent: light-dark(var(--neutral-0), var(--neutral-950));
+	--text-danger: light-dark(var(--red-600), var(--red-300));
+	--text-warning: light-dark(var(--amber-700), var(--amber-400));
+	--text-success: light-dark(var(--green-700), var(--green-300));
+
+	/* Ember as a line or mark (tab underline, cursor outline) and as a fill. */
+	--accent: light-dark(var(--ember-500), var(--ember-400));
+	--accent-fill: light-dark(var(--ember-600), var(--ember-400));
+	--accent-fill-hover: light-dark(var(--ember-700), var(--ember-200));
+
+	--scrollbar: light-dark(var(--neutral-300), var(--neutral-800));
+	--scrollbar-hover: light-dark(var(--neutral-500), var(--neutral-600));
+
+	--shadow-raised: 0 1px 2px light-dark(oklch(0.2 0.01 50 / 0.06), oklch(0 0 0 / 0.3));
+	--shadow-overlay: 0 4px 8px light-dark(oklch(0.2 0.01 50 / 0.12), oklch(0 0 0 / 0.45));
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+}

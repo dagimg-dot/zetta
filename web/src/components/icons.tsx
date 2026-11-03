@@ -85,6 +85,19 @@ const paths = {
 			<path d="M7 2v8" />
 		</>
 	),
+	sun: () => (
+		<>
+			<circle cx="6" cy="6" r="2.3" />
+			<path d="M6 1v1.2M6 9.8V11M1 6h1.2M9.8 6H11M2.5 2.5l.8.8M8.7 8.7l.8.8M2.5 9.5l.8-.8M8.7 3.3l.8-.8" />
+		</>
+	),
+	moon: () => <path d="M9.8 7.4A4.2 4.2 0 0 1 4.6 2.2a4.2 4.2 0 1 0 5.2 5.2Z" />,
+	monitor: () => (
+		<>
+			<rect x="1.3" y="2" width="9.4" height="6.3" rx="1" />
+			<path d="M4.2 10.4h3.6M6 8.3v2.1" />
+		</>
+	),
 } satisfies Record<string, () => JSX.Element>;
 
 export type IconName = keyof typeof paths;

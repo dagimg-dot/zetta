@@ -12,6 +12,7 @@ const groups: { title: string; keys: [string[], string][] }[] = [
 			[["g"], "Focus the grid"],
 			[["["], "Previous page"],
 			[["]"], "Next page"],
+			[["t"], "Cycle the theme: system, light, dark"],
 			[["?"], "This list"],
 		],
 	},

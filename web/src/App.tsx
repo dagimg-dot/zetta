@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
-import { announcement } from "./announce";
+import { announce, announcement } from "./announce";
 import { getCatalog, getMeta, onUnauthorized } from "./api";
 import { DataPane } from "./components/DataPane";
 import { Icon } from "./components/icons";
@@ -8,6 +8,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SqlPane } from "./components/SqlPane";
 import { Unauthorized } from "./components/Unauthorized";
 import { createRequest } from "./request";
+import { cycleTheme } from "./theme";
 import { setView, type Tab, view } from "./url";
 
 function typing(): boolean {
@@ -74,6 +75,9 @@ export function App() {
 				break;
 			case "?":
 				shortcuts?.showModal();
+				break;
+			case "t":
+				announce(`Theme: ${cycleTheme()}`);
 				break;
 			case "d":
 				showTab("data");
