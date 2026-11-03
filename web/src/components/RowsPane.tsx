@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, Show, untrack } from "solid-js";
 import { announce } from "../announce";
 import { browse, compileBuilder, countRows, type TableDetail } from "../api";
 import { formatMs } from "../format";
@@ -137,7 +137,8 @@ export function RowsPane(props: {
 			? rawFilter().trim() !== view().filter ||
 				rawOrder().trim() !== view().order ||
 				view().q !== ""
-			: encodeBuilder(draft()) !== view().q;
+			: // Both sides re-encoded, so a shared URL written another way (\u escapes, key order) is not an edit.
+				encodeBuilder(draft()) !== encodeBuilder(applied() ?? emptyBuilder);
 
 	const toBuilder = () => {
 		setSqlMode(false);
@@ -278,6 +279,18 @@ export function RowsPane(props: {
 		if (k && !filtered() && props.approxRows !== null) return { n: props.approxRows, exact: false };
 		return null;
 	};
+
+	/** An offset past the end, as from an old link, moves to the last page once the count is known. */
+	createEffect(() => {
+		const r = result();
+		const k = rows.dataKey();
+		const t = total();
+		// Once moved, the URL no longer holds the empty page's offset, so this does not repeat.
+		if (!r || !k || r.rows.length || k.offset === 0 || !t?.exact || view().offset !== k.offset)
+			return;
+		const last = Math.max(0, Math.floor((t.n - 1) / k.limit) * k.limit);
+		if (last !== k.offset) untrack(() => setView({ offset: last }));
+	});
 
 	/** Whether the rows shown are a subset: a raw WHERE, or a builder with at least one filter. */
 	const filtered = () => {
