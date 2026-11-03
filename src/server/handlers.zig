@@ -17,6 +17,7 @@ pub const Context = struct {
     io: std.Io,
     adapter: db.Adapter,
     token: []const u8,
+    statement_timeout_ms: ?u32 = null,
     name: []const u8,
     version: []const u8,
 };
@@ -183,6 +184,7 @@ fn browse(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !
         .builder = src.builder,
         .limit = std.math.clamp(limit, 1, 1000),
         .offset = offset,
+        .budget_ms = ctx.statement_timeout_ms,
     }, &diag) catch |err| return dbFail(req, err, &diag);
     return respondResult(ctx, req, rs, started);
 }
@@ -238,7 +240,7 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status 
 
     const started = std.Io.Timestamp.now(ctx.io, .awake);
     var diag: db.Diagnostic = .{};
-    const rs = ctx.adapter.query(arena, sql, .{}, &diag) catch |err| return dbFail(req, err, &diag);
+    const rs = ctx.adapter.query(arena, sql, .{ .budget_ms = ctx.statement_timeout_ms }, &diag) catch |err| return dbFail(req, err, &diag);
     return respondResult(ctx, req, rs, started);
 }
 
@@ -449,4 +451,19 @@ test "a result larger than one chunk arrives whole and in order" {
     const parsed = try std.json.parseFromSliceLeaky(struct { rows: []const [2][]const u8 }, app.arena_state.allocator(), res.body, .{ .ignore_unknown_fields = true });
     try testing.expectEqual(1000, parsed.rows.len);
     for (parsed.rows, 1..) |row, n| try testing.expectEqual(n, try std.fmt.parseInt(usize, row[0], 10));
+}
+
+test "a browse past the statement timeout is a 504 that names the budget" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    app.ctx.statement_timeout_ms = 20;
+    var diag: db.Diagnostic = .{};
+    _ = try app.ctx.adapter.query(app.arena_state.allocator(), "create table t (x integer); insert into t values (1)", .{}, &diag);
+
+    const slow = try encode(app.arena_state.allocator(), "(with recursive r(i) as (select 1 union all select i + 1 from r where i < 100000000) select count(*) from r) > 0");
+    const res = try app.get(try std.fmt.allocPrint(app.arena_state.allocator(), "/api/browse?schema=main&table=t&filter={s}", .{slow}), null);
+    try testing.expectEqual(std.http.Status.gateway_timeout, res.status);
+    try testing.expect(std.mem.indexOf(u8, res.body, "\"timeout\"") != null);
+    try testing.expect(std.mem.indexOf(u8, res.body, "20 ms") != null);
 }

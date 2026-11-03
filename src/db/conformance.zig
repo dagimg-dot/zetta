@@ -338,6 +338,29 @@ fn run(f: Fixture) !void {
         try testing.expectEqual(3, try a.count(arena, .{ .table = parts }, &diag));
     }
 
+    // query and browse past their budget are Timeout, even while reading rows past max_rows,
+    // and a later statement without a budget is not cut short by the earlier one
+    {
+        const many = "with recursive r(i) as (select 1 union all select i + 1 from r where i < 100000000) select i from r";
+        try testing.expectError(error.Timeout, a.query(arena, many, .{ .max_rows = 10, .budget_ms = 20 }, &diag));
+        try testing.expect(contains(diag.message(), "20 ms"));
+        const slow = switch (a.info().name) {
+            .postgres => "(select true from pg_sleep(2))",
+            .sqlite => "(with recursive r(i) as (select 1 union all select i + 1 from r where i < 100000000) select count(*) from r) > 0",
+        };
+        try testing.expectError(error.Timeout, a.browse(arena, .{ .table = parts, .filter = slow, .budget_ms = 20 }, &diag));
+        try testing.expect(contains(diag.message(), "20 ms"));
+
+        const longer = switch (a.info().name) {
+            .postgres => "select pg_sleep(0.1) is not null",
+            .sqlite => "with recursive r(i) as (select 1 union all select i + 1 from r where i < 300000) select count(*) > 0 from r",
+        };
+        _ = try a.query(arena, "select 1", .{ .budget_ms = 20 }, &diag);
+        const res = try a.query(arena, longer, .{}, &diag);
+        try testing.expectEqual(1, res.rows.len);
+        try testing.expectEqual(3, (try a.browse(arena, .{ .table = parts, .budget_ms = 5000 }, &diag)).rows.len);
+    }
+
     // a builder compares a number column with a bound value
     {
         const b: Builder = .{ .filters = &.{.{ .column = "qty", .op = .eq, .value = "20" }} };

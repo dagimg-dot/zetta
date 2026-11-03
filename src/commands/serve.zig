@@ -10,6 +10,7 @@ pub const Args = struct {
     port: u16 = 7777,
     token: ?[]const u8 = null,
     read_only: bool = false,
+    statement_timeout: u32 = 30_000,
     open: ?bool = null,
 
     pub const about =
@@ -33,6 +34,12 @@ pub const Args = struct {
         \\Useful in containers, where the URL is not visible.
         },
         common.read_only,
+        .{ .field = "statement_timeout", .value_name = "MS", .env = &.{"ZETTA_STATEMENT_TIMEOUT"}, .help =
+        \\Stop a browse or a SQL tab query after this many milliseconds
+        \\
+        \\A query reads every row to count them, even past the 5,000 it returns, so this
+        \\is what bounds a large one. 0 means no limit. Counting rows has its own 3 s budget.
+        },
         .{ .field = "open", .negatable = true, .help = "Open the UI in a browser (default: when stdout is a terminal)" },
     };
     pub const examples = [_]cli.Example{
@@ -60,6 +67,7 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
         .host = args.host,
         .port = args.port,
         .token = token,
+        .statement_timeout_ms = if (args.statement_timeout == 0) null else args.statement_timeout,
         .name = "zetta",
         .version = ctx.version,
     }) catch |err| return switch (err) {

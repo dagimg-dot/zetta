@@ -125,6 +125,21 @@ fn run(self: *Postgres, arena: Allocator, text: []const u8, params: ?[]const Con
     return conn.run(arena, text, params, max_rows, diag);
 }
 
+/// `run` for browse and query: applies their budget, and after caller SQL stops trusting the
+/// statement_timeout zetta set, since that SQL can hold any statement.
+fn runBudgeted(self: *Postgres, arena: Allocator, text: []const u8, params: ?[]const Conn.Param, max_rows: usize, budget_ms: ?u32, caller_sql: bool, diag: *Diagnostic) types.Error!types.ResultSet {
+    const lease = try self.pool.acquire(diag);
+    defer lease.release();
+    const conn = &lease.conn.conn;
+    defer endTransaction(conn, arena);
+    try conn.statementTimeout(arena, budget_ms, diag);
+    defer if (caller_sql) conn.callerSqlRan();
+    return conn.run(arena, text, params, max_rows, diag) catch |err| {
+        if (err == error.Timeout) if (budget_ms) |ms| diag.print("the statement ran past its {d} ms budget", .{ms});
+        return err;
+    };
+}
+
 /// Each request stands alone: a BEGIN without COMMIT would otherwise hold its
 /// locks on a pooled connection and leak into whoever uses it next.
 fn endTransaction(conn: *Conn, arena: Allocator) void {
@@ -527,7 +542,12 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
     // With a builder the statement goes through the extended protocol, which binds the values.
     const params = if (req.builder != null) try bindParams(arena, compiled.params) else null;
-    return self.run(arena, text.written(), params, req.limit, diag);
+    const caller_sql = nonEmpty(req.filter) or nonEmpty(req.order);
+    return self.runBudgeted(arena, text.written(), params, req.limit, req.budget_ms, caller_sql, diag);
+}
+
+fn nonEmpty(s: ?[]const u8) bool {
+    return if (s) |text| text.len > 0 else false;
 }
 
 /// Builder values as untyped text parameters, so Postgres infers each from its column.
@@ -539,7 +559,7 @@ fn bindParams(arena: Allocator, values: []const []const u8) Allocator.Error![]co
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {
     const self = from(ptr);
-    return self.run(arena, text, null, options.max_rows, diag);
+    return self.runBudgeted(arena, text, null, options.max_rows, options.budget_ms, true, diag);
 }
 
 fn isTrue(v: ?[]const u8) bool {

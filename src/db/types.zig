@@ -221,6 +221,8 @@ pub const BrowseRequest = struct {
     builder: ?Builder = null,
     limit: u32 = 100,
     offset: u64 = 0,
+    /// Stops the statement with error.Timeout once it runs this long. Null means no limit.
+    budget_ms: ?u32 = null,
 };
 
 pub const CountRequest = struct {
@@ -234,6 +236,9 @@ pub const CountRequest = struct {
 
 pub const QueryOptions = struct {
     max_rows: usize = 5000,
+    /// As in `BrowseRequest`. Rows past `max_rows` are still read to count them, so this is
+    /// what bounds a large result.
+    budget_ms: ?u32 = null,
 };
 
 pub const OpenOptions = struct {

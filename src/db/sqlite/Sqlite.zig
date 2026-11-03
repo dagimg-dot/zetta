@@ -473,7 +473,16 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     const self = from(ptr);
     const lease = try self.pool.acquire(diag);
     defer lease.release();
+    var deadline: Conn.Deadline = undefined;
+    if (req.budget_ms) |ms| {
+        deadline = .after(self.io, ms);
+        lease.conn.setDeadline(&deadline);
+    }
+    defer lease.conn.clearDeadline();
+    return browseRows(lease.conn, arena, req, diag) catch |err| budgetError(err, req.budget_ms, diag);
+}
 
+fn browseRows(conn: *Conn, arena: Allocator, req: types.BrowseRequest, diag: *Diagnostic) types.Error!types.ResultSet {
     var text: std.Io.Writer.Allocating = .init(arena);
     const w = &text.writer;
     w.print("select * from {s}.{s}", .{
@@ -485,20 +494,32 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     builder.writeOrder(w, req.order, compiled.order) catch return error.OutOfMemory;
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
     // Bound values need one prepared statement; a raw filter keeps running every statement as before.
-    if (req.builder == null) return lease.conn.runAll(arena, text.written(), req.limit, diag);
+    if (req.builder == null) return conn.runAll(arena, text.written(), req.limit, diag);
     // The builder quotes every column, and a misspelt one must fail rather than compare as a string.
-    const dqs = lease.conn.strictIdentifiers();
-    defer lease.conn.restoreDoubleQuotedStrings(dqs);
+    const dqs = conn.strictIdentifiers();
+    defer conn.restoreDoubleQuotedStrings(dqs);
     w.writeByte(0) catch return error.OutOfMemory;
     const z = text.written();
-    return lease.conn.runBound(arena, z[0 .. z.len - 1 :0], compiled.params, diag);
+    return conn.runBound(arena, z[0 .. z.len - 1 :0], compiled.params, diag);
 }
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {
     const self = from(ptr);
     const lease = try self.pool.acquire(diag);
     defer lease.release();
-    return lease.conn.runAll(arena, text, options.max_rows, diag);
+    var deadline: Conn.Deadline = undefined;
+    if (options.budget_ms) |ms| {
+        deadline = .after(self.io, ms);
+        lease.conn.setDeadline(&deadline);
+    }
+    defer lease.conn.clearDeadline();
+    return lease.conn.runAll(arena, text, options.max_rows, diag) catch |err| budgetError(err, options.budget_ms, diag);
+}
+
+/// SQLite only says "interrupted", so a timeout gets the budget it ran past.
+fn budgetError(err: types.Error, budget_ms: ?u32, diag: *Diagnostic) types.Error {
+    if (err == error.Timeout) if (budget_ms) |ms| diag.print("the statement ran past its {d} ms budget", .{ms});
+    return err;
 }
 
 test "display name drops the directory and URI parameters" {

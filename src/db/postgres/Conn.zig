@@ -77,6 +77,7 @@ const State = struct {
     /// Messages bigger than the read buffer land here.
     big: std.ArrayList(u8) = .empty,
     type_names: std.AutoHashMapUnmanaged(u32, []u8) = .empty,
+    statement_timeout: StatementTimeout = .default,
     net_rbuf: [buf_len]u8,
     net_wbuf: [buf_len]u8,
     tls_rbuf: [buf_len]u8,
@@ -124,6 +125,15 @@ const State = struct {
         s.stream.close(s.io);
         s.gpa.destroy(s);
     }
+};
+
+/// What zetta last did to the session's statement_timeout, so an unchanged budget costs no round trip.
+const StatementTimeout = union(enum) {
+    /// Never set by zetta: whatever the server, database or role says.
+    default,
+    ms: u32,
+    /// Set by zetta, then caller SQL ran, and that can hold a SET of its own.
+    unsure,
 };
 
 const Ssl = enum { off, if_offered, required };
@@ -580,6 +590,21 @@ fn finishResult(arena: Allocator, fields: ?[]wire.Field, rows: []const types.Row
         .truncated = total > rows.len,
         .command = command,
     }, .oids = oids };
+}
+
+/// Limits each statement that follows to `ms`, or with null puts back the session's default.
+pub fn statementTimeout(self: *Conn, arena: Allocator, ms: ?u32, diag: *Diagnostic) Error!void {
+    const st = self.state;
+    const want: StatementTimeout = if (ms) |v| .{ .ms = v } else .default;
+    if (std.meta.eql(st.statement_timeout, want)) return;
+    const text = if (ms) |v| try std.fmt.allocPrint(arena, "set statement_timeout = {d}", .{v}) else "reset statement_timeout";
+    _ = try self.run(arena, text, null, 0, diag);
+    st.statement_timeout = want;
+}
+
+/// Records that caller SQL ran, which may have changed statement_timeout behind zetta's back.
+pub fn callerSqlRan(self: *Conn) void {
+    if (self.state.statement_timeout != .default) self.state.statement_timeout = .unsure;
 }
 
 /// Names for types outside the built-in table (enums, domains, extensions), cached per connection.

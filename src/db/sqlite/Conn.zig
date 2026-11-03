@@ -164,9 +164,19 @@ const progress_steps = 10_000;
 
 /// `runBound` that stops with error.Timeout once `deadline` passes.
 pub fn runBoundUntil(self: *Conn, arena: Allocator, text: [:0]const u8, params: []const []const u8, deadline: *const Deadline, diag: *Diagnostic) Error!types.ResultSet {
-    c.sqlite3_progress_handler(self.raw, progress_steps, onProgress, @constCast(deadline));
-    defer c.sqlite3_progress_handler(self.raw, 0, null, null);
+    self.setDeadline(deadline);
+    defer self.clearDeadline();
     return self.runBound(arena, text, params, diag);
+}
+
+/// Every statement run from here on stops with error.Timeout once `deadline` passes, until
+/// `clearDeadline`. `deadline` has to outlive that.
+pub fn setDeadline(self: *Conn, deadline: *const Deadline) void {
+    c.sqlite3_progress_handler(self.raw, progress_steps, onProgress, @constCast(deadline));
+}
+
+pub fn clearDeadline(self: *Conn) void {
+    c.sqlite3_progress_handler(self.raw, 0, null, null);
 }
 
 fn onProgress(ctx: ?*anyopaque) callconv(.c) c_int {

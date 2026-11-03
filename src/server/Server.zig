@@ -17,6 +17,8 @@ pub const Config = struct {
     host: []const u8,
     port: u16,
     token: []const u8,
+    /// Applied to every browse and query. Null means no limit.
+    statement_timeout_ms: ?u32,
     name: []const u8,
     version: []const u8,
 };
@@ -27,7 +29,7 @@ pub fn listen(io: Io, adapter: db.Adapter, config: Config) ListenError!Server {
     const address = Io.net.IpAddress.parse(config.host, config.port) catch return error.InvalidAddress;
     const listener = try address.listen(io, .{ .reuse_address = true });
     return .{
-        .ctx = .{ .io = io, .adapter = adapter, .token = config.token, .name = config.name, .version = config.version },
+        .ctx = .{ .io = io, .adapter = adapter, .token = config.token, .statement_timeout_ms = config.statement_timeout_ms, .name = config.name, .version = config.version },
         .listener = listener,
     };
 }

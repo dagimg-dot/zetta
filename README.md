@@ -68,6 +68,8 @@ Run `zetta <command> --help` for every option. Each option has an environment va
 
 The SQL tab and `query` run any statement with the privileges of the connecting role. With Postgres, `--read-only` sets `default_transaction_read_only`, which a statement can turn off again. For a hard guarantee, connect as a read-only role.
 
+In the web UI, a browse or a SQL tab query stops after 30 seconds and reports a timeout. Change that with `--statement-timeout` in milliseconds, or turn it off with 0. The `query` command has no limit.
+
 ## Postgres support
 
 zetta speaks the Postgres protocol itself; there is no libpq or OpenSSL.
