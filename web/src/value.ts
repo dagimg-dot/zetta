@@ -96,7 +96,7 @@ export function closest(word: string, candidates: readonly string[]): string | n
 /** The column name in "no such column: x" (SQLite) or 'column "x" does not exist' (Postgres). */
 export function unknownColumn(message: string): string | null {
 	const m =
-		/no such column: ([\w.]+)/.exec(message) ?? /column "([^"]+)" does not exist/.exec(message);
+		/no such column: "?([\w.]+)/.exec(message) ?? /column "([^"]+)" does not exist/.exec(message);
 	const name = m?.[1];
 	if (!name) return null;
 	const dot = name.lastIndexOf(".");

@@ -1,17 +1,17 @@
 import { For, Show } from "solid-js";
+import { compileBuilder } from "../api";
 import {
 	type Builder,
 	type Category,
 	categoryOf,
-	compileOrder,
-	compileWhere,
-	type Dialect,
+	encodeBuilder,
 	type Filter,
 	type Op,
 	opInfo,
 	opsFor,
 	type SortKey,
 } from "../query";
+import { createRequest } from "../request";
 import { Choice } from "./Choice";
 import { type ColumnChoice, ColumnPicker } from "./ColumnPicker";
 import { Icon } from "./icons";
@@ -27,7 +27,6 @@ const placeholders: Record<Category, string> = {
 
 export function QueryBar(props: {
 	columns: ColumnChoice[];
-	dialect: Dialect;
 	draft: Builder;
 	setDraft: (b: Builder) => void;
 	dirty: boolean;
@@ -91,10 +90,15 @@ export function QueryBar(props: {
 		}
 	};
 
+	/** The server compiles the builder, so the preview is exactly the SQL that runs, values included. */
+	const preview = createRequest(compileBuilder, () => encodeBuilder(props.draft) || null);
 	const sql = () => {
-		const w = compileWhere(props.draft, props.dialect);
-		const o = compileOrder(props.draft);
-		return [w && `WHERE ${w}`, o && `ORDER BY ${o}`].filter(Boolean).join("  ");
+		const q = encodeBuilder(props.draft);
+		const c = preview.data();
+		if (!q || !c || preview.dataKey() !== q) return "";
+		return [c.where && `WHERE ${c.where}`, c.order && `ORDER BY ${c.order}`]
+			.filter(Boolean)
+			.join("  ");
 	};
 
 	return (

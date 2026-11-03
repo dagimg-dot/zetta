@@ -1,6 +1,5 @@
 import { createMemo, For, Match, Show, Switch } from "solid-js";
 import { getTable, type TableDetail } from "../api";
-import type { Dialect } from "../query";
 import { createRequest } from "../request";
 import { type Pane, setView, view } from "../url";
 import { formatBytes } from "../value";
@@ -38,7 +37,6 @@ function plural(n: number, one: string, many = `${one}s`): string {
 
 export function DataPane(props: {
 	active: boolean;
-	dialect: Dialect;
 	approxRows: (schema: string, table: string) => number | null;
 	filterRef?: (el: HTMLInputElement) => void;
 }) {
@@ -188,7 +186,6 @@ export function DataPane(props: {
 										schema={t().schema}
 										table={t().table}
 										active={props.active}
-										dialect={props.dialect}
 										detail={current()}
 										approxRows={approx()}
 										filterRef={props.filterRef}

@@ -77,6 +77,8 @@ export class ApiError extends Error {
 export interface BrowseParams {
 	schema: string;
 	table: string;
+	/** The builder as JSON (see query.ts); the server compiles it. Never sent with filter or order. */
+	q?: string;
 	filter?: string;
 	order?: string;
 	limit?: number;
@@ -140,8 +142,23 @@ export interface RowCount {
 }
 
 /** Exact row count for a table and filter. Fails with `timeout` past the server's budget. */
-export function countRows(p: { schema: string; table: string; filter: string }): Promise<RowCount> {
+export function countRows(p: {
+	schema: string;
+	table: string;
+	q?: string;
+	filter?: string;
+}): Promise<RowCount> {
 	return request<RowCount>(`/api/count?${query({ ...p })}`);
+}
+
+export interface CompiledBuilder {
+	where: string;
+	order: string;
+}
+
+/** The SQL the server would run for a builder, with values written out, for display and editing. */
+export function compileBuilder(q: string): Promise<CompiledBuilder> {
+	return request<CompiledBuilder>(`/api/compile?${query({ q })}`);
 }
 
 export function runQuery(sql: string): Promise<ResultSet> {

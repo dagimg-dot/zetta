@@ -1,12 +1,9 @@
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { announce } from "../announce";
-import { browse, countRows, type TableDetail } from "../api";
+import { browse, compileBuilder, countRows, type TableDetail } from "../api";
 import { formatMs } from "../format";
 import {
 	type Builder,
-	compileOrder,
-	compileWhere,
-	type Dialect,
 	decodeBuilder,
 	emptyBuilder,
 	encodeBuilder,
@@ -28,7 +25,6 @@ export function RowsPane(props: {
 	schema: string;
 	table: string;
 	active: boolean;
-	dialect: Dialect;
 	detail: TableDetail | undefined;
 	approxRows: number | null;
 	filterRef?: (el: HTMLInputElement) => void;
@@ -63,10 +59,9 @@ export function RowsPane(props: {
 		),
 	);
 
-	/** What actually runs: the builder compiled for this database, or the raw SQL. */
-	const query = createMemo(() => {
-		const b = applied();
-		if (b) return { filter: compileWhere(b, props.dialect), order: compileOrder(b) };
+	/** What the server runs: the builder as data, which it compiles per dialect, or the raw SQL. */
+	const query = createMemo((): { q?: string; filter?: string; order?: string } => {
+		if (applied()) return { q: view().q };
 		return { filter: view().filter, order: view().order };
 	});
 
@@ -113,10 +108,20 @@ export function RowsPane(props: {
 		setView({ q: "", filter: "", order: "", offset: 0 });
 	};
 
-	const toSql = () => {
-		const b = draft();
-		setRawFilter(compileWhere(b, props.dialect));
-		setRawOrder(compileOrder(b));
+	/** Seeds the raw boxes with the server's own SQL for the builder, so nothing is lost switching. */
+	const toSql = async () => {
+		const q = encodeBuilder(draft());
+		let where = "";
+		let order = "";
+		if (q) {
+			try {
+				({ where, order } = await compileBuilder(q));
+			} catch {
+				// The builder stays as it was; switching with empty boxes loses nothing that applied.
+			}
+		}
+		setRawFilter(where);
+		setRawOrder(order);
 		setSqlMode(true);
 		queueMicrotask(() =>
 			document.querySelector<HTMLInputElement>("#pane-data .raw-where")?.focus(),
@@ -213,7 +218,7 @@ export function RowsPane(props: {
 	const counter = createRequest(countRows, () => {
 		const k = rows.dataKey();
 		if (!props.active || !k || shortPage() !== null) return null;
-		return { schema: k.schema, table: k.table, filter: k.filter ?? "" };
+		return { schema: k.schema, table: k.table, q: k.q, filter: k.filter };
 	});
 
 	/** The best total we have: exact when counted, the planner's estimate while counting an unfiltered table. */
@@ -229,14 +234,21 @@ export function RowsPane(props: {
 			c &&
 			ck.schema === k.schema &&
 			ck.table === k.table &&
-			ck.filter === (k.filter ?? "")
+			ck.q === k.q &&
+			ck.filter === k.filter
 		)
 			return { n: c.count, exact: true };
-		if (k && !k.filter && props.approxRows !== null) return { n: props.approxRows, exact: false };
+		if (k && !filtered() && props.approxRows !== null) return { n: props.approxRows, exact: false };
 		return null;
 	};
 
-	const filtered = () => !!rows.dataKey()?.filter;
+	/** Whether the rows shown are a subset: a raw WHERE, or a builder with at least one filter. */
+	const filtered = () => {
+		const k = rows.dataKey();
+		if (!k) return false;
+		if (k.filter) return true;
+		return (decodeBuilder(k.q ?? null)?.filters.length ?? 0) > 0;
+	};
 
 	const info = () => {
 		const r = result();
@@ -264,7 +276,6 @@ export function RowsPane(props: {
 				fallback={
 					<QueryBar
 						columns={columns()}
-						dialect={props.dialect}
 						draft={draft()}
 						setDraft={setDraft}
 						dirty={dirty()}
@@ -346,7 +357,7 @@ export function RowsPane(props: {
 								</button>
 							)}
 						</Show>
-						<Show when={query().filter || query().order}>
+						<Show when={query().q || query().filter || query().order}>
 							<button
 								type="button"
 								class="btn quiet"

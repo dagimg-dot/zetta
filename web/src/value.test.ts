@@ -14,6 +14,10 @@ describe("kindOf", () => {
 describe("did you mean", () => {
 	test("finds the column in both databases' messages", () => {
 		expect(unknownColumn("no such column: balanc")).toBe("balanc");
+		// Builder queries quote names, and SQLite then quotes them back in the message.
+		expect(
+			unknownColumn('no such column: "balanc" - should this be a string literal in single-quotes?'),
+		).toBe("balanc");
 		expect(unknownColumn('column "c.balanc" does not exist')).toBe("balanc");
 		expect(closest("balanc", ["id", "name", "balance"])).toBe("balance");
 		expect(closest("zzz", ["id", "name"])).toBeNull();

@@ -186,7 +186,6 @@ export function App() {
 					</div>
 					<DataPane
 						active={view().tab === "data"}
-						dialect={meta.data()?.adapter === "sqlite" ? "sqlite" : "postgres"}
 						approxRows={approxRows}
 						filterRef={(el) => {
 							filter = el;

@@ -4,7 +4,6 @@
  * user types in a value box can change the shape of the query.
  */
 
-export type Dialect = "postgres" | "sqlite";
 export type Category = "number" | "text" | "bool" | "time" | "json" | "other";
 
 export type Op =
@@ -114,78 +113,12 @@ export function opsFor(category: Category): OpInfo[] {
 	}
 }
 
+/**
+ * Only for header clicks in raw SQL mode, where the ORDER BY is text the user owns. Double quotes
+ * are standard SQL and mean the same in both adapters; the builder itself is compiled on the server.
+ */
 export function quoteIdent(name: string): string {
 	return `"${name.replaceAll('"', '""')}"`;
-}
-
-export function quoteLiteral(value: string): string {
-	return `'${value.replaceAll("'", "''")}'`;
-}
-
-function likePattern(value: string, before: string, after: string): string {
-	const escaped = value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
-	return quoteLiteral(before + escaped + after);
-}
-
-/** One condition as SQL, or null while it is incomplete. */
-export function compileFilter(f: Filter, dialect: Dialect): string | null {
-	if (!f.c) return null;
-	const col = quoteIdent(f.c);
-	const info = ops[f.op];
-	if (info.value && f.v === "") return null;
-	const like = dialect === "postgres" ? "ILIKE" : "LIKE";
-	// Text matching works on any column type once it is cast to text.
-	const asText = dialect === "postgres" ? `${col}::text` : col;
-	switch (f.op) {
-		case "eq":
-			return `${col} = ${quoteLiteral(f.v)}`;
-		case "neq":
-			return `${col} <> ${quoteLiteral(f.v)}`;
-		case "gt":
-			return `${col} > ${quoteLiteral(f.v)}`;
-		case "gte":
-			return `${col} >= ${quoteLiteral(f.v)}`;
-		case "lt":
-			return `${col} < ${quoteLiteral(f.v)}`;
-		case "lte":
-			return `${col} <= ${quoteLiteral(f.v)}`;
-		case "contains":
-			return `${asText} ${like} ${likePattern(f.v, "%", "%")} ESCAPE '\\'`;
-		case "starts":
-			return `${asText} ${like} ${likePattern(f.v, "", "%")} ESCAPE '\\'`;
-		case "ends":
-			return `${asText} ${like} ${likePattern(f.v, "%", "")} ESCAPE '\\'`;
-		case "in": {
-			const items = f.v
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-			return items.length ? `${col} IN (${items.map(quoteLiteral).join(", ")})` : null;
-		}
-		case "is_null":
-			return `${col} IS NULL`;
-		case "not_null":
-			return `${col} IS NOT NULL`;
-		case "is_true":
-			return dialect === "postgres" ? `${col} IS TRUE` : `${col} = 1`;
-		case "is_false":
-			return dialect === "postgres" ? `${col} IS FALSE` : `${col} = 0`;
-	}
-}
-
-export function compileWhere(b: Builder, dialect: Dialect): string {
-	const parts = b.filters
-		.map((f) => compileFilter(f, dialect))
-		.filter((p): p is string => p !== null);
-	if (parts.length <= 1) return parts[0] ?? "";
-	return parts.map((p) => `(${p})`).join(b.match === "all" ? " AND " : " OR ");
-}
-
-export function compileOrder(b: Builder): string {
-	return b.sorts
-		.filter((s) => s.c)
-		.map((s) => `${quoteIdent(s.c)} ${s.d}`)
-		.join(", ");
 }
 
 /** The builder travels in the URL so a filtered view can be shared and restored. */
