@@ -1,19 +1,56 @@
-import { createEffect, createSignal, on, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
+import { announce } from "../announce";
 import { runQuery } from "../api";
 import { formatMs, plural } from "../format";
 import { createRequest } from "../request";
+import { errorRange, isWrite } from "../value";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, Grid, HiddenButton } from "./Grid";
 import { Icon } from "./icons";
 
 const INDENT = "  ";
 
-export function SqlPane(props: { active: boolean }) {
+function load(key: string): string {
+	try {
+		return localStorage.getItem(key) ?? "";
+	} catch {
+		return "";
+	}
+}
+
+function save(key: string, value: string): void {
+	try {
+		if (value) localStorage.setItem(key, value);
+		else localStorage.removeItem(key);
+	} catch {
+		// Storage can be blocked; the draft is then only kept for this page.
+	}
+}
+
+export function SqlPane(props: {
+	active: boolean;
+	database: string | undefined;
+	readOnly: boolean;
+	editorRef?: (el: HTMLTextAreaElement) => void;
+}) {
 	let editor: HTMLTextAreaElement | undefined;
+	const storageKey = () => `zetta.sql.${props.database ?? ""}`;
 	const [sql, setSql] = createSignal("");
+	const [ran, setRan] = createSignal("");
 	const hidden = createHidden();
 	const query = createRequest(runQuery);
 
+	createEffect(
+		on(
+			() => props.database,
+			(db) => {
+				if (db !== undefined && !sql()) setSql(load(storageKey()));
+			},
+		),
+	);
+	createEffect(
+		on(sql, (s) => props.database !== undefined && save(storageKey(), s), { defer: true }),
+	);
 	createEffect(on(query.data, () => hidden.clear(), { defer: true }));
 	createEffect(
 		on(
@@ -24,12 +61,17 @@ export function SqlPane(props: { active: boolean }) {
 		),
 	);
 
+	const writes = createMemo(() => !props.readOnly && isWrite(sql()));
+
 	/** Runs the selection when there is one, so a single statement can be run out of a longer script. */
 	const run = () => {
 		if (!editor || query.loading()) return;
 		const { selectionStart: a, selectionEnd: b, value } = editor;
 		const text = (a !== b ? value.slice(a, b) : value).trim();
-		if (text) query.run(text);
+		if (!text) return;
+		setRan(text);
+		announce("Running");
+		query.run(text);
 	};
 
 	const onKey = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
@@ -47,24 +89,57 @@ export function SqlPane(props: { active: boolean }) {
 				);
 				setSql(e.currentTarget.value);
 			}
+		} else if (e.key === "Escape") {
+			e.currentTarget.blur();
 		}
+	};
+
+	const errorAt = () => {
+		const err = query.error();
+		if (!err) return null;
+		const range = errorRange(ran(), err.message);
+		if (!range) return null;
+		const start = sql().indexOf(ran());
+		return start >= 0 ? ([start + range[0], start + range[1]] as const) : null;
+	};
+
+	const showError = (range: readonly [number, number]) => {
+		if (!editor) return;
+		editor.focus();
+		editor.setSelectionRange(range[0], range[1]);
 	};
 
 	const info = () => {
 		const r = query.data();
 		if (!r) return "";
-		const rows = plural(r.rowCount, "row") + (r.columns.length ? "" : " affected");
-		return [r.command, rows, formatMs(r.elapsedMs)].filter(Boolean).join(" · ");
+		if (!r.columns.length) return [r.command, formatMs(r.elapsedMs)].filter(Boolean).join(" · ");
+		return [plural(r.rowCount, "row"), formatMs(r.elapsedMs)].join(" · ");
 	};
 
+	createEffect(
+		on(query.data, (r) => {
+			if (r) announce(info());
+		}),
+	);
+
 	return (
-		<section class="pane" hidden={!props.active}>
+		<section
+			class="pane"
+			hidden={!props.active}
+			id="pane-sql"
+			role="tabpanel"
+			aria-labelledby="tab-sql"
+		>
 			<textarea
-				ref={editor}
+				ref={(el) => {
+					editor = el;
+					props.editorRef?.(el);
+				}}
 				class="editor mono"
+				aria-label="SQL"
 				spellcheck={false}
 				autocomplete="off"
-				placeholder="select * from …     (Ctrl+Enter to run, or select a statement to run just that)"
+				placeholder="select * from customers limit 10"
 				value={sql()}
 				onInput={(e) => setSql(e.currentTarget.value)}
 				onKeyDown={onKey}
@@ -72,29 +147,63 @@ export function SqlPane(props: { active: boolean }) {
 			<div class="bar">
 				<button
 					type="button"
-					class="btn primary"
+					class="btn"
+					classList={{ primary: !writes(), danger: writes() }}
 					disabled={query.loading() || !sql().trim()}
 					onClick={run}
 				>
-					<Icon name="play" />
-					Run
+					<Icon name={writes() ? "warn" : "play"} />
+					{writes() ? "Run write" : "Run"}
 					<kbd>Ctrl ↵</kbd>
 				</button>
+				<Show
+					when={writes()}
+					fallback={<span class="hint">Select text to run only that statement</span>}
+				>
+					<span class="write-note">
+						This changes data in <span class="mono">{props.database}</span>
+					</span>
+				</Show>
+			</div>
+			<Show when={query.error()}>
+				{(err) => (
+					<ErrorBox error={err()} inline>
+						<Show when={errorAt()}>
+							{(range) => (
+								<button type="button" class="btn" onClick={() => showError(range())}>
+									Show in editor
+								</button>
+							)}
+						</Show>
+					</ErrorBox>
+				)}
+			</Show>
+			<Show
+				when={query.data()}
+				fallback={
+					<Show when={!query.loading() && !query.error()}>
+						<div class="empty">
+							<strong>Run SQL against {props.database ?? "the database"}</strong>
+							<kbd>Ctrl</kbd> <kbd>↵</kbd> runs the editor, or only the selected text. Results are
+							capped at 5,000 rows.
+						</div>
+					</Show>
+				}
+			>
+				{(r) => (
+					<div class="pane" classList={{ busy: query.loading() }}>
+						<Grid result={r()} hidden={hidden} label="Query result" stale={!!query.error()} />
+					</div>
+				)}
+			</Show>
+			<div class="status">
 				<span class="info">{query.loading() ? "Running…" : query.error() ? "Failed" : info()}</span>
 				<Show when={!query.loading() && !query.error() && query.data()?.truncated}>
-					<span class="warn">showing first {query.data()?.rows.length.toLocaleString()} rows</span>
+					<span class="warn">showing the first {query.data()?.rows.length.toLocaleString()}</span>
 				</Show>
 				<span class="spacer" />
 				<HiddenButton hidden={hidden} />
 			</div>
-			<Show when={query.error()}>{(err) => <ErrorBox error={err()} />}</Show>
-			<Show when={!query.error() && query.data()}>
-				{(r) => (
-					<div class="pane" classList={{ busy: query.loading() }}>
-						<Grid result={r()} hidden={hidden} />
-					</div>
-				)}
-			</Show>
 		</section>
 	);
 }

@@ -1,8 +1,8 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "../api";
 import { openTable, view } from "../url";
 import { ErrorBox } from "./ErrorBox";
-import { Icon } from "./icons";
+import { Icon, Mark } from "./icons";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,
@@ -27,22 +27,11 @@ export function Sidebar(props: {
 	error: ApiError | undefined;
 	loading: boolean;
 	onRefresh: () => void;
+	onOpen: () => void;
+	searchRef?: (el: HTMLInputElement) => void;
 }) {
-	let search: HTMLInputElement | undefined;
 	const [query, setQuery] = createSignal("");
 	const [toggled, setToggled] = createSignal<Record<string, boolean>>({});
-
-	const onKey = (e: KeyboardEvent) => {
-		if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
-		const el = document.activeElement;
-		if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return;
-		if (el instanceof HTMLElement && el.isContentEditable) return;
-		e.preventDefault();
-		search?.focus();
-		search?.select();
-	};
-	onMount(() => addEventListener("keydown", onKey));
-	onCleanup(() => removeEventListener("keydown", onKey));
 
 	const schemas = () => props.catalog?.schemas ?? [];
 	const flat = () => props.meta?.capabilities.schemas === false && schemas().length === 1;
@@ -69,6 +58,20 @@ export function Sidebar(props: {
 
 	const toggle = (name: string) => setToggled({ ...toggled(), [name]: !isOpen(name) });
 
+	const open = (schema: string, table: string) => {
+		openTable(schema, table);
+		props.onOpen();
+	};
+
+	const openFirst = () => {
+		const s = shown()[0];
+		const t = s?.tables[0];
+		if (s && t) {
+			open(s.name, t.name);
+			setQuery("");
+		}
+	};
+
 	const TableRow = (p: { schema: string; t: TableInfo }) => {
 		const active = () => view().schema === p.schema && view().table === p.t.name;
 		const kind = kindLabel[p.t.kind];
@@ -77,8 +80,9 @@ export function Sidebar(props: {
 				type="button"
 				class="tbl"
 				classList={{ active: active() }}
+				aria-current={active() ? "page" : undefined}
 				title={`${p.schema}.${p.t.name}`}
-				onClick={() => openTable(p.schema, p.t.name)}
+				onClick={() => open(p.schema, p.t.name)}
 			>
 				<Icon name={p.t.kind === "table" ? "table" : "view"} />
 				<span class="name">{p.t.name}</span>
@@ -95,16 +99,18 @@ export function Sidebar(props: {
 	};
 
 	return (
-		<aside>
+		<aside aria-label="Tables">
 			<header>
 				<div class="brand">
+					<Mark size={18} />
 					<b>zetta</b>
 					<Show when={props.meta}>{(m) => <span class="version">{m().version}</span>}</Show>
 					<span class="spacer" />
 					<button
 						type="button"
-						class="btn icon-only"
-						title="Reload schemas"
+						class="btn quiet icon-only"
+						aria-label="Reload tables"
+						title="Reload tables"
 						disabled={props.loading}
 						onClick={() => props.onRefresh()}
 					>
@@ -120,7 +126,7 @@ export function Sidebar(props: {
 							</span>
 							<span class="badge">{m().adapter}</span>
 							<Show when={m().readOnly}>
-								<span class="badge ro" title="Writes are rejected by the server">
+								<span class="badge ro" title="Writes are refused by the server">
 									<Icon name="lock" size={10} />
 									read-only
 								</span>
@@ -132,15 +138,19 @@ export function Sidebar(props: {
 			<div class="find">
 				<Icon name="search" />
 				<input
-					ref={search}
+					ref={props.searchRef}
 					type="search"
-					placeholder="Filter tables"
+					aria-label="Search tables"
+					placeholder="Search tables"
 					autocomplete="off"
 					spellcheck={false}
 					value={query()}
 					onInput={(e) => setQuery(e.currentTarget.value)}
 					onKeyDown={(e) => {
-						if (e.key === "Escape") {
+						if (e.key === "Enter") {
+							e.preventDefault();
+							openFirst();
+						} else if (e.key === "Escape") {
 							setQuery("");
 							e.currentTarget.blur();
 						}
@@ -151,10 +161,10 @@ export function Sidebar(props: {
 			<div class="tree" classList={{ flat: flat() }}>
 				<Show when={props.error}>{(err) => <ErrorBox error={err()} />}</Show>
 				<Show when={!props.catalog && props.loading}>
-					<div class="empty">Loading</div>
+					<div class="empty">Loading…</div>
 				</Show>
 				<Show when={props.catalog && !shown().length}>
-					<div class="empty">{query().trim() ? "No matches" : "No schemas"}</div>
+					<div class="empty">{query().trim() ? "No matching tables" : "No schemas"}</div>
 				</Show>
 				<Show
 					when={!flat()}
@@ -170,12 +180,15 @@ export function Sidebar(props: {
 								<button
 									type="button"
 									class="schema-head"
-									classList={{ open: isOpen(s.name) }}
+									aria-expanded={isOpen(s.name)}
+									aria-label={`Schema ${s.name}, ${s.tables.length} ${s.tables.length === 1 ? "table" : "tables"}`}
 									onClick={() => toggle(s.name)}
 								>
 									<Icon name="chevron" class="chev" size={11} />
 									<span>{s.name}</span>
-									<span class="count">{s.tables.length}</span>
+									<span class="count" aria-hidden="true">
+										{s.tables.length}
+									</span>
 								</button>
 								<Show when={isOpen(s.name)}>
 									<Show when={s.tables.length} fallback={<div class="note">No tables</div>}>

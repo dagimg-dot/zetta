@@ -1,8 +1,10 @@
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
+import { announce } from "../announce";
 import { browse, type Column, getColumns } from "../api";
 import { formatMs } from "../format";
 import { createRequest } from "../request";
 import { setView, view } from "../url";
+import { closest, unknownColumn } from "../value";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, Grid, HiddenButton, type Sort } from "./Grid";
 import { Icon } from "./icons";
@@ -32,6 +34,7 @@ function nextOrder(order: string, col: string): string {
 export function DataPane(props: {
 	active: boolean;
 	approxRows: (schema: string, table: string) => number | null;
+	filterRef?: (el: HTMLInputElement) => void;
 }) {
 	const [filter, setFilter] = createSignal(view().filter);
 	const [order, setOrder] = createSignal(view().order);
@@ -97,11 +100,38 @@ export function DataPane(props: {
 
 	const dirty = () => filter().trim() !== view().filter || order().trim() !== view().order;
 
+	/** The last result for this table, kept on screen (dimmed) while a newer request failed. */
 	const result = () => {
 		const k = rows.dataKey();
 		const t = target();
-		if (rows.error() || !k || !t || k.schema !== t.schema || k.table !== t.table) return undefined;
+		if (!k || !t || k.schema !== t.schema || k.table !== t.table) return undefined;
 		return rows.data();
+	};
+
+	const suggestion = () => {
+		const err = rows.error();
+		if (!err) return null;
+		const bad = unknownColumn(err.message);
+		if (!bad) return null;
+		const names = [...columnMap().keys()];
+		const fix = closest(bad, names.length ? names : (result()?.columns.map((c) => c.name) ?? []));
+		return fix && fix !== bad ? { bad, fix } : null;
+	};
+
+	const applySuggestion = (bad: string, fix: string) => {
+		const swap = (s: string) =>
+			s.replace(new RegExp(`\\b${bad.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"), fix);
+		const f = swap(filter());
+		const o = swap(order());
+		setFilter(f);
+		setOrder(o);
+		setView({ filter: f.trim(), order: o.trim(), offset: 0 });
+	};
+
+	const clearFilter = () => {
+		setFilter("");
+		setOrder("");
+		setView({ filter: "", order: "", offset: 0 });
 	};
 
 	const info = () => {
@@ -115,16 +145,31 @@ export function DataPane(props: {
 			: "no rows";
 		const total = props.approxRows(t.schema, t.table);
 		const of = total !== null && !view().filter ? ` of ~${total.toLocaleString()}` : "";
-		return `${t.schema}.${t.table} · ${range}${of} · ${formatMs(r.elapsedMs)}`;
+		return `${range}${of} · ${formatMs(r.elapsedMs)}`;
 	};
 
+	createEffect(
+		on(rows.data, () => {
+			const t = target();
+			if (t && props.active) announce(`${t.table}: ${info()}`);
+		}),
+	);
+
 	return (
-		<section class="pane" hidden={!props.active}>
+		<section
+			class="pane"
+			hidden={!props.active}
+			id="pane-data"
+			role="tabpanel"
+			aria-labelledby="tab-data"
+		>
 			<div class="bar">
 				<input
+					ref={props.filterRef}
 					type="text"
 					class="grow mono"
-					placeholder="WHERE …   e.g.  id > 100 and email like '%@x.io'"
+					aria-label="Filter rows, as a SQL WHERE condition"
+					placeholder="WHERE …   e.g.  id > 100 and email like '%@example.com'"
 					autocomplete="off"
 					spellcheck={false}
 					disabled={!target()}
@@ -135,6 +180,7 @@ export function DataPane(props: {
 				<input
 					type="text"
 					class="ord mono"
+					aria-label="Order rows, as a SQL ORDER BY list"
 					placeholder="ORDER BY …"
 					autocomplete="off"
 					spellcheck={false}
@@ -153,13 +199,44 @@ export function DataPane(props: {
 					Apply
 				</button>
 			</div>
-			<Show when={target()} fallback={<div class="empty">Pick a table on the left.</div>}>
-				<Show when={rows.error()}>{(err) => <ErrorBox error={err()} />}</Show>
+			<Show
+				when={target()}
+				fallback={
+					<div class="empty">
+						<strong>Pick a table</strong>
+						Choose one on the left, or press <kbd>/</kbd> to search. <kbd>?</kbd> lists every
+						shortcut.
+					</div>
+				}
+			>
+				<Show when={rows.error()}>
+					{(err) => (
+						<ErrorBox error={err()} inline>
+							<Show when={suggestion()}>
+								{(s) => (
+									<button
+										type="button"
+										class="btn"
+										onClick={() => applySuggestion(s().bad, s().fix)}
+									>
+										Use <span class="mono">{s().fix}</span> instead of{" "}
+										<span class="mono">{s().bad}</span>
+									</button>
+								)}
+							</Show>
+							<Show when={view().filter || view().order}>
+								<button type="button" class="btn quiet" onClick={clearFilter}>
+									Clear filter and order
+								</button>
+							</Show>
+						</ErrorBox>
+					)}
+				</Show>
 				<Show
 					when={result()}
 					fallback={
 						<Show when={rows.loading()}>
-							<div class="empty">Loading</div>
+							<div class="empty">Loading…</div>
 						</Show>
 					}
 				>
@@ -168,22 +245,31 @@ export function DataPane(props: {
 							<Grid
 								result={r()}
 								hidden={hidden}
+								label={`${target()?.schema}.${target()?.table}`}
 								offset={rows.dataKey()?.offset ?? 0}
 								sort={parseSort(view().order)}
 								onSort={sortBy}
 								columnInfo={(name) => columnMap().get(name)}
+								stale={!!rows.error()}
 							/>
 						</div>
 					)}
 				</Show>
 			</Show>
 			<div class="status">
-				<span class="info">{rows.loading() && !result() ? "Loading…" : info()}</span>
+				<span class="info">
+					{rows.loading() && !result()
+						? "Loading…"
+						: rows.error() && result()
+							? "Showing the last good result"
+							: info()}
+				</span>
 				<span class="spacer" />
 				<HiddenButton hidden={hidden} />
 				<button
 					type="button"
 					class="btn"
+					title="Previous page ([)"
 					disabled={!result() || view().offset === 0 || rows.loading()}
 					onClick={() => setView({ offset: Math.max(0, view().offset - PAGE) })}
 				>
@@ -193,6 +279,7 @@ export function DataPane(props: {
 				<button
 					type="button"
 					class="btn"
+					title="Next page (])"
 					disabled={!result() || (result()?.rows.length ?? 0) < PAGE || rows.loading()}
 					onClick={() => setView({ offset: view().offset + PAGE })}
 				>
@@ -203,3 +290,5 @@ export function DataPane(props: {
 		</section>
 	);
 }
+
+export const PAGE_SIZE = PAGE;

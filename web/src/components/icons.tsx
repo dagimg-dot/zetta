@@ -58,6 +58,33 @@ const paths = {
 			<path d="M6 3.6v2.8M6 8.3v.1" />
 		</>
 	),
+	warn: () => (
+		<>
+			<path d="M6 1.6 11 10.4H1Z" />
+			<path d="M6 5v2.2M6 8.8v.1" />
+		</>
+	),
+	check: () => <path d="m2.5 6.3 2.3 2.3 4.7-5" />,
+	close: () => <path d="M3 3l6 6M9 3 3 9" />,
+	copy: () => (
+		<>
+			<rect x="4" y="4" width="6" height="6" rx="1" />
+			<path d="M8 4V2.8a.8.8 0 0 0-.8-.8H2.8a.8.8 0 0 0-.8.8v4.4a.8.8 0 0 0 .8.8H4" />
+		</>
+	),
+	menu: () => <path d="M2 3.5h8M2 6h8M2 8.5h8" />,
+	help: () => (
+		<>
+			<circle cx="6" cy="6" r="4.6" />
+			<path d="M4.7 4.7a1.4 1.4 0 1 1 1.9 1.3c-.4.2-.6.5-.6.9M6 8.4v.1" />
+		</>
+	),
+	inspect: () => (
+		<>
+			<rect x="1.5" y="2" width="9" height="8" rx="1.2" />
+			<path d="M7 2v8" />
+		</>
+	),
 } satisfies Record<string, () => JSX.Element>;
 
 export type IconName = keyof typeof paths;
@@ -77,6 +104,40 @@ export function Icon(props: { name: IconName; size?: number; class?: string }) {
 			aria-hidden="true"
 		>
 			{paths[props.name]()}
+		</svg>
+	);
+}
+
+const ON = [[0, 1, 2, 3], [2], [1], [0, 1, 2, 3]];
+
+/** The Grid Z mark: a 4×4 cell grid on an Ember tile, with the Z cells lit. */
+export function Mark(props: { size?: number }) {
+	const cells = [];
+	for (let row = 0; row < 4; row++) {
+		for (let col = 0; col < 4; col++) {
+			cells.push({ x: 10 + col * 12, y: 10 + row * 12, on: ON[row]?.includes(col) ?? false });
+		}
+	}
+	return (
+		<svg
+			class="icon"
+			width={props.size ?? 18}
+			height={props.size ?? 18}
+			viewBox="0 0 64 64"
+			aria-hidden="true"
+		>
+			<rect width="64" height="64" rx="14" fill="#ea580c" />
+			{cells.map((c) => (
+				<rect
+					x={c.x}
+					y={c.y}
+					width="8"
+					height="8"
+					rx="2"
+					fill="#fff"
+					opacity={c.on ? undefined : 0.22}
+				/>
+			))}
 		</svg>
 	);
 }

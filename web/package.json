@@ -5,14 +5,17 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite build",
-		"check": "tsc --noEmit && biome check .",
-		"fmt": "biome format --write ."
+		"check": "tsc --noEmit && biome check . && bun test",
+		"fmt": "biome format --write .",
+		"test": "bun test"
 	},
 	"dependencies": {
 		"solid-js": "^1.9.18"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.6.4",
+		"@fontsource-variable/lexend": "^5.3.0",
+		"@fontsource-variable/source-code-pro": "^5.3.1",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.5",
 		"vite-plugin-singlefile": "^2.3.4",

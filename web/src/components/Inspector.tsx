@@ -1,0 +1,155 @@
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
+import { announce } from "../announce";
+import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
+import { Icon } from "./icons";
+
+export interface InspectedCell {
+	column: string;
+	type: string;
+	value: string | null;
+	row: number;
+}
+
+type Mode = "pretty" | "raw";
+
+export async function copyText(text: string): Promise<boolean> {
+	try {
+		await navigator.clipboard.writeText(text);
+		return true;
+	} catch {
+		const area = document.createElement("textarea");
+		area.value = text;
+		area.style.position = "fixed";
+		area.style.opacity = "0";
+		document.body.append(area);
+		area.select();
+		const ok = document.execCommand("copy");
+		area.remove();
+		return ok;
+	}
+}
+
+/** Draws line breaks as a visible ↵ while keeping the text selectable and copyable. */
+function withBreaks(text: string) {
+	const parts = text.split("\n");
+	return parts.map((line, i) => (
+		<>
+			{line}
+			{i < parts.length - 1 && (
+				<>
+					<span class="nl" aria-hidden="true">
+						↵
+					</span>
+					{"\n"}
+				</>
+			)}
+		</>
+	));
+}
+
+export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
+	const [mode, setMode] = createSignal<Mode>("pretty");
+	const [copied, setCopied] = createSignal(false);
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	onCleanup(() => clearTimeout(timer));
+
+	const kind = createMemo(() => kindOf(props.cell.value));
+	createEffect(on(kind, () => setMode("pretty"), { defer: true }));
+
+	const shown = () => {
+		const v = props.cell.value;
+		if (v === null) return "NULL";
+		if (mode() === "raw") return v;
+		if (kind() === "json") return JSON.stringify(parseJson(v), null, 2);
+		if (kind() === "blob") return hexDump(v);
+		return v;
+	};
+
+	const facts = () => {
+		const v = props.cell.value;
+		if (v === null) return ["NULL"];
+		if (kind() === "blob") return ["blob", formatBytes(blobBytes(v))];
+		const out = [`${[...v].length.toLocaleString()} chars`];
+		const lines = v.split("\n").length;
+		if (lines > 1) out.push(`${lines.toLocaleString()} lines`);
+		if (kind() === "json") out.push("JSON");
+		return out;
+	};
+
+	const copy = async () => {
+		const ok = await copyText(props.cell.value ?? "");
+		if (!ok) return;
+		setCopied(true);
+		announce("Copied");
+		clearTimeout(timer);
+		timer = setTimeout(() => setCopied(false), 1200);
+	};
+
+	return (
+		<section class="inspector" aria-label={`Value of ${props.cell.column}, row ${props.cell.row}`}>
+			<header>
+				<span class="col" title={props.cell.column}>
+					{props.cell.column}
+				</span>
+				<span class="type">{props.cell.type}</span>
+				<span class="spacer" />
+				<button
+					type="button"
+					class="btn quiet icon-only"
+					aria-label="Copy value"
+					title="Copy value (C)"
+					disabled={props.cell.value === null}
+					onClick={copy}
+				>
+					<Icon name={copied() ? "check" : "copy"} />
+				</button>
+				<button
+					type="button"
+					class="btn quiet icon-only"
+					aria-label="Close inspector"
+					title="Close (Esc)"
+					onClick={() => props.onClose()}
+				>
+					<Icon name="close" />
+				</button>
+			</header>
+			<div class="facts">
+				<span>row {props.cell.row.toLocaleString()}</span>
+				{facts().map((f) => (
+					<span>{f}</span>
+				))}
+			</div>
+			<Show when={kind() === "json" || kind() === "blob"}>
+				<fieldset class="modes">
+					<legend class="sr-only">View</legend>
+					<button
+						type="button"
+						aria-pressed={mode() === "pretty"}
+						onClick={() => setMode("pretty")}
+					>
+						{kind() === "json" ? "Formatted" : "Hex"}
+					</button>
+					<button type="button" aria-pressed={mode() === "raw"} onClick={() => setMode("raw")}>
+						Raw
+					</button>
+				</fieldset>
+			</Show>
+			{/* biome-ignore lint/a11y/noNoninteractiveTabindex: a long value scrolls, and a scrollable region must be reachable by keyboard. */}
+			<pre class="value" classList={{ null: props.cell.value === null }} tabIndex={0}>
+				{kind() === "multiline" || (kind() === "json" && mode() === "raw")
+					? withBreaks(shown())
+					: shown()}
+			</pre>
+			<footer>
+				<kbd>↑</kbd>
+				<kbd>↓</kbd>
+				<kbd>←</kbd>
+				<kbd>→</kbd>
+				<span>move</span>
+				<span class="spacer" />
+				<kbd>Esc</kbd>
+				<span>close</span>
+			</footer>
+		</section>
+	);
+}
