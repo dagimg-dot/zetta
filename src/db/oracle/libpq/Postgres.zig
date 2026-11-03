@@ -71,6 +71,7 @@ fn info(ptr: *anyopaque) Adapter.Info {
         .database = self.database,
         .read_only = self.read_only,
         .capabilities = .{ .schemas = true, .approx_rows = true },
+        .dialect = &@import("../../postgres/dialect.zig").dialect,
     };
 }
 

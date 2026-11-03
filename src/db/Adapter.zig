@@ -7,6 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const types = @import("types.zig");
 const Diagnostic = @import("Diagnostic.zig");
+const builder = @import("builder.zig");
 
 const Adapter = @This();
 
@@ -21,6 +22,8 @@ pub const Info = struct {
     database: []const u8,
     read_only: bool,
     capabilities: types.Capabilities,
+    /// How this database spells the filter and sort builder.
+    dialect: *const builder.Dialect,
 };
 
 pub const VTable = struct {

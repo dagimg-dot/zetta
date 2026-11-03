@@ -205,6 +205,14 @@ pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ns: ?u64) Writer.Error!vo
     try s.endObject();
 }
 
+pub fn compiled(w: *Writer, where: []const u8, order: []const u8) Writer.Error!void {
+    var s: Stringify = .{ .writer = w };
+    try s.beginObject();
+    try field(&s, "where", where);
+    try field(&s, "order", order);
+    try s.endObject();
+}
+
 pub fn count(w: *Writer, n: u64, elapsed_ns: u64) Writer.Error!void {
     var s: Stringify = .{ .writer = w };
     try s.beginObject();
@@ -342,6 +350,15 @@ test "a view without sizes writes null for them" {
     });
     try testing.expectEqualStrings(
         \\{"schema":"public","name":"v","kind":"view","approxRows":null,"sizeBytes":null,"comment":null,"columns":[],"constraints":[],"indexes":[],"foreignKeys":[],"referencedBy":[],"triggers":[],"ddl":"CREATE VIEW v AS\nSELECT 1;"}
+    , w.buffered());
+}
+
+test "compiled SQL matches the API shape" {
+    var buf: [128]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    try compiled(&w, "\"n\"::text ILIKE '%a\\%%' ESCAPE '\\'", "");
+    try testing.expectEqualStrings(
+        \\{"where":"\"n\"::text ILIKE '%a\\%%' ESCAPE '\\'","order":""}
     , w.buffered());
 }
 

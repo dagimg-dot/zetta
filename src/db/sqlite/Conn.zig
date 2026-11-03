@@ -128,6 +128,24 @@ pub fn runBound(self: *Conn, arena: Allocator, text: [:0]const u8, params: []con
     return self.collect(arena, s, std.math.maxInt(usize), diag);
 }
 
+/// Turns off SQLite's legacy reading of `"name"` as a string when no column has that
+/// name, so a quoted column that does not exist is an error. Returns the previous
+/// setting for `restoreDoubleQuotedStrings`.
+///
+/// The return codes below are ignored on purpose: `sqlite3_db_config` fails only with
+/// SQLITE_MISUSE for an option the library does not know, and DQS_DML exists in every
+/// SQLite since 3.29, so the vendored amalgamation always accepts it.
+pub fn strictIdentifiers(self: *Conn) bool {
+    var was: c_int = 1;
+    _ = c.sqlite3_db_config(self.raw, c.SQLITE_DBCONFIG_DQS_DML, @as(c_int, -1), &was);
+    _ = c.sqlite3_db_config(self.raw, c.SQLITE_DBCONFIG_DQS_DML, @as(c_int, 0), @as(?*c_int, null));
+    return was != 0;
+}
+
+pub fn restoreDoubleQuotedStrings(self: *Conn, was: bool) void {
+    _ = c.sqlite3_db_config(self.raw, c.SQLITE_DBCONFIG_DQS_DML, @as(c_int, @intFromBool(was)), @as(?*c_int, null));
+}
+
 pub const Deadline = struct {
     io: std.Io,
     at: std.Io.Timestamp,

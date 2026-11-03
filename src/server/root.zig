@@ -8,5 +8,6 @@ test {
     _ = @import("http.zig");
     _ = @import("auth.zig");
     _ = @import("handlers.zig");
+    _ = @import("q.zig");
     _ = @import("Server.zig");
 }

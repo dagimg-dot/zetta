@@ -8,6 +8,7 @@ const Diagnostic = @import("Diagnostic.zig");
 const types = @import("types.zig");
 const dsn = @import("dsn.zig");
 const open = @import("open.zig").open;
+const Builder = @import("builder.zig").Builder;
 
 const Fixture = struct {
     adapter: Adapter,
@@ -64,7 +65,7 @@ fn seed(f: Fixture) !void {
         , .{ s, s, s, s, s, s, s })),
     }
     try exec(f.adapter, try std.fmt.bufPrint(&buf,
-        \\insert into {s}.parts (id, item_id, code, qty) values (1, 1, 'a', 5), (2, 1, 'b', 20), (3, 2, 'c', 0);
+        \\insert into {s}.parts (id, item_id, code, qty) values (1, 1, 'a%b', 5), (2, 1, 'axb', 20), (3, 2, 'c', 0);
     , .{s}));
 }
 
@@ -335,6 +336,81 @@ fn run(f: Fixture) !void {
         try testing.expectError(error.Timeout, a.count(arena, .{ .table = parts, .filter = slow, .budget_ms = 20 }, &diag));
         try testing.expect(contains(diag.message(), "20 ms"));
         try testing.expectEqual(3, try a.count(arena, .{ .table = parts }, &diag));
+    }
+
+    // a builder compares a number column with a bound value
+    {
+        const b: Builder = .{ .filters = &.{.{ .column = "qty", .op = .eq, .value = "20" }} };
+        try testing.expectEqual(1, try a.count(arena, .{ .table = parts, .builder = b }, &diag));
+        const res = try a.browse(arena, .{ .table = parts, .builder = b }, &diag);
+        try testing.expectEqual(1, res.rows.len);
+        try testing.expectEqualStrings("2", res.rows[0][0].?);
+    }
+
+    // a builder's contains matches % literally and ignores case
+    {
+        const b: Builder = .{ .filters = &.{.{ .column = "code", .op = .contains, .value = "A%B" }} };
+        try testing.expectEqual(1, try a.count(arena, .{ .table = parts, .builder = b }, &diag));
+        const res = try a.browse(arena, .{ .table = parts, .builder = b }, &diag);
+        try testing.expectEqual(1, res.rows.len);
+        try testing.expectEqualStrings("a%b", res.rows[0][2].?);
+    }
+
+    // a builder's in binds one value per item
+    {
+        const b: Builder = .{ .filters = &.{.{ .column = "code", .op = .in, .value = "c, axb, ," }} };
+        try testing.expectEqual(2, try a.count(arena, .{ .table = parts, .builder = b }, &diag));
+        const nums: Builder = .{ .filters = &.{.{ .column = "qty", .op = .in, .value = "0,5" }} };
+        try testing.expectEqual(2, try a.count(arena, .{ .table = parts, .builder = nums }, &diag));
+    }
+
+    // a builder joins with OR for any and AND for all, and sorts in priority order
+    {
+        const either: Builder = .{ .match = .any, .filters = &.{
+            .{ .column = "qty", .op = .lt, .value = "1" },
+            .{ .column = "code", .op = .eq, .value = "a%b" },
+        } };
+        try testing.expectEqual(2, try a.count(arena, .{ .table = parts, .builder = either }, &diag));
+        const both: Builder = .{
+            .filters = &.{
+                .{ .column = "qty", .op = .gte, .value = "5" },
+                .{ .column = "item_id", .op = .eq, .value = "1" },
+                .{ .column = "code", .op = .eq, .value = "" },
+            },
+            .sorts = &.{ .{ .column = "item_id" }, .{ .column = "qty", .desc = true } },
+        };
+        try testing.expectEqual(2, try a.count(arena, .{ .table = parts, .builder = both }, &diag));
+        const res = try a.browse(arena, .{ .table = parts, .builder = both }, &diag);
+        try testing.expectEqual(2, res.rows.len);
+        try testing.expectEqualStrings("2", res.rows[0][0].?);
+        try testing.expectEqualStrings("1", res.rows[1][0].?);
+    }
+
+    // a builder tests for null without a value
+    {
+        const nulls: Builder = .{ .filters = &.{.{ .column = "updated", .op = .is_null }} };
+        try testing.expectEqual(3, try a.count(arena, .{ .table = parts, .builder = nulls }, &diag));
+        const set: Builder = .{ .filters = &.{.{ .column = "updated", .op = .not_null }} };
+        try testing.expectEqual(0, try a.count(arena, .{ .table = parts, .builder = set }, &diag));
+    }
+
+    // a builder value is only ever a value, so injected SQL matches nothing and changes nothing
+    {
+        const b: Builder = .{ .filters = &.{.{ .column = "code", .op = .eq, .value = "x' or 1=1 --" }} };
+        try testing.expectEqual(0, try a.count(arena, .{ .table = parts, .builder = b }, &diag));
+        const res = try a.browse(arena, .{ .table = parts, .builder = b }, &diag);
+        try testing.expectEqual(0, res.rows.len);
+        const drop: Builder = .{ .filters = &.{.{ .column = "code", .op = .contains, .value = "'); delete from parts; --" }} };
+        try testing.expectEqual(0, try a.count(arena, .{ .table = parts, .builder = drop }, &diag));
+        try testing.expectEqual(3, try a.count(arena, .{ .table = parts }, &diag));
+    }
+
+    // a builder naming an unknown column is the database's own query error
+    {
+        const b: Builder = .{ .filters = &.{.{ .column = "nonesuch", .op = .eq, .value = "1" }} };
+        try testing.expectError(error.QueryFailed, a.count(arena, .{ .table = parts, .builder = b }, &diag));
+        try testing.expect(contains(diag.message(), "nonesuch"));
+        try testing.expectError(error.QueryFailed, a.browse(arena, .{ .table = parts, .builder = b }, &diag));
     }
 
     // a bad statement is QueryFailed with the database's message

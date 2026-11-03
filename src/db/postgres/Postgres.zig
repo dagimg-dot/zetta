@@ -11,6 +11,8 @@ const Conn = @import("Conn.zig");
 const conninfo = @import("conninfo.zig");
 const settings_mod = @import("settings.zig");
 const sql = @import("sql.zig");
+const builder = @import("../builder.zig");
+const dialect = @import("dialect.zig").dialect;
 
 const Postgres = @This();
 
@@ -111,6 +113,7 @@ fn info(ptr: *anyopaque) Adapter.Info {
         .database = self.settings.dbname,
         .read_only = self.read_only,
         .capabilities = .{ .schemas = true, .approx_rows = true },
+        .dialect = &dialect,
     };
 }
 
@@ -151,11 +154,11 @@ fn count(ptr: *anyopaque, arena: Allocator, req: types.CountRequest, diag: *Diag
 
     var text: std.Io.Writer.Allocating = .init(arena);
     const w = &text.writer;
+    const compiled = if (req.builder) |b| try builder.compile(arena, b, &dialect, .bind) else builder.Compiled.empty;
     w.print("select count(*) from {s}.{s}", .{ try quoteIdent(arena, req.table.schema), try quoteIdent(arena, req.table.table) }) catch return error.OutOfMemory;
-    // On its own lines so a trailing -- comment in the filter cannot swallow the parenthesis.
-    if (req.filter) |f| if (f.len > 0) w.print(" where (\n{s}\n)", .{f}) catch return error.OutOfMemory;
+    builder.writeWhere(w, req.filter, compiled.where) catch return error.OutOfMemory;
     // The extended protocol takes exactly one statement, so the filter cannot smuggle in another.
-    const res = conn.run(arena, text.written(), &.{}, 1, diag) catch |err| {
+    const res = conn.run(arena, text.written(), try bindParams(arena, compiled.params), 1, diag) catch |err| {
         if (err == error.Timeout) diag.print("counting took longer than the {d} ms budget", .{budget});
         return err;
     };
@@ -517,11 +520,21 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     const self = from(ptr);
     var text: std.Io.Writer.Allocating = .init(arena);
     const w = &text.writer;
+    const compiled = if (req.builder) |b| try builder.compile(arena, b, &dialect, .bind) else builder.Compiled.empty;
     w.print("select * from {s}.{s}", .{ try quoteIdent(arena, req.table.schema), try quoteIdent(arena, req.table.table) }) catch return error.OutOfMemory;
-    if (req.filter) |f| if (f.len > 0) w.print(" where {s}", .{f}) catch return error.OutOfMemory;
-    if (req.order) |o| if (o.len > 0) w.print(" order by {s}", .{o}) catch return error.OutOfMemory;
+    builder.writeWhere(w, req.filter, compiled.where) catch return error.OutOfMemory;
+    builder.writeOrder(w, req.order, compiled.order) catch return error.OutOfMemory;
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
-    return self.run(arena, text.written(), null, req.limit, diag);
+    // With a builder the statement goes through the extended protocol, which binds the values.
+    const params = if (req.builder != null) try bindParams(arena, compiled.params) else null;
+    return self.run(arena, text.written(), params, req.limit, diag);
+}
+
+/// Builder values as untyped text parameters, so Postgres infers each from its column.
+fn bindParams(arena: Allocator, values: []const []const u8) Allocator.Error![]const Conn.Param {
+    const out = try arena.alloc(Conn.Param, values.len);
+    for (out, values) |*p, v| p.* = v;
+    return out;
 }
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {

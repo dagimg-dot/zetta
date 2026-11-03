@@ -8,6 +8,7 @@ const db = @import("db");
 const render = @import("render");
 const http = @import("http.zig");
 const auth = @import("auth.zig");
+const qparam = @import("q.zig");
 
 /// The UI page, gzipped at build time. Every browser accepts gzip, so it is never inflated here.
 const ui_index_gz = @embedFile("ui_index");
@@ -20,7 +21,7 @@ pub const Context = struct {
     version: []const u8,
 };
 
-const Route = enum { index, meta, catalog, columns, table, count, browse, query, not_found };
+const Route = enum { index, meta, catalog, columns, table, count, compile, browse, query, not_found };
 
 fn route(method: std.http.Method, path: []const u8) Route {
     const eql = std.mem.eql;
@@ -30,6 +31,7 @@ fn route(method: std.http.Method, path: []const u8) Route {
     if (method == .GET and eql(u8, path, "/api/columns")) return .columns;
     if (method == .GET and eql(u8, path, "/api/table")) return .table;
     if (method == .GET and eql(u8, path, "/api/count")) return .count;
+    if (method == .GET and eql(u8, path, "/api/compile")) return .compile;
     if (method == .GET and eql(u8, path, "/api/browse")) return .browse;
     if (method == .POST and eql(u8, path, "/api/query")) return .query;
     return .not_found;
@@ -54,6 +56,7 @@ pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.St
         .columns => columns(ctx, arena, req, target.query),
         .table => tableDetail(ctx, arena, req, target.query),
         .count => count(ctx, arena, req, target.query),
+        .compile => compile(ctx, arena, req, target.query),
         .browse => browse(ctx, arena, req, target.query),
         .query => query(ctx, arena, req),
         .not_found => fail(req, .not_found, "not_found", "no such route"),
@@ -142,11 +145,16 @@ fn tableDetail(ctx: *const Context, arena: Allocator, req: *Request, query_strin
 
 fn count(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !std.http.Status {
     const table = try tableRef(arena, q) orelse return fail(req, .bad_request, "bad_request", "schema and table are required");
+    const src = switch (try rowSource(arena, q)) {
+        .ok => |s| s,
+        .bad => |message| return fail(req, .bad_request, "bad_request", message),
+    };
     const started = std.Io.Timestamp.now(ctx.io, .awake);
     var diag: db.Diagnostic = .{};
     const n = ctx.adapter.count(arena, .{
         .table = table,
-        .filter = try http.queryParam(arena, q, "filter"),
+        .filter = src.filter,
+        .builder = src.builder,
     }, &diag) catch |err| return dbFail(req, err, &diag);
     const elapsed: u64 = @intCast(@max(0, started.untilNow(ctx.io, .awake).toNanoseconds()));
     var out: std.Io.Writer.Allocating = .init(arena);
@@ -161,17 +169,59 @@ fn browse(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !
         return fail(req, .bad_request, "bad_request", "limit must be a whole number") else 100;
     const offset = if (try http.queryParam(arena, q, "offset")) |s| std.fmt.parseInt(u64, s, 10) catch
         return fail(req, .bad_request, "bad_request", "offset must be a whole number") else 0;
+    const src = switch (try rowSource(arena, q)) {
+        .ok => |s| s,
+        .bad => |message| return fail(req, .bad_request, "bad_request", message),
+    };
 
     const started = std.Io.Timestamp.now(ctx.io, .awake);
     var diag: db.Diagnostic = .{};
     const rs = ctx.adapter.browse(arena, .{
         .table = table,
-        .filter = try http.queryParam(arena, q, "filter"),
-        .order = try http.queryParam(arena, q, "order"),
+        .filter = src.filter,
+        .order = src.order,
+        .builder = src.builder,
         .limit = std.math.clamp(limit, 1, 1000),
         .offset = offset,
     }, &diag) catch |err| return dbFail(req, err, &diag);
     return respondResult(ctx, arena, req, rs, started);
+}
+
+/// Which rows browse and count look at: the raw `filter` and `order`, or the builder in `q`.
+const RowSource = struct {
+    filter: ?[]const u8 = null,
+    order: ?[]const u8 = null,
+    builder: ?db.builder.Builder = null,
+};
+
+fn rowSource(arena: Allocator, q: []const u8) !union(enum) { ok: RowSource, bad: []const u8 } {
+    const filter: ?[]const u8 = try http.queryParam(arena, q, "filter");
+    const order: ?[]const u8 = try http.queryParam(arena, q, "order");
+    const text: []const u8 = try http.queryParam(arena, q, "q") orelse "";
+    if (text.len == 0) return .{ .ok = .{ .filter = filter, .order = order } };
+    if (nonEmpty(filter) or nonEmpty(order)) return .{ .bad = "send either q or filter and order, not both" };
+    return switch (try qparam.parse(arena, text)) {
+        .ok => |b| .{ .ok = .{ .builder = b } },
+        .bad => |message| .{ .bad = message },
+    };
+}
+
+fn nonEmpty(s: ?[]const u8) bool {
+    return if (s) |text| text.len > 0 else false;
+}
+
+fn compile(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !std.http.Status {
+    const text: []const u8 = try http.queryParam(arena, q, "q") orelse "";
+    if (text.len == 0) return fail(req, .bad_request, "bad_request", "q is required");
+    const b = switch (try qparam.parse(arena, text)) {
+        .ok => |b| b,
+        .bad => |message| return fail(req, .bad_request, "bad_request", message),
+    };
+    const compiled = try db.builder.compile(arena, b, ctx.adapter.info().dialect, .display);
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try render.json.compiled(&out.writer, compiled.where, compiled.order);
+    try http.respondJson(req, .ok, out.written());
+    return .ok;
 }
 
 fn query(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
@@ -229,6 +279,136 @@ test "routes" {
     try std.testing.expectEqual(Route.query, route(.POST, "/api/query"));
     try std.testing.expectEqual(Route.table, route(.GET, "/api/table"));
     try std.testing.expectEqual(Route.count, route(.GET, "/api/count"));
+    try std.testing.expectEqual(Route.compile, route(.GET, "/api/compile"));
     try std.testing.expectEqual(Route.not_found, route(.GET, "/api/query"));
     try std.testing.expectEqual(Route.not_found, route(.DELETE, "/api/catalog"));
+}
+
+const testing = std.testing;
+
+const Response = struct { status: std.http.Status, body: []const u8 };
+
+/// Runs one GET through `handle` over in-memory streams, signed in.
+fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response {
+    const raw = try std.fmt.allocPrint(arena, "GET {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\n\r\n", .{ target, auth.cookie_name, ctx.token });
+    var in: std.Io.Reader = .fixed(raw);
+    const out_buf = try arena.alloc(u8, 16 * 1024);
+    var out: std.Io.Writer = .fixed(out_buf);
+    var server: std.http.Server = .init(&in, &out);
+    var req = try server.receiveHead();
+    const status = try handle(ctx, arena, &req);
+    const written = out.buffered();
+    const split = std.mem.indexOf(u8, written, "\r\n\r\n") orelse return error.TestNoBody;
+    return .{ .status = status, .body = written[split + 4 ..] };
+}
+
+/// Percent-encodes everything outside the unreserved set.
+fn encode(arena: Allocator, s: []const u8) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    for (s) |ch| {
+        if (std.ascii.isAlphanumeric(ch) or std.mem.indexOfScalar(u8, "-._~", ch) != null) {
+            try out.append(arena, ch);
+        } else try out.print(arena, "%{X:0>2}", .{ch});
+    }
+    return out.items;
+}
+
+const TestApp = struct {
+    arena_state: std.heap.ArenaAllocator,
+    ctx: Context,
+
+    fn init(app: *TestApp) !void {
+        app.arena_state = .init(testing.allocator);
+        errdefer app.arena_state.deinit();
+        var diag: db.Diagnostic = .{};
+        const target = try db.dsn.parse(app.arena_state.allocator(), ":memory:");
+        const adapter = try db.open(testing.allocator, testing.io, target, .{}, &diag);
+        app.ctx = .{ .io = testing.io, .adapter = adapter, .token = "t", .name = "zetta", .version = "test" };
+    }
+
+    fn deinit(app: *TestApp) void {
+        app.ctx.adapter.deinit();
+        app.arena_state.deinit();
+    }
+
+    fn get(app: *TestApp, path: []const u8, q: ?[]const u8) !Response {
+        const arena = app.arena_state.allocator();
+        const target = if (q) |text| try std.fmt.allocPrint(arena, "{s}{s}q={s}", .{
+            path, if (std.mem.indexOfScalar(u8, path, '?') == null) "?" else "&", try encode(arena, text),
+        }) else path;
+        return testGet(&app.ctx, arena, target);
+    }
+};
+
+test "compile shows the builder as SQL with literals and touches no table" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.get("/api/compile",
+        \\{"match":"any","filters":[{"c":"status","op":"contains","v":"it's 50%"},{"c":"id","op":"in","v":"1, 2"}],"sorts":[{"c":"id","d":"desc"}]}
+    );
+    try testing.expectEqual(std.http.Status.ok, res.status);
+    try testing.expectEqualStrings(
+        \\{"where":"(\"status\" LIKE '%it''s 50\\%%' ESCAPE '\\') OR (\"id\" IN ('1', '2'))","order":"\"id\" desc"}
+    , res.body);
+}
+
+test "compile of an empty builder gives empty strings" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.get("/api/compile", "{\"filters\":[{\"c\":\"a\",\"op\":\"eq\",\"v\":\"\"}]}");
+    try testing.expectEqual(std.http.Status.ok, res.status);
+    try testing.expectEqualStrings("{\"where\":\"\",\"order\":\"\"}", res.body);
+}
+
+test "compile without q, or with a bad q, is a bad request" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const missing = try app.get("/api/compile", null);
+    try testing.expectEqual(std.http.Status.bad_request, missing.status);
+    try testing.expect(std.mem.indexOf(u8, missing.body, "\"bad_request\"") != null);
+    const unknown = try app.get("/api/compile", "{\"filters\":[{\"c\":\"a\",\"op\":\"regex\",\"v\":\"x\"}]}");
+    try testing.expectEqual(std.http.Status.bad_request, unknown.status);
+    try testing.expect(std.mem.indexOf(u8, unknown.body, "regex") != null);
+    const junk = try app.get("/api/compile", "{not json");
+    try testing.expectEqual(std.http.Status.bad_request, junk.status);
+}
+
+test "q together with a raw filter or order is a bad request" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const b = "{\"filters\":[{\"c\":\"x\",\"op\":\"eq\",\"v\":\"1\"}]}";
+    for ([_][]const u8{
+        "/api/browse?schema=main&table=t&filter=x%3D1",
+        "/api/browse?schema=main&table=t&order=x",
+        "/api/count?schema=main&table=t&filter=x%3D1",
+    }) |path| {
+        const res = try app.get(path, b);
+        try testing.expectEqual(std.http.Status.bad_request, res.status);
+        try testing.expect(std.mem.indexOf(u8, res.body, "not both") != null);
+    }
+}
+
+test "browse and count take q and bind its values" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    var diag: db.Diagnostic = .{};
+    _ = try app.ctx.adapter.query(app.arena_state.allocator(), "create table t (x integer, s text); insert into t values (1, 'a'), (2, 'b'), (3, 'c')", .{}, &diag);
+
+    const b = "{\"filters\":[{\"c\":\"x\",\"op\":\"gte\",\"v\":\"2\"},{\"c\":\"s\",\"op\":\"neq\",\"v\":\"' or 1=1 --\"}],\"sorts\":[{\"c\":\"x\",\"d\":\"desc\"}]}";
+    const counted = try app.get("/api/count?schema=main&table=t", b);
+    try testing.expectEqual(std.http.Status.ok, counted.status);
+    try testing.expect(std.mem.startsWith(u8, counted.body, "{\"count\":2,"));
+
+    const browsed = try app.get("/api/browse?schema=main&table=t", b);
+    try testing.expectEqual(std.http.Status.ok, browsed.status);
+    try testing.expect(std.mem.indexOf(u8, browsed.body, "\"rows\":[[\"3\",\"c\"],[\"2\",\"b\"]]") != null);
+
+    const unknown = try app.get("/api/count?schema=main&table=t", "{\"filters\":[{\"c\":\"nope\",\"op\":\"eq\",\"v\":\"1\"}]}");
+    try testing.expectEqual(std.http.Status.bad_request, unknown.status);
+    try testing.expect(std.mem.indexOf(u8, unknown.body, "\"db_error\"") != null);
 }

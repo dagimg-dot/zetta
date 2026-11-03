@@ -1,6 +1,8 @@
 //! Values every adapter produces. All slices are owned by the allocator the
 //! caller passed in, which is expected to be an arena.
 
+const Builder = @import("builder.zig").Builder;
+
 pub const Error = error{
     ConnectFailed,
     QueryFailed,
@@ -215,6 +217,8 @@ pub const BrowseRequest = struct {
     filter: ?[]const u8 = null,
     /// Raw SQL placed after ORDER BY.
     order: ?[]const u8 = null,
+    /// Compiled by the adapter with bound values; ANDed with `filter` and ordered after `order`.
+    builder: ?Builder = null,
     limit: u32 = 100,
     offset: u64 = 0,
 };
@@ -223,6 +227,8 @@ pub const CountRequest = struct {
     table: TableRef,
     /// Raw SQL placed after WHERE, as in `BrowseRequest`.
     filter: ?[]const u8 = null,
+    /// Its sorts are ignored; a count has no order.
+    builder: ?Builder = null,
     budget_ms: u32 = 3000,
 };
 

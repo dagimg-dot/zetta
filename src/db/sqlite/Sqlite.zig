@@ -9,6 +9,8 @@ const types = @import("../types.zig");
 const Pool = @import("../pool.zig").Pool;
 const Conn = @import("Conn.zig");
 const parse = @import("parse.zig");
+const builder = @import("../builder.zig");
+const dialect = @import("dialect.zig").dialect;
 
 const Sqlite = @This();
 
@@ -96,6 +98,7 @@ fn info(ptr: *anyopaque) Adapter.Info {
         .database = self.database,
         .read_only = self.read_only,
         .capabilities = .{ .schemas = true, .approx_rows = false },
+        .dialect = &dialect,
     };
 }
 
@@ -202,12 +205,17 @@ fn count(ptr: *anyopaque, arena: Allocator, req: types.CountRequest, diag: *Diag
     const conn = lease.conn;
     const found = try lookup(conn, arena, req.table, diag);
 
-    var text: std.ArrayList(u8) = .empty;
-    try text.print(arena, "select count(*) from {s}.{s}", .{ found.q, try Conn.quoteIdent(arena, found.name) });
-    // On its own lines so a trailing -- comment in the filter cannot swallow the parenthesis.
-    if (req.filter) |f| if (f.len > 0) try text.print(arena, " where (\n{s}\n)", .{f});
+    const compiled = if (req.builder) |b| try builder.compile(arena, b, &dialect, .bind) else builder.Compiled.empty;
+    var text: std.Io.Writer.Allocating = .init(arena);
+    const w = &text.writer;
+    w.print("select count(*) from {s}.{s}", .{ found.q, try Conn.quoteIdent(arena, found.name) }) catch return error.OutOfMemory;
+    builder.writeWhere(w, req.filter, compiled.where) catch return error.OutOfMemory;
+    w.writeByte(0) catch return error.OutOfMemory;
+    const z = text.written();
+    const dqs = if (req.builder != null) conn.strictIdentifiers() else null;
+    defer if (dqs) |was| conn.restoreDoubleQuotedStrings(was);
     const deadline: Conn.Deadline = .after(self.io, req.budget_ms);
-    const res = conn.runBoundUntil(arena, try text.toOwnedSliceSentinel(arena, 0), &.{}, &deadline, diag) catch |err| {
+    const res = conn.runBoundUntil(arena, z[0 .. z.len - 1 :0], compiled.params, &deadline, diag) catch |err| {
         if (err == error.Timeout) diag.print("counting took longer than the {d} ms budget", .{req.budget_ms});
         return err;
     };
@@ -472,10 +480,18 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
         try Conn.quoteIdent(arena, req.table.schema),
         try Conn.quoteIdent(arena, req.table.table),
     }) catch return error.OutOfMemory;
-    if (req.filter) |f| if (f.len > 0) w.print(" where {s}", .{f}) catch return error.OutOfMemory;
-    if (req.order) |o| if (o.len > 0) w.print(" order by {s}", .{o}) catch return error.OutOfMemory;
+    const compiled = if (req.builder) |b| try builder.compile(arena, b, &dialect, .bind) else builder.Compiled.empty;
+    builder.writeWhere(w, req.filter, compiled.where) catch return error.OutOfMemory;
+    builder.writeOrder(w, req.order, compiled.order) catch return error.OutOfMemory;
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
-    return lease.conn.runAll(arena, text.written(), req.limit, diag);
+    // Bound values need one prepared statement; a raw filter keeps running every statement as before.
+    if (req.builder == null) return lease.conn.runAll(arena, text.written(), req.limit, diag);
+    // The builder quotes every column, and a misspelt one must fail rather than compare as a string.
+    const dqs = lease.conn.strictIdentifiers();
+    defer lease.conn.restoreDoubleQuotedStrings(dqs);
+    w.writeByte(0) catch return error.OutOfMemory;
+    const z = text.written();
+    return lease.conn.runBound(arena, z[0 .. z.len - 1 :0], compiled.params, diag);
 }
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {

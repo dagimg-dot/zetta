@@ -5,6 +5,7 @@ const types = @import("types.zig");
 pub const Adapter = @import("Adapter.zig");
 pub const Diagnostic = @import("Diagnostic.zig");
 pub const dsn = @import("dsn.zig");
+pub const builder = @import("builder.zig");
 pub const open = @import("open.zig").open;
 
 pub const Error = types.Error;
@@ -38,6 +39,7 @@ pub const Capabilities = types.Capabilities;
 test {
     _ = @import("Diagnostic.zig");
     _ = @import("dsn.zig");
+    _ = @import("builder.zig");
     _ = @import("pool.zig");
     _ = @import("sqlite/Conn.zig");
     _ = @import("sqlite/Sqlite.zig");
