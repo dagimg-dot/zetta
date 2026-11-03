@@ -726,6 +726,18 @@ textarea.editor:focus-visible {
 	line-height: var(--leading-relaxed);
 }
 
+.empty .starter {
+	display: flex;
+	margin: var(--space-3) auto 0;
+	max-width: 100%;
+}
+
+.empty .starter .mono {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .empty strong {
 	display: block;
 	color: var(--text);

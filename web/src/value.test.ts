@@ -8,6 +8,8 @@ import {
 	isNumericType,
 	isWrite,
 	kindOf,
+	statementAt,
+	statementRanges,
 	statements,
 	unknownColumn,
 } from "./value";
@@ -127,4 +129,48 @@ test("only create, drop and alter change the table list", () => {
 
 test("hexDump groups bytes with offsets", () => {
 	expect(hexDump("\\x0011223344")).toBe("000000  0011 2233 44");
+});
+
+describe("statement at the caret", () => {
+	const script = "select 1;\n\nselect 'a; b';\n-- note\nselect 3";
+	const at = (needle: string, shift = 0) => script.indexOf(needle) + shift;
+	const textAt = (caret: number) => {
+		const r = statementAt(script, caret);
+		return r ? script.slice(r[0], r[1]) : null;
+	};
+
+	test("ranges leave out the whitespace and the semicolon", () => {
+		expect(statementRanges(script).map(([a, b]) => script.slice(a, b))).toEqual([
+			"select 1",
+			"select 'a; b'",
+			"-- note\nselect 3",
+		]);
+	});
+
+	test("a caret inside a statement, or right after its semicolon, means that statement", () => {
+		expect(textAt(0)).toBe("select 1");
+		expect(textAt(at("1;", 2))).toBe("select 1");
+		expect(textAt(at("'a;", 2))).toBe("select 'a; b'");
+		expect(textAt(script.length)).toBe("-- note\nselect 3");
+	});
+
+	test("a caret on the blank line between two statements means the one above", () => {
+		expect(textAt(at("\n\n", 1))).toBe("select 1");
+	});
+
+	test("a comment before a statement belongs to it", () => {
+		expect(textAt(at("-- note", 3))).toBe("-- note\nselect 3");
+	});
+
+	test("semicolons in strings, quoted names, comments and $tag$ bodies do not split", () => {
+		const sql = `select '; x', "a;b" /* ; */ -- ;\n;select $f$ ; $f$`;
+		expect(statementRanges(sql).length).toBe(2);
+	});
+
+	test("a script without semicolons is one statement, and only comments are none", () => {
+		expect(statementRanges("select 1\nfrom t")).toEqual([[0, 15]]);
+		expect(statementAt("-- nothing here", 3)).toBeNull();
+		expect(statementAt("", 0)).toBeNull();
+		expect(statementAt("  \n select 1", 0)).toEqual([4, 12]);
+	});
 });

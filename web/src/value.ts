@@ -142,21 +142,36 @@ export function changesSchema(sql: string): boolean {
 	return statements(sql).some((s) => /^\s*(create|drop|alter)\b/i.test(s));
 }
 
-/**
- * The statements in `sql`, without comments, with each string literal and quoted name emptied, so
- * a keyword or semicolon inside one does not count. Handles '', "" and Postgres $tag$ quoting.
- */
-export function statements(sql: string): string[] {
-	const out: string[] = [];
+interface Segment {
+	/** Where it starts in `sql`, just after the previous semicolon. */
+	start: number;
+	/** Where its semicolon is, or the end of `sql`. */
+	end: number;
+	/** The text without comments, with each string literal and quoted name emptied. */
+	clean: string;
+}
+
+const tagAt = /\$[A-Za-z_]*\$/y;
+
+/** The Postgres `$tag$` that starts at `i`, if one does. */
+function dollarTag(sql: string, i: number): string | null {
+	tagAt.lastIndex = i;
+	return tagAt.exec(sql)?.[0] ?? null;
+}
+
+/** Cuts `sql` at each semicolon that is not inside a comment, string, quoted name or $tag$ body. */
+function segments(sql: string): Segment[] {
+	const out: Segment[] = [];
+	let start = 0;
 	let cur = "";
 	let i = 0;
 	while (i < sql.length) {
 		const ch = sql[i] ?? "";
-		const rest = sql.slice(i);
-		if (rest.startsWith("--")) {
+		const rest = sql.slice(i, i + 2);
+		if (rest === "--") {
 			const end = sql.indexOf("\n", i);
 			i = end < 0 ? sql.length : end;
-		} else if (rest.startsWith("/*")) {
+		} else if (rest === "/*") {
 			const end = sql.indexOf("*/", i + 2);
 			i = end < 0 ? sql.length : end + 2;
 			cur += " ";
@@ -165,22 +180,61 @@ export function statements(sql: string): string[] {
 			while (j < sql.length && !(sql[j] === ch && sql[j + 1] !== ch)) j += sql[j] === ch ? 2 : 1;
 			i = j + 1;
 			cur += `${ch}${ch}`;
-		} else if (ch === "$" && /^\$[A-Za-z_]*\$/.test(rest)) {
-			const tag = /^\$[A-Za-z_]*\$/.exec(rest)?.[0] ?? "$$";
+		} else if (ch === "$" && dollarTag(sql, i)) {
+			const tag = dollarTag(sql, i) ?? "$$";
 			const end = sql.indexOf(tag, i + tag.length);
 			i = end < 0 ? sql.length : end + tag.length;
 			cur += "''";
 		} else if (ch === ";") {
-			out.push(cur);
+			out.push({ start, end: i, clean: cur });
 			cur = "";
 			i++;
+			start = i;
 		} else {
 			cur += ch;
 			i++;
 		}
 	}
-	out.push(cur);
-	return out.filter((s) => s.trim());
+	out.push({ start, end: Math.min(i, sql.length), clean: cur });
+	return out;
+}
+
+/**
+ * The statements in `sql`, without comments, with each string literal and quoted name emptied, so
+ * a keyword or semicolon inside one does not count. Handles '', "" and Postgres $tag$ quoting.
+ */
+export function statements(sql: string): string[] {
+	return segments(sql)
+		.map((s) => s.clean)
+		.filter((s) => s.trim());
+}
+
+/**
+ * Where each statement is in `sql`, as [start, end) without the surrounding whitespace or the
+ * semicolon. Comments before a statement belong to it; a stretch of only comments is not one.
+ */
+export function statementRanges(sql: string): [number, number][] {
+	const out: [number, number][] = [];
+	for (const s of segments(sql)) {
+		if (!s.clean.trim()) continue;
+		let a = s.start;
+		let b = s.end;
+		while (a < b && /\s/.test(sql[a] ?? "")) a++;
+		while (b > a && /\s/.test(sql[b - 1] ?? "")) b--;
+		out.push([a, b]);
+	}
+	return out;
+}
+
+/**
+ * The statement a caret at `at` means: the one it is in or right after, so a caret on a blank line
+ * between two statements means the one above. Before the first statement, it means the first.
+ */
+export function statementAt(sql: string, at: number): [number, number] | null {
+	const ranges = statementRanges(sql);
+	let pick = ranges[0] ?? null;
+	for (const r of ranges) if (r[0] <= at) pick = r;
+	return pick;
 }
 
 const writeVerbs =

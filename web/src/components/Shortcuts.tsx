@@ -47,7 +47,8 @@ const groups: { title: string; keys: Shortcut[] }[] = [
 	{
 		title: "In the SQL editor",
 		keys: [
-			{ keys: ["Mod+Enter"], what: "Run, or run the selection" },
+			{ keys: ["Mod+Enter"], what: "Run the statement at the caret, or the selected text" },
+			{ keys: ["Mod+Shift+Enter"], what: "Run everything in the editor" },
 			{ keys: ["Esc"], what: "Leave the editor" },
 		],
 	},

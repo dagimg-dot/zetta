@@ -9,6 +9,7 @@ import { SqlPane } from "./components/SqlPane";
 import { TipLayer, tip } from "./components/Tip";
 import { Unauthorized } from "./components/Unauthorized";
 import { createRequest } from "./request";
+import { starterSql } from "./starter";
 import { cycleTheme } from "./theme";
 import { setView, type Tab, view } from "./url";
 
@@ -193,6 +194,7 @@ export function App() {
 						active={view().tab === "sql"}
 						database={meta.data()?.database}
 						readOnly={meta.data()?.readOnly ?? false}
+						starter={starterSql(catalog.data(), meta.data()?.adapter, view())}
 						onSchemaChange={catalog.refetch}
 						editorRef={(el) => {
 							editor = el;

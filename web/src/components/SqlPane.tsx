@@ -4,7 +4,14 @@ import { runQuery } from "../api";
 import { formatMs, plural } from "../format";
 import { isMac } from "../keys";
 import { createRequest } from "../request";
-import { changesSchema, errorRange, isWrite, statements } from "../value";
+import {
+	changesSchema,
+	errorRange,
+	isWrite,
+	statementAt,
+	statementRanges,
+	statements,
+} from "../value";
 import { Button } from "./Button";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
@@ -13,6 +20,25 @@ import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
 
 const INDENT = "  ";
+
+/**
+ * What a run sends and where it starts in the editor: the selection when there is one, otherwise
+ * the statement at the caret, or with `all` everything.
+ */
+function pickRun(
+	value: string,
+	a: number,
+	b: number,
+	all: boolean,
+): { text: string; at: number } | null {
+	if (all || a !== b) {
+		const raw = all ? value : value.slice(a, b);
+		const text = raw.trim();
+		return text ? { text, at: (all ? 0 : a) + raw.indexOf(text) } : null;
+	}
+	const r = statementAt(value, a);
+	return r ? { text: value.slice(r[0], r[1]), at: r[0] } : null;
+}
 
 function load(key: string): string {
 	try {
@@ -35,6 +61,8 @@ export function SqlPane(props: {
 	active: boolean;
 	database: string | undefined;
 	readOnly: boolean;
+	/** A first query to offer while the editor is empty, on a table that exists. */
+	starter?: string | null;
 	/** A run created, dropped or altered something, so the table list may be out of date. */
 	onSchemaChange?: () => void;
 	editorRef?: (el: HTMLTextAreaElement) => void;
@@ -42,6 +70,10 @@ export function SqlPane(props: {
 	let editor: HTMLTextAreaElement | undefined;
 	const storageKey = () => `zetta.sql.${props.database ?? ""}`;
 	const [sql, setSql] = createSignal("");
+	/** The editor's selection, or its caret when both ends are the same. */
+	const [caret, setCaret] = createSignal<[number, number]>([0, 0]);
+	const track = (e: { currentTarget: HTMLTextAreaElement }) =>
+		setCaret([e.currentTarget.selectionStart, e.currentTarget.selectionEnd]);
 	/** What the last run sent, and where in the editor it started. */
 	const [ran, setRan] = createSignal({ text: "", at: 0 });
 	const hidden = createHidden();
@@ -69,7 +101,20 @@ export function SqlPane(props: {
 		),
 	);
 
-	const writes = createMemo(() => !props.readOnly && isWrite(sql()));
+	const ranges = createMemo(() => statementRanges(sql()));
+	const next = createMemo(() => pickRun(sql(), caret()[0], caret()[1], false));
+	const writes = createMemo(() => !props.readOnly && isWrite(next()?.text ?? ""));
+	const writesAll = createMemo(() => !props.readOnly && isWrite(sql()));
+
+	/** Which statement Run would send, for the hint beside it. */
+	const nextNote = () => {
+		const [a, b] = caret();
+		if (a !== b) return "Runs the selected text";
+		const n = ranges().length;
+		const at = next()?.at;
+		const i = ranges().findIndex((r) => r[0] === at);
+		return n > 1 && i >= 0 ? `Statement ${i + 1} of ${n}` : "";
+	};
 
 	/** How many statements the shown result's run held, when more than one: only the last one's result shows. */
 	const ranMany = createMemo(() => {
@@ -78,24 +123,30 @@ export function SqlPane(props: {
 	});
 
 	/**
-	 * Runs the selection when there is one, so a single statement can be run out of a longer script.
-	 * A run while another is waiting replaces it.
+	 * Runs the selection, or the statement at the caret, or with `all` the whole editor. A run while
+	 * another is waiting replaces it.
 	 */
-	const run = () => {
+	const run = (all = false) => {
 		if (!editor) return;
-		const { selectionStart: a, selectionEnd: b, value } = editor;
-		const raw = a !== b ? value.slice(a, b) : value;
-		const text = raw.trim();
-		if (!text) return;
-		setRan({ text, at: (a !== b ? a : 0) + raw.indexOf(text) });
+		const picked = pickRun(editor.value, editor.selectionStart, editor.selectionEnd, all);
+		if (!picked) return;
+		setRan(picked);
 		announce("Running");
-		query.run(text);
+		query.run(picked.text);
+	};
+
+	const start = (text: string) => {
+		setSql(text);
+		if (!editor) return;
+		editor.focus();
+		editor.setSelectionRange(text.length, text.length);
+		setCaret([text.length, text.length]);
 	};
 
 	const onKey = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
 		if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
 			e.preventDefault();
-			run();
+			run(e.shiftKey);
 		} else if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
 			e.preventDefault();
 			if (!document.execCommand("insertText", false, INDENT)) {
@@ -160,10 +211,17 @@ export function SqlPane(props: {
 				aria-label="SQL"
 				spellcheck={false}
 				autocomplete="off"
-				placeholder={`Write SQL here. ${isMac() ? "⌘" : "Ctrl"}+Enter runs it, or only the selected text.`}
+				placeholder={`Write SQL here. ${isMac() ? "⌘" : "Ctrl"}+Enter runs the statement at the caret, or the selected text.`}
 				value={sql()}
-				onInput={(e) => setSql(e.currentTarget.value)}
+				onInput={(e) => {
+					setSql(e.currentTarget.value);
+					track(e);
+				}}
 				onKeyDown={onKey}
+				onKeyUp={track}
+				onMouseUp={track}
+				onSelect={track}
+				onFocus={track}
 			/>
 			<div class="bar">
 				<Button
@@ -171,11 +229,21 @@ export function SqlPane(props: {
 					icon={writes() ? "warn" : "play"}
 					kbd="Mod+Enter"
 					busy={query.loading()}
-					disabled={!sql().trim()}
-					onClick={run}
+					disabled={!next()}
+					onClick={() => run()}
 				>
 					{writes() ? "Run write" : "Run"}
 				</Button>
+				<Show when={ranges().length > 1}>
+					<Button
+						variant={writesAll() ? "danger" : "default"}
+						kbd="Mod+Shift+Enter"
+						disabled={query.loading()}
+						onClick={() => run(true)}
+					>
+						Run all
+					</Button>
+				</Show>
 				<Show when={query.loading()}>
 					<Button
 						icon="close"
@@ -188,10 +256,7 @@ export function SqlPane(props: {
 						Stop
 					</Button>
 				</Show>
-				<Show
-					when={writes()}
-					fallback={<span class="hint">Select text to run only that statement</span>}
-				>
+				<Show when={writes()} fallback={<span class="hint">{nextNote()}</span>}>
 					<span class="write-note">
 						This changes data in <span class="mono">{props.database}</span>
 					</span>
@@ -223,8 +288,15 @@ export function SqlPane(props: {
 					>
 						<div class="empty">
 							<strong>Run SQL against {props.database ?? "the database"}</strong>
-							<Kbd keys="Mod+Enter" /> runs the editor, or only the selected text. Results are
-							capped at 5,000 rows.
+							<Kbd keys="Mod+Enter" /> runs the statement at the caret, or the selected text, and{" "}
+							<Kbd keys="Mod+Shift+Enter" /> runs everything. Results are capped at 5,000 rows.
+							<Show when={!sql().trim() && props.starter}>
+								{(text) => (
+									<Button size="sm" class="starter" onClick={() => start(text())}>
+										<span class="mono">{text()}</span>
+									</Button>
+								)}
+							</Show>
 						</div>
 					</Show>
 				}
