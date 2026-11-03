@@ -60,6 +60,7 @@ pub fn run(self: *Server) Io.Cancelable!void {
 fn serveConnection(self: *Server, stream: Io.net.Stream) void {
     const io = self.ctx.io;
     defer stream.close(io);
+    sendSmallWritesAtOnce(stream);
     var read_buf: [16 * 1024]u8 = undefined;
     var write_buf: [16 * 1024]u8 = undefined;
     var reader = stream.reader(io, &read_buf);
@@ -90,6 +91,15 @@ fn serveConnection(self: *Server, stream: Io.net.Stream) void {
 /// each one's largest result would hold that memory for as long as the tab is open.
 const keep_between_requests = 256 * 1024;
 
+/// Results go out in chunks as they are written. With Nagle's algorithm on, the kernel holds a
+/// short final chunk until the client acknowledges the last one, which a client delaying its
+/// ACK makes about 40 ms on Linux.
+fn sendSmallWritesAtOnce(stream: Io.net.Stream) void {
+    const on: c_int = 1;
+    std.posix.setsockopt(stream.socket.handle, std.posix.IPPROTO.TCP, std.posix.TCP.NODELAY, std.mem.asBytes(&on)) catch |err|
+        log.warn("could not set TCP_NODELAY, large responses may stall: {t}", .{err});
+}
+
 /// The path without the query string, which can hold the token or a filter.
 fn copyPath(buf: []u8, target: []const u8) []const u8 {
     const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
@@ -101,4 +111,21 @@ fn copyPath(buf: []u8, target: []const u8) []const u8 {
 test "logged paths never include the query string" {
     var buf: [128]u8 = undefined;
     try std.testing.expectEqualStrings("/", copyPath(&buf, "/?token=secret"));
+}
+
+test "accepted connections send small writes without waiting for an ACK" {
+    const io = std.testing.io;
+    const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
+    var listener = try address.listen(io, .{});
+    defer listener.deinit(io);
+    const client = try listener.socket.address.connect(io, .{ .mode = .stream });
+    defer client.close(io);
+    const accepted = try listener.accept(io);
+    defer accepted.close(io);
+
+    sendSmallWritesAtOnce(accepted);
+    var value: c_int = 0;
+    var len: std.posix.socklen_t = @sizeOf(c_int);
+    try std.testing.expectEqual(0, std.posix.system.getsockopt(accepted.socket.handle, std.posix.IPPROTO.TCP, std.posix.TCP.NODELAY, std.mem.asBytes(&value), &len));
+    try std.testing.expect(value != 0);
 }
