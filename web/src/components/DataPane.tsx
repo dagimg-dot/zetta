@@ -52,7 +52,7 @@ export function DataPane(props: {
 	);
 
 	const detail = createRequest(
-		(t: { schema: string; table: string }) => getTable(t.schema, t.table),
+		(t: { schema: string; table: string }, signal) => getTable(t.schema, t.table, signal),
 		() => (props.active ? target() : null),
 	);
 

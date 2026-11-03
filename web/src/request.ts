@@ -1,4 +1,12 @@
-import { type Accessor, batch, createEffect, createSignal, untrack } from "solid-js";
+import {
+	type Accessor,
+	batch,
+	createEffect,
+	createSignal,
+	getOwner,
+	onCleanup,
+	untrack,
+} from "solid-js";
 import { ApiError } from "./api";
 
 export interface Request<K, T> {
@@ -18,12 +26,13 @@ function toApiError(e: unknown): ApiError {
 }
 
 /**
- * Wraps a fetcher with loading/error state that never throws on read. Stale responses are dropped,
- * and when `source` is given the request reruns only when its key changes by value; a falsy key
+ * Wraps a fetcher with loading/error state that never throws on read. A new run, a reset or the
+ * owner's cleanup aborts the request in flight, so the browser stops reading a response nobody will
+ * see. When `source` is given the request reruns only when its key changes by value; a falsy key
  * pauses it without clearing the last result.
  */
 export function createRequest<K, T>(
-	fetcher: (key: K) => Promise<T>,
+	fetcher: (key: K, signal: AbortSignal) => Promise<T>,
 	source?: () => K | false | null | undefined,
 ): Request<K, T> {
 	const [data, setData] = createSignal<T>();
@@ -33,15 +42,26 @@ export function createRequest<K, T>(
 	let seq = 0;
 	let lastKey: { key: K } | undefined;
 	let lastJson: string | undefined;
+	let inFlight: AbortController | undefined;
+
+	const abort = () => {
+		inFlight?.abort();
+		inFlight = undefined;
+	};
+	if (getOwner()) onCleanup(abort);
 
 	const run = (key: K) => {
 		const id = ++seq;
 		lastKey = { key };
 		lastJson = JSON.stringify(key);
 		setLoading(true);
-		fetcher(key).then(
+		abort();
+		const controller = new AbortController();
+		inFlight = controller;
+		fetcher(key, controller.signal).then(
 			(value) => {
 				if (id !== seq) return;
+				inFlight = undefined;
 				batch(() => {
 					setData(() => value);
 					setDataKey(() => key);
@@ -51,6 +71,7 @@ export function createRequest<K, T>(
 			},
 			(e: unknown) => {
 				if (id !== seq) return;
+				inFlight = undefined;
 				batch(() => {
 					setError(toApiError(e));
 					setLoading(false);
@@ -79,6 +100,7 @@ export function createRequest<K, T>(
 		},
 		reset: () => {
 			seq++;
+			abort();
 			lastKey = undefined;
 			lastJson = undefined;
 			batch(() => {

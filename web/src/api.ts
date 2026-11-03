@@ -132,8 +132,8 @@ export function getColumns(schema: string, table: string): Promise<Columns> {
 	return request<Columns>(`/api/columns?${query({ schema, table })}`);
 }
 
-export function browse(p: BrowseParams): Promise<ResultSet> {
-	return request<ResultSet>(`/api/browse?${query({ ...p })}`);
+export function browse(p: BrowseParams, signal?: AbortSignal): Promise<ResultSet> {
+	return request<ResultSet>(`/api/browse?${query({ ...p })}`, { signal });
 }
 
 export interface RowCount {
@@ -142,13 +142,16 @@ export interface RowCount {
 }
 
 /** Exact row count for a table and filter. Fails with `timeout` past the server's budget. */
-export function countRows(p: {
-	schema: string;
-	table: string;
-	q?: string;
-	filter?: string;
-}): Promise<RowCount> {
-	return request<RowCount>(`/api/count?${query({ ...p })}`);
+export function countRows(
+	p: {
+		schema: string;
+		table: string;
+		q?: string;
+		filter?: string;
+	},
+	signal?: AbortSignal,
+): Promise<RowCount> {
+	return request<RowCount>(`/api/count?${query({ ...p })}`, { signal });
 }
 
 export interface CompiledBuilder {
@@ -157,15 +160,16 @@ export interface CompiledBuilder {
 }
 
 /** The SQL the server would run for a builder, with values written out, for display and editing. */
-export function compileBuilder(q: string): Promise<CompiledBuilder> {
-	return request<CompiledBuilder>(`/api/compile?${query({ q })}`);
+export function compileBuilder(q: string, signal?: AbortSignal): Promise<CompiledBuilder> {
+	return request<CompiledBuilder>(`/api/compile?${query({ q })}`, { signal });
 }
 
-export function runQuery(sql: string): Promise<ResultSet> {
+export function runQuery(sql: string, signal?: AbortSignal): Promise<ResultSet> {
 	return request<ResultSet>("/api/query", {
 		method: "POST",
 		headers: { "content-type": "text/plain" },
 		body: sql,
+		signal,
 	});
 }
 
@@ -241,6 +245,10 @@ export interface TableDetail {
 	ddl: string;
 }
 
-export function getTable(schema: string, table: string): Promise<TableDetail> {
-	return request<TableDetail>(`/api/table?${query({ schema, table })}`);
+export function getTable(
+	schema: string,
+	table: string,
+	signal?: AbortSignal,
+): Promise<TableDetail> {
+	return request<TableDetail>(`/api/table?${query({ schema, table })}`, { signal });
 }
