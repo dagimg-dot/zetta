@@ -97,7 +97,8 @@
 	--duration-slow: 220ms;
 	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
-	--control-height: 30px;
+	--control-height: 32px;
+	--control-height-sm: 28px;
 	--bar-height: 41px;
 	--sidebar-width: 264px;
 	--inspector-width: 380px;

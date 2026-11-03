@@ -112,6 +112,7 @@ export function Sidebar(props: {
 					<span class="spacer" />
 					<Button
 						icon="refresh"
+						iconSize={14}
 						label="Reload tables"
 						busy={props.loading}
 						onClick={() => props.onRefresh()}

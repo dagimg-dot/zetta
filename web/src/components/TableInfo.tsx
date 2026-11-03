@@ -1,10 +1,9 @@
-import { createMemo, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
-import { announce } from "../announce";
-import type { Constraint, IndexInfo, RefAction, TableDetail } from "../api";
+import { createMemo, For, type JSX, Show } from "solid-js";
+import type { Constraint, IndexInfo, RefAction, TableDetail, TableKind } from "../api";
+import { plural } from "../format";
 import { openTable } from "../url";
 import { formatBytes } from "../value";
-import { Button } from "./Button";
-import { copyText } from "./Inspector";
+import { CopyButton } from "./CopyButton";
 import { Icon } from "./icons";
 import { tip } from "./Tip";
 
@@ -359,28 +358,16 @@ export function TriggersPane(props: { detail: TableDetail }) {
 }
 
 export function DdlPane(props: { detail: TableDetail }) {
-	const [copied, setCopied] = createSignal(false);
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	onCleanup(() => clearTimeout(timer));
-
-	const copy = async () => {
-		if (!(await copyText(props.detail.ddl))) return;
-		setCopied(true);
-		announce("Copied the DDL");
-		clearTimeout(timer);
-		timer = setTimeout(() => setCopied(false), 1200);
-	};
-
 	return (
 		<div class="sheet ddl">
 			<div class="ddl-bar">
 				<span class="note">
-					{props.detail.ddl.split("\n").length.toLocaleString()} lines, rebuilt from the catalog
+					{plural(props.detail.ddl.split("\n").length, "line")}, from the catalog
 				</span>
 				<span class="spacer" />
-				<Button variant="quiet" icon={copied() ? "check" : "copy"} onClick={copy}>
-					{copied() ? "Copied" : "Copy"}
-				</Button>
+				<CopyButton variant="quiet" text={() => props.detail.ddl} what="the DDL">
+					Copy
+				</CopyButton>
 			</div>
 			{/* biome-ignore lint/a11y/noNoninteractiveTabindex: a long statement scrolls, and a scrollable region must be reachable by keyboard. */}
 			<pre class="def-block ddl-text" tabIndex={0}>

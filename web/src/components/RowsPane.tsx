@@ -401,6 +401,7 @@ export function RowsPane(props: {
 						<Show when={suggestion()}>
 							{(s) => (
 								<Button
+									size="sm"
 									onClick={() => {
 										const swap = (t: string) => t.replaceAll(s().bad, s().fix);
 										const b = applied();
@@ -425,6 +426,7 @@ export function RowsPane(props: {
 						<Show when={query().q || query().filter || query().order}>
 							<Button
 								variant="quiet"
+								size="sm"
 								onClick={() => {
 									setDraft(emptyBuilder);
 									setSqlMode(false);

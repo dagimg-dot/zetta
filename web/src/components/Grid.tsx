@@ -11,13 +11,15 @@ import {
 } from "solid-js";
 import { announce } from "../announce";
 import type { Column, ResultColumn, ResultSet } from "../api";
+import { copyRich, copyText } from "../clipboard";
 import { type FormatId, fileName, format, htmlTable, pick } from "../copy";
+import { plural } from "../format";
 import type { SortKey } from "../query";
 import { refName } from "../refs";
 import { blobBytes, formatBytes, isBlob, isNumericType } from "../value";
 import { Button } from "./Button";
 import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu";
-import { copyRich, copyText, Inspector, type InspectorAction } from "./Inspector";
+import { Inspector, type InspectorAction } from "./Inspector";
 import { Icon } from "./icons";
 import { RowMenu, type RowTarget } from "./RowMenu";
 import { tip } from "./Tip";
@@ -61,7 +63,7 @@ export function HiddenButton(props: { hidden: Hidden }) {
 	const n = () => props.hidden.hidden().size;
 	return (
 		<Show when={n()}>
-			<Button variant="quiet" onClick={() => props.hidden.clear()}>
+			<Button variant="quiet" size="sm" onClick={() => props.hidden.clear()}>
 				<span class="wide-only">Show </span>
 				{n()} hidden
 				<span class="wide-only"> column{n() > 1 ? "s" : ""}</span>
@@ -520,7 +522,9 @@ export function Grid(props: {
 		const v = props.result.rows[cur.row]?.[cur.col];
 		if (v === undefined) return;
 		const name = props.result.columns[cur.col]?.name;
-		props.selection.tell((await copyText(v ?? "")) ? `Copied ${name}` : "Copy failed");
+		// The inspector's Copy is off for NULL too: there is no text to copy.
+		if (v === null) return props.selection.tell("NULL has no text to copy");
+		props.selection.tell((await copyText(v)) ? `Copied ${name}` : "Copy failed");
 	};
 
 	const selectRows = (from: number, to: number, add = false) => {
@@ -1120,7 +1124,9 @@ export function Grid(props: {
 								if (i >= 0) toggleColumn(i, name, true);
 							},
 							copy: async (name) => {
-								if (await copyText(name)) announce(`Copied ${name}`);
+								props.selection.tell(
+									(await copyText(name)) ? `Copied the name ${name}` : "Copy failed",
+								);
 							},
 						}}
 						onClose={closeMenu}

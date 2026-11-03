@@ -222,7 +222,13 @@ export function HeaderMenu(props: {
 										<div class="filter-foot">
 											<span class="note">Adds to the filters above the grid.</span>
 											<span class="spacer" />
-											<Button ref={applyButton} type="submit" variant="primary" kbd="Enter">
+											<Button
+												ref={applyButton}
+												type="submit"
+												variant="primary"
+												size="sm"
+												kbd="Enter"
+											>
 												Apply
 											</Button>
 										</div>

@@ -205,7 +205,7 @@ export function QueryBar(props: {
 								</Index>
 							</ol>
 						</Show>
-						<Button variant="quiet" class="q-add" icon="plus" onClick={addFilter}>
+						<Button variant="quiet" size="sm" class="q-add" icon="plus" onClick={addFilter}>
 							Add filter
 						</Button>
 					</section>
@@ -230,6 +230,7 @@ export function QueryBar(props: {
 												onChange={(name) => setSort(i, { c: name })}
 											/>
 											<Button
+												size="sm"
 												class="q-dir"
 												icon={s().d}
 												aria-label={`Direction: ${s().d === "asc" ? "ascending" : "descending"}`}
@@ -259,7 +260,7 @@ export function QueryBar(props: {
 								</Index>
 							</ol>
 						</Show>
-						<Button variant="quiet" class="q-add" icon="plus" onClick={addSort}>
+						<Button variant="quiet" size="sm" class="q-add" icon="plus" onClick={addSort}>
 							Add sort
 						</Button>
 					</section>
@@ -269,14 +270,15 @@ export function QueryBar(props: {
 					<code class="q-sql" {...tip(sql())}>
 						{sql() || "No conditions yet"}
 					</code>
-					<Button variant="quiet" icon="code" onClick={() => props.onEditSql()}>
+					<Button variant="quiet" size="sm" icon="code" onClick={() => props.onEditSql()}>
 						Edit as SQL
 					</Button>
-					<Button variant="quiet" onClick={() => props.onClear()}>
+					<Button variant="quiet" size="sm" onClick={() => props.onClear()}>
 						Clear
 					</Button>
 					<Button
 						variant={props.dirty ? "primary" : "default"}
+						size="sm"
 						kbd="Enter"
 						disabled={!props.dirty}
 						onClick={() => props.onApply()}

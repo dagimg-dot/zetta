@@ -168,7 +168,7 @@ export function App() {
 							aria-expanded={navOpen()}
 							onClick={() => setNavOpen(!navOpen())}
 						/>
-						<div role="tablist" aria-label="View" style={{ display: "flex", gap: "2px" }}>
+						<div role="tablist" aria-label="View" class="view-tabs">
 							{tab("data", "Data")}
 							{tab("sql", "SQL")}
 						</div>

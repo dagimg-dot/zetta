@@ -1,11 +1,12 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
-import { announce } from "../announce";
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { inspectorWidth } from "../layout";
 import { matchRefs } from "../refs";
 import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
 import { Button } from "./Button";
+import { CopyButton } from "./CopyButton";
 import { Icon, type IconName } from "./icons";
 import { Kbd } from "./Kbd";
+import { Segmented } from "./Segmented";
 import { Splitter } from "./Splitter";
 import { tip } from "./Tip";
 
@@ -31,42 +32,6 @@ export interface InspectedCell {
 const FILTER_REFS_AT = 8;
 
 type Mode = "pretty" | "raw";
-
-export async function copyText(text: string): Promise<boolean> {
-	try {
-		await navigator.clipboard.writeText(text);
-		return true;
-	} catch {
-		const area = document.createElement("textarea");
-		area.value = text;
-		area.style.position = "fixed";
-		area.style.opacity = "0";
-		document.body.append(area);
-		area.select();
-		const ok = document.execCommand("copy");
-		area.remove();
-		return ok;
-	}
-}
-
-/**
- * Writes plain text and an HTML table together, so spreadsheets paste cells. Browsers allow this
- * only on HTTPS or localhost; elsewhere it falls back to the plain text.
- */
-export async function copyRich(text: string, html: string): Promise<boolean> {
-	if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return copyText(text);
-	try {
-		await navigator.clipboard.write([
-			new ClipboardItem({
-				"text/plain": new Blob([text], { type: "text/plain" }),
-				"text/html": new Blob([html], { type: "text/html" }),
-			}),
-		]);
-		return true;
-	} catch {
-		return copyText(text);
-	}
-}
 
 /** Draws line breaks as a visible ↵ while keeping the text selectable and copyable. */
 function withBreaks(text: string) {
@@ -113,9 +78,6 @@ export function Inspector(props: {
 	onMove: (dRow: number, dCol: number) => void;
 }) {
 	const [mode, setMode] = createSignal<Mode>("pretty");
-	const [copied, setCopied] = createSignal(false);
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	onCleanup(() => clearTimeout(timer));
 
 	const kind = createMemo(() => kindOf(props.cell.value, props.cell.type));
 	createEffect(on(kind, () => setMode("pretty"), { defer: true }));
@@ -166,15 +128,6 @@ export function Inspector(props: {
 		props.onMove(step[0], step[1]);
 	};
 
-	const copy = async () => {
-		const ok = await copyText(props.cell.value ?? "");
-		if (!ok) return;
-		setCopied(true);
-		announce("Copied");
-		clearTimeout(timer);
-		timer = setTimeout(() => setCopied(false), 1200);
-	};
-
 	return (
 		<section
 			class="inspector"
@@ -187,12 +140,12 @@ export function Inspector(props: {
 				</span>
 				<span class="type">{props.cell.type}</span>
 				<span class="spacer" />
-				<Button
-					icon={copied() ? "check" : "copy"}
+				<CopyButton
+					text={() => props.cell.value ?? ""}
+					what={props.cell.column}
 					label="Copy value"
 					kbd="C"
 					disabled={props.cell.value === null}
-					onClick={copy}
 				/>
 				<Button icon="close" label="Close inspector" kbd="Esc" onClick={() => props.onClose()} />
 			</header>
@@ -203,22 +156,27 @@ export function Inspector(props: {
 				))}
 			</div>
 			<Show when={kind() === "json" || kind() === "blob"}>
-				<fieldset class="modes">
-					<legend class="sr-only">View</legend>
-					<button
-						type="button"
-						aria-pressed={mode() === "pretty"}
-						onClick={() => setMode("pretty")}
-					>
-						{kind() === "json" ? "Formatted" : "Hex"}
-					</button>
-					<button type="button" aria-pressed={mode() === "raw"} onClick={() => setMode("raw")}>
-						Raw
-					</button>
-				</fieldset>
+				<div class="modes">
+					<Segmented
+						legend="View"
+						options={[
+							{ value: "pretty", label: kind() === "json" ? "Formatted" : "Hex" },
+							{ value: "raw", label: "Raw" },
+						]}
+						value={mode()}
+						onChange={setMode}
+					/>
+				</div>
 			</Show>
-			{/* biome-ignore lint/a11y/noNoninteractiveTabindex: a long value scrolls, and a scrollable region must be reachable by keyboard. */}
-			<pre class="value" classList={{ null: props.cell.value === null }} tabIndex={0}>
+			<pre
+				class="value"
+				classList={{
+					null: props.cell.value === null || props.cell.value === "" || shown() === "No bytes",
+					hex: kind() === "blob" && mode() === "pretty",
+				}}
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: a long value scrolls, and a scrollable region must be reachable by keyboard.
+				tabIndex={0}
+			>
 				{kind() === "multiline" || (kind() === "json" && mode() === "raw")
 					? withBreaks(shown())
 					: shown()}

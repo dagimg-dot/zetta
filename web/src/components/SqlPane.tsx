@@ -194,7 +194,11 @@ export function SqlPane(props: {
 				{(err) => (
 					<ErrorBox error={err()} inline>
 						<Show when={errorAt()}>
-							{(range) => <Button onClick={() => showError(range())}>Show in editor</Button>}
+							{(range) => (
+								<Button size="sm" onClick={() => showError(range())}>
+									Show in editor
+								</Button>
+							)}
 						</Show>
 					</ErrorBox>
 				)}

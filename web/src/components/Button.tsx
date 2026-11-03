@@ -11,6 +11,8 @@ export type ButtonVariant = "default" | "quiet" | "primary" | "danger" | "bare";
 
 interface Own {
 	variant?: ButtonVariant;
+	/** `sm` for a button inside a bar, a note or a row of small controls. */
+	size?: "sm";
 	icon?: IconName;
 	iconSize?: number;
 	/**
@@ -42,6 +44,7 @@ export type ButtonProps = Own &
 export function Button(props: ButtonProps) {
 	const [own, rest] = splitProps(props, [
 		"variant",
+		"size",
 		"icon",
 		"iconSize",
 		"label",
@@ -62,6 +65,7 @@ export function Button(props: ButtonProps) {
 		const out = v === "bare" ? [] : ["btn"];
 		if (v !== "default" && v !== "bare") out.push(v);
 		if (iconOnly && v !== "bare") out.push("icon-only");
+		if (own.size && v !== "bare") out.push(own.size);
 		if (own.class) out.push(own.class);
 		return out.join(" ");
 	};
