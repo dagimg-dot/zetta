@@ -47,7 +47,7 @@ export function categoryOf(type: string): Category {
 	if (/^(json|jsonb)\b/.test(t)) return "json";
 	if (/^(date|time|timestamp|timestamptz|timetz|interval)\b/.test(t)) return "time";
 	if (
-		/^(smallint|integer|int|bigint|int2|int4|int8|numeric|decimal|real|double|float|money|oid|serial|bigserial)\b/.test(
+		/^(smallint|integer|int|bigint|int2|int4|int8|numeric|decimal|real|double|float|float4|float8|money|oid|serial|bigserial)\b/.test(
 			t,
 		)
 	)

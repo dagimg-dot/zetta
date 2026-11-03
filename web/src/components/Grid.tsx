@@ -154,10 +154,16 @@ function cell(
 		td.textContent = "NULL";
 		return td;
 	}
-	if (isBlob(v, type)) {
+	// Blobs, empty text and text of only spaces would otherwise look alike, or like nothing.
+	const blank = v.trim() === "";
+	if (isBlob(v, type) || blank) {
 		const mark = document.createElement("span");
 		mark.className = "mark";
-		mark.textContent = `blob · ${formatBytes(blobBytes(v))}`;
+		mark.textContent = !blank
+			? `blob · ${formatBytes(blobBytes(v))}`
+			: v === ""
+				? "empty"
+				: `blank · ${plural([...v].length, "char")}`;
 		td.append(mark);
 		return td;
 	}
@@ -197,13 +203,14 @@ function headerFacts(info: Column | undefined): string[] {
 	return out;
 }
 
+/** The full name on its own line, then what the catalog says about it: a long name is cut in the header. */
 function headerTitle(name: string, type: string, info: Column | undefined): string {
-	if (!info) return `${name}  ${type}`;
-	const parts = [name, info.type || type];
+	if (!info) return `${name}\n${type}`;
+	const parts = [info.type || type];
 	if (info.primaryKey) parts.push("primary key");
 	if (!info.nullable) parts.push("not null");
 	if (info.default !== null) parts.push(`default ${info.default}`);
-	return parts.join("  ");
+	return `${name}\n${parts.join(" · ")}`;
 }
 
 interface Cursor {
@@ -216,6 +223,8 @@ export function Grid(props: {
 	hidden: Hidden;
 	selection: Selection;
 	label: string;
+	/** What an empty result says; the status bar says the same. */
+	empty?: string;
 	offset?: number;
 	sorts?: SortKey[];
 	/** `additive` is true for shift-click, which adds a secondary sort key. */
@@ -292,7 +301,7 @@ export function Grid(props: {
 	 * Cells are monospace, so a character count in `ch` is the width; long values stop at the cap.
 	 */
 	/** The row-number column fits the largest number on the page, so spare width goes to the filler. */
-	const rnDigits = () => String((props.offset ?? 0) + props.result.rows.length).length;
+	const rnDigits = () => ((props.offset ?? 0) + props.result.rows.length).toLocaleString().length;
 
 	const colChars = createMemo(() => {
 		const { columns, rows } = props.result;
@@ -960,6 +969,7 @@ export function Grid(props: {
 																	type="button"
 																	class="label"
 																	data-col={c.name}
+																	{...tip(headerTitle(c.name, c.type, info()), undefined, "bottom")}
 																	aria-label={`${c.name}, ${c.type}${info()?.primaryKey ? ", primary key" : ""}${props.links?.outgoing(c.name) ? `, links to ${props.links.outgoing(c.name)?.table}` : ""}. Sort; shift adds a secondary sort${props.actions ? "; the menu key opens column actions" : ""}`}
 																	onKeyDown={(e) => {
 																		const th = e.currentTarget.closest("th");
@@ -1062,7 +1072,7 @@ export function Grid(props: {
 											classList={{ sel: props.selection.rows().has(r) }}
 											aria-selected={props.selection.rows().has(r)}
 										>
-											<td class="rn">{(props.offset ?? 0) + r + 1}</td>
+											<td class="rn">{((props.offset ?? 0) + r + 1).toLocaleString()}</td>
 											{tds}
 											<td class="fill" aria-hidden="true" />
 										</tr>
@@ -1080,7 +1090,7 @@ export function Grid(props: {
 						</tbody>
 					</table>
 					<Show when={!props.result.rows.length}>
-						<div class="none">No rows</div>
+						<div class="none">{props.empty ?? "No rows"}</div>
 					</Show>
 				</Show>
 			</div>

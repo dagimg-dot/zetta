@@ -1,23 +1,11 @@
+import { categoryOf } from "./query";
+
 /** What a cell holds, for inline markers in the grid and the inspector. */
 export type ValueKind = "null" | "blob" | "json" | "multiline" | "text";
 
-const numericTypes = [
-	"integer",
-	"bigint",
-	"smallint",
-	"numeric",
-	"real",
-	"double precision",
-	"int",
-	"float",
-	"decimal",
-	"money",
-	"oid",
-];
-
+/** Numbers are right-aligned. Types like interval or int4range only start like numbers. */
 export function isNumericType(type: string): boolean {
-	const t = type.toLowerCase();
-	return numericTypes.some((n) => t.startsWith(n));
+	return categoryOf(type) === "number";
 }
 
 /**

@@ -149,7 +149,7 @@ export function Mark(props: { size?: number }) {
 			viewBox="0 0 64 64"
 			aria-hidden="true"
 		>
-			<rect width="64" height="64" rx="14" fill="#ea580c" />
+			<rect width="64" height="64" rx="14" fill="var(--ember-500)" />
 			{cells.map((c) => (
 				<rect
 					x={c.x}
@@ -157,7 +157,7 @@ export function Mark(props: { size?: number }) {
 					width="8"
 					height="8"
 					rx="2"
-					fill="#fff"
+					fill="var(--neutral-0)"
 					opacity={c.on ? undefined : 0.22}
 				/>
 			))}

@@ -12,7 +12,7 @@ import type { RefAction, TableDetail } from "../api";
 import { openTable } from "../url";
 import { Button } from "./Button";
 import { Icon } from "./icons";
-import { RefActions } from "./TableInfo";
+import { kindNoun, RefActions } from "./TableInfo";
 import { tip } from "./Tip";
 
 interface Edge {
@@ -244,12 +244,12 @@ export function Relationships(props: { detail: TableDetail }) {
 			const tables = new Set(ins.map((e) => `${e.schema}.${e.table}`)).size;
 			const schemas = new Set(ins.map((e) => e.schema)).size;
 			parts.push(
-				`${count(ins.length, "foreign key")} from ${count(tables, "table")}${schemas > 1 ? ` in ${count(schemas, "schema")}` : ""} point here`,
+				`${count(ins.length, "foreign key")} from ${count(tables, "table")}${schemas > 1 ? ` in ${count(schemas, "schema")}` : ""} ${ins.length === 1 ? "points" : "point"} here`,
 			);
 		}
 		if (outs.length)
 			parts.push(
-				`it references ${count(new Set(outs.map((e) => `${e.schema}.${e.table}`)).size, "table")}`,
+				`${parts.length ? "it" : "It"} references ${count(new Set(outs.map((e) => `${e.schema}.${e.table}`)).size, "table")}`,
 			);
 		return `${parts.join("; ")}.`;
 	};
@@ -339,12 +339,12 @@ export function Relationships(props: { detail: TableDetail }) {
 					fallback={
 						<p class="info-none">
 							{side === "out"
-								? "This table has no foreign keys."
-								: "No foreign key in this database points at this table."}
+								? `This ${kindNoun(props.detail.kind)} has no foreign keys.`
+								: `No foreign key in this database points at this ${kindNoun(props.detail.kind)}.`}
 						</p>
 					}
 				>
-					<Show when={shown().length} fallback={<p class="info-none">Nothing matches.</p>}>
+					<Show when={shown().length} fallback={<p class="info-none">No matching relationships</p>}>
 						<ul class="info-list rel-list">
 							<For each={shown()}>
 								{(e, i) => (
@@ -409,10 +409,15 @@ export function Relationships(props: { detail: TableDetail }) {
 			<Show
 				when={total()}
 				fallback={
-					<div class="empty">
-						<strong>No relationships</strong>
-						No foreign key leads out of <span class="mono">{here()}</span>, and none leads into it.
-					</div>
+					<section class="info-section">
+						<header>
+							<h2>Relationships</h2>
+						</header>
+						<p class="info-none">
+							No foreign key leads out of <span class="mono">{here()}</span>, and none leads into
+							it.
+						</p>
+					</section>
 				}
 			>
 				<section class="info-section">
@@ -436,7 +441,7 @@ export function Relationships(props: { detail: TableDetail }) {
 						</svg>
 						<div class="rel-col">
 							<span class="rel-label">Referenced by</span>
-							<For each={left()} fallback={<span class="rel-empty">nothing</span>}>
+							<For each={left()} fallback={<span class="rel-empty">None</span>}>
 								{(n) => node(n)}
 							</For>
 						</div>
@@ -459,7 +464,7 @@ export function Relationships(props: { detail: TableDetail }) {
 						</div>
 						<div class="rel-col">
 							<span class="rel-label">References</span>
-							<For each={right()} fallback={<span class="rel-empty">nothing</span>}>
+							<For each={right()} fallback={<span class="rel-empty">None</span>}>
 								{(n) => node(n)}
 							</For>
 						</div>

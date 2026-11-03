@@ -80,7 +80,7 @@ export function Pager(props: {
 						inputmode="numeric"
 						class="pg-input"
 						value={draft()}
-						size={Math.max(1, draft().length)}
+						size={Math.max(1, draft().length, String(pages() ?? "").length)}
 						onInput={(e) => setDraft(e.currentTarget.value.replace(/\D/g, ""))}
 						onKeyDown={(e) => {
 							if (e.key === "Enter") commit();

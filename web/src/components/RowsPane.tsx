@@ -455,6 +455,7 @@ export function RowsPane(props: {
 							hidden={hidden}
 							selection={selection}
 							label={`${props.schema}.${props.table}`}
+							empty={filtered() ? "No matching rows" : "No rows"}
 							offset={rows.dataKey()?.offset ?? 0}
 							sorts={applied()?.sorts ?? []}
 							onSort={sortBy}
@@ -472,10 +473,7 @@ export function RowsPane(props: {
 					when={result()}
 					fallback={
 						<Show when={rows.loading()}>
-							<span class="st-note st-loading">
-								<Loader size={12} />
-								Loading rows
-							</span>
+							<span class="st-note">Loading rows</span>
 						</Show>
 					}
 				>
@@ -507,7 +505,7 @@ export function RowsPane(props: {
 												>
 													<span class="st-pending st-loading">
 														<Loader size={12} />
-														counting
+														Counting
 													</span>
 												</Show>
 											}

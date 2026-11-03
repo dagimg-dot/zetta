@@ -4,6 +4,7 @@ import {
 	closest,
 	errorRange,
 	hexDump,
+	isNumericType,
 	isWrite,
 	kindOf,
 	statements,
@@ -25,6 +26,12 @@ describe("kindOf", () => {
 		expect(kindOf("\\x41", "BLOB")).toBe("blob");
 		expect(kindOf("\\x41", "")).toBe("blob");
 	});
+});
+
+test("only number types are right-aligned, not ones that start like them", () => {
+	for (const t of ["integer", "int8", "numeric(10,2)", "double precision", "float8", "REAL"])
+		expect(isNumericType(t)).toBe(true);
+	for (const t of ["interval", "int4range", "inet", "text"]) expect(isNumericType(t)).toBe(false);
 });
 
 describe("did you mean", () => {

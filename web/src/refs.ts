@@ -14,3 +14,17 @@ export function matchRefs<T extends { label: string; detail?: string }>(
 		(r) => r.label.toLowerCase().includes(q) || r.detail?.toLowerCase().includes(q),
 	);
 }
+
+/**
+ * How many foreign keys a table takes part in. A key from the table to itself is in both its
+ * outgoing and incoming lists, and counts once.
+ */
+export function relationshipCount(d: {
+	schema: string;
+	name: string;
+	foreignKeys: unknown[];
+	referencedBy: { schema: string; table: string }[];
+}): number {
+	const fromElsewhere = d.referencedBy.filter((r) => r.schema !== d.schema || r.table !== d.name);
+	return d.foreignKeys.length + fromElsewhere.length;
+}

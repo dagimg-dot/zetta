@@ -64,7 +64,7 @@ export function ColumnPicker(props: {
 					<Combobox.Content class="pop list">
 						<Show
 							when={collection().items.length}
-							fallback={<div class="pop-empty">No column matches</div>}
+							fallback={<div class="pop-empty">No matching columns</div>}
 						>
 							<For each={collection().items}>
 								{(c) => (

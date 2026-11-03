@@ -156,7 +156,7 @@ export function QueryBar(props: {
 								<span class="q-note">of</span>
 							</Show>
 						</header>
-						<Show when={props.draft.filters.length} fallback={<p class="q-empty">Every row.</p>}>
+						<Show when={props.draft.filters.length} fallback={<p class="q-empty">Every row</p>}>
 							<ol class="q-rows">
 								<Index each={props.draft.filters}>
 									{(f, i) => {
@@ -217,7 +217,7 @@ export function QueryBar(props: {
 								<span class="q-note">first key wins</span>
 							</Show>
 						</header>
-						<Show when={props.draft.sorts.length} fallback={<p class="q-empty">Database order.</p>}>
+						<Show when={props.draft.sorts.length} fallback={<p class="q-empty">Database order</p>}>
 							<ol class="q-rows">
 								<Index each={props.draft.sorts}>
 									{(s, i) => (

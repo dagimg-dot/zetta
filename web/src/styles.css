@@ -39,7 +39,7 @@ body,
 body {
 	background: var(--surface-canvas);
 	color: var(--text);
-	font: var(--text-md) / 1.4 var(--font-sans);
+	font: var(--text-md) / var(--leading) var(--font-sans);
 	-webkit-font-smoothing: antialiased;
 }
 
@@ -77,6 +77,22 @@ input[type="text"] {
 	background: var(--surface);
 	outline: none;
 	transition: border-color var(--duration) var(--ease-out);
+}
+
+/* The browser's own clear button is blue; this one takes the field's colors. */
+input[type="search"]::-webkit-search-cancel-button {
+	appearance: none;
+	width: 12px;
+	height: 12px;
+	background: var(--text-secondary);
+	mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 3l6 6M9 3l-6 6' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	cursor: pointer;
+}
+
+input[type="search"]::-webkit-search-cancel-button:hover {
+	background: var(--text);
 }
 
 ::placeholder {
@@ -286,7 +302,7 @@ aside header {
 
 .tbl {
 	display: flex;
-	gap: 7px;
+	gap: var(--space-2);
 	align-items: center;
 	width: 100%;
 	padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-5);
@@ -587,7 +603,7 @@ textarea.editor {
 	background: var(--surface);
 	outline: none;
 	tab-size: 2;
-	line-height: 1.55;
+	line-height: var(--leading-relaxed);
 }
 
 textarea.editor:focus-visible {
@@ -608,24 +624,21 @@ textarea.editor:focus-visible {
 	font-size: var(--text-xs);
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
+	gap: var(--space-1-5);
 }
 
 .status {
 	margin-top: auto;
-	padding: var(--space-1-5) var(--space-2) var(--space-1-5) var(--space-3);
+	flex: none;
+	display: flex;
+	gap: var(--space-3);
+	align-items: center;
+	height: var(--foot-height);
+	padding: 0 var(--space-2) 0 var(--space-3);
 	border-top: 1px solid var(--border);
 	color: var(--text-secondary);
 	background: var(--surface-chrome);
-	display: flex;
-	gap: var(--space-2);
-	align-items: center;
-	min-height: var(--bar-height);
-}
-
-.status .warn {
-	color: var(--text-warning);
-	white-space: nowrap;
+	font-size: var(--text-sm);
 }
 
 .busy {
@@ -650,6 +663,11 @@ textarea.editor:focus-visible {
 	border-radius: var(--radius-md);
 	background: var(--surface-danger);
 	color: var(--text-danger);
+}
+
+/* A pane that failed as a whole: the box lines up with the sheet's content. */
+.table-panel > .error {
+	margin: var(--space-4);
 }
 
 .error.inline {
@@ -705,11 +723,7 @@ textarea.editor:focus-visible {
 	padding: var(--space-10) var(--space-6);
 	text-align: center;
 	max-width: 44ch;
-	line-height: 1.6;
-}
-
-.empty .mono {
-	overflow-wrap: anywhere;
+	line-height: var(--leading-relaxed);
 }
 
 .empty strong {
@@ -756,6 +770,17 @@ textarea.editor:focus-visible {
 
 .grid:focus-visible {
 	outline: none;
+}
+
+/* The table is taller and wider than its scroller, so its own ring only showed on two edges; the
+   scroller draws it instead, around what is in view. */
+.grid table:focus-visible {
+	outline: none;
+}
+
+.grid:has(table:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
 }
 
 .grid table {
@@ -868,8 +893,8 @@ th:focus-within .ico.fold {
 	opacity: 1;
 }
 
-.grid th.collapsed,
-.grid td.collapsed {
+/* Body cells of a hidden column get the same look from the rule Grid.tsx writes per column. */
+.grid th.collapsed {
 	width: 30px;
 	min-width: 30px;
 	max-width: 30px;
@@ -1041,10 +1066,15 @@ th.collapsed .ico.fold {
 	overflow: auto;
 	margin: 0;
 	padding: var(--space-3);
-	font: var(--text-sm) / 1.6 var(--font-mono);
+	font: var(--text-sm) / var(--leading-relaxed) var(--font-mono);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	user-select: text;
+}
+
+.inspector .value.hex {
+	white-space: pre;
+	overflow-wrap: normal;
 }
 
 .inspector .value.null {
@@ -1077,12 +1107,19 @@ th.collapsed .ico.fold {
 .shortcuts {
 	margin: auto;
 	padding: 0;
+	max-height: calc(100dvh - 32px);
+	overflow: hidden;
+	flex-direction: column;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-lg);
 	background: var(--surface);
 	color: var(--text);
 	box-shadow: var(--shadow-overlay);
 	width: min(440px, calc(100vw - 32px));
+}
+
+.shortcuts[open] {
+	display: flex;
 }
 
 .shortcuts::backdrop {
@@ -1098,6 +1135,8 @@ th.collapsed .ico.fold {
 }
 
 .shortcuts dl {
+	overflow-y: auto;
+	min-height: 0;
 	display: grid;
 	grid-template-columns: auto 1fr;
 	gap: var(--space-2) var(--space-4);
@@ -1110,6 +1149,11 @@ th.collapsed .ico.fold {
 	align-items: center;
 	gap: var(--space-2);
 	justify-content: flex-end;
+}
+
+.shortcuts dt .or {
+	color: var(--text-tertiary);
+	font-size: var(--text-xs);
 }
 
 .shortcuts dt .click {
@@ -1161,7 +1205,7 @@ th.collapsed .ico.fold {
 .gate p {
 	margin: var(--space-2) 0 0;
 	color: var(--text-secondary);
-	line-height: 1.55;
+	line-height: var(--leading-relaxed);
 }
 
 .gate code {
@@ -1214,6 +1258,10 @@ th.collapsed .ico.fold {
 }
 
 .splitter:hover::after,
+.splitter:focus-visible {
+	outline: none;
+}
+
 .splitter:focus-visible::after,
 .splitter.dragging::after {
 	background: var(--accent);
@@ -1376,7 +1424,7 @@ body.resizing * {
 .st-loading {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--space-1-5);
 	align-self: center;
 }
 
@@ -1883,6 +1931,7 @@ body.resizing * {
 .info-none {
 	margin: 0;
 	color: var(--text-secondary);
+	overflow-wrap: anywhere;
 }
 
 .info-hint {
@@ -1975,11 +2024,6 @@ body.resizing * {
 
 .muted {
 	color: var(--text-tertiary);
-}
-
-.tag {
-	font-size: var(--text-xs);
-	color: var(--text-secondary);
 }
 
 .key {
@@ -2117,7 +2161,7 @@ button.key.fk:hover {
 	border-radius: var(--radius-md);
 	background: var(--surface-chrome);
 	border: 1px solid var(--border-subtle);
-	font: var(--text-sm) / 1.6 var(--font-mono);
+	font: var(--text-sm) / var(--leading-relaxed) var(--font-mono);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	color: var(--syntax-name);
@@ -2194,7 +2238,7 @@ button.key.fk:hover {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) minmax(0, 1fr);
 	column-gap: clamp(24px, 4.5vw, 72px);
-	align-items: center;
+	align-items: stretch;
 	padding: var(--space-4);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-md);
@@ -2241,6 +2285,16 @@ button.key.fk:hover {
 
 .rel-col.mid {
 	justify-content: center;
+}
+
+/* Both side labels sit at the top, whichever side has fewer tables; the tables center below. */
+.rel-col > .rel-label {
+	margin-bottom: auto;
+}
+
+.rel-col:not(.mid)::after {
+	content: "";
+	margin-top: auto;
 }
 
 .rel-label {
@@ -2354,6 +2408,12 @@ button.rel-node:hover,
 	flex: 0 1 auto;
 }
 
+/* The far side is usually short (a table and its key), so the near side gives way first. */
+.rel-list .line > .mono:not(:first-child) {
+	flex: 0 0 auto;
+	max-width: 55%;
+}
+
 .rel-list .ref-actions {
 	flex: none;
 }
@@ -2386,6 +2446,10 @@ button.rel-node:hover,
 		--sheet-pad: var(--space-3);
 		padding: var(--sheet-pad);
 	}
+
+	.table-panel > .error {
+		margin: var(--space-3);
+	}
 }
 
 /* Floating layers: tooltips, menus, lists and popovers (Ark parts) */
@@ -2414,7 +2478,7 @@ button.rel-node:hover,
 	color: var(--surface);
 	font-size: var(--text-xs);
 	font-weight: var(--weight-medium);
-	line-height: 1.35;
+	line-height: var(--leading-tight);
 	box-shadow: var(--shadow-overlay);
 	pointer-events: none;
 }
@@ -2522,6 +2586,13 @@ button.rel-node:hover,
 }
 
 .pop-head .mono {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pop-head .type {
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -2815,19 +2886,10 @@ th:focus-within .ico.more,
 
 /* Status bar: what the grid holds, how long it took, and where you are in it */
 
-.status {
-	gap: var(--space-3);
-	flex: none;
-	height: var(--foot-height);
-	min-height: var(--foot-height);
-	padding: 0 var(--space-2) 0 var(--space-4);
-	font-size: var(--text-sm);
-}
-
 .st-summary {
 	display: flex;
 	align-items: baseline;
-	gap: 5px;
+	gap: var(--space-1-5);
 	margin: 0;
 	min-width: 0;
 	overflow: hidden;
@@ -2849,7 +2911,7 @@ th:focus-within .ico.more,
 .st-copied {
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
+	gap: var(--space-1-5);
 	margin-left: var(--space-3);
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;

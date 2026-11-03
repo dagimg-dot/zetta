@@ -55,7 +55,16 @@ const groups: { title: string; keys: Shortcut[] }[] = [
 
 export function Shortcuts(props: { ref: (el: HTMLDialogElement) => void }) {
 	return (
-		<dialog class="shortcuts" ref={props.ref} aria-labelledby="shortcuts-title">
+		// biome-ignore lint/a11y/useKeyWithClickEvents: Esc already closes a modal dialog; this only adds the backdrop click.
+		<dialog
+			class="shortcuts"
+			ref={props.ref}
+			aria-labelledby="shortcuts-title"
+			onClick={(e) => {
+				// A click on the backdrop lands on the dialog itself, outside its box.
+				if (e.target === e.currentTarget) e.currentTarget.close();
+			}}
+		>
 			<header>
 				<span id="shortcuts-title">Keyboard shortcuts</span>
 				<span class="spacer" />
@@ -72,7 +81,16 @@ export function Shortcuts(props: { ref: (el: HTMLDialogElement) => void }) {
 								{(k) => (
 									<>
 										<dt>
-											<For each={k.keys}>{(combo) => <Kbd keys={combo} />}</For>
+											<For each={k.keys}>
+												{(combo, i) => (
+													<>
+														<Show when={i() > 0}>
+															<span class="or">or</span>
+														</Show>
+														<Kbd keys={combo} />
+													</>
+												)}
+											</For>
 											<Show when={k.click}>
 												<span class="click">click</span>
 											</Show>

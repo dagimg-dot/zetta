@@ -2,8 +2,9 @@ import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { announce } from "../announce";
 import { runQuery } from "../api";
 import { formatMs, plural } from "../format";
+import { isMac } from "../keys";
 import { createRequest } from "../request";
-import { changesSchema, errorRange, isWrite } from "../value";
+import { changesSchema, errorRange, isWrite, statements } from "../value";
 import { Button } from "./Button";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
@@ -69,6 +70,12 @@ export function SqlPane(props: {
 	);
 
 	const writes = createMemo(() => !props.readOnly && isWrite(sql()));
+
+	/** How many statements the shown result's run held, when more than one: only the last one's result shows. */
+	const ranMany = createMemo(() => {
+		const n = statements(query.dataKey() ?? "").length;
+		return n > 1 ? n : 0;
+	});
 
 	/**
 	 * Runs the selection when there is one, so a single statement can be run out of a longer script.
@@ -153,7 +160,7 @@ export function SqlPane(props: {
 				aria-label="SQL"
 				spellcheck={false}
 				autocomplete="off"
-				placeholder="select * from customers limit 10"
+				placeholder={`Write SQL here. ${isMac() ? "⌘" : "Ctrl"}+Enter runs it, or only the selected text.`}
 				value={sql()}
 				onInput={(e) => setSql(e.currentTarget.value)}
 				onKeyDown={onKey}
@@ -167,7 +174,7 @@ export function SqlPane(props: {
 					disabled={!sql().trim()}
 					onClick={run}
 				>
-					{query.loading() ? "Running" : writes() ? "Run write" : "Run"}
+					{writes() ? "Run write" : "Run"}
 				</Button>
 				<Show when={query.loading()}>
 					<Button
@@ -235,16 +242,12 @@ export function SqlPane(props: {
 				)}
 			</Show>
 			<div class="status">
+				{/* The same rules as the Rows status bar: a rerun or a failure keeps the last result's summary. */}
 				<Show
-					when={!query.loading() && !query.error() && query.data()}
+					when={query.data()}
 					fallback={
 						<span class="st-note">
-							<Show when={query.loading()} fallback={query.error() ? "Failed" : ""}>
-								<span class="st-loading">
-									<Loader size={12} />
-									Running
-								</span>
-							</Show>
+							{query.loading() ? "Running query" : query.error() ? "Failed" : ""}
 						</span>
 					}
 				>
@@ -252,18 +255,35 @@ export function SqlPane(props: {
 						<p class="st-summary">
 							<Show
 								when={r().columns.length}
-								fallback={<span class="st-word st-strong">{r().command || "Done"}</span>}
+								// The pane already names the command; the bar only says it finished.
+								fallback={<span class="st-word st-strong">Done</span>}
 							>
-								<span class="st-num">{r().rowCount.toLocaleString()}</span>
-								<span class="st-word">{r().rowCount === 1 ? "row" : "rows"}</span>
+								<Show when={r().rowCount} fallback={<span class="st-word">No rows</span>}>
+									<span class="st-num">{r().rowCount.toLocaleString()}</span>
+									<span class="st-word">{r().rowCount === 1 ? "row" : "rows"}</span>
+								</Show>
 							</Show>
 							<span class="st-sep" aria-hidden="true" />
-							<span class="st-time">{formatMs(r().elapsedMs)}</span>
+							<Show
+								when={query.loading()}
+								fallback={<span class="st-time">{formatMs(r().elapsedMs)}</span>}
+							>
+								<span class="st-time st-loading">
+									<Loader size={12} />
+									<span class="sr-only">Running query</span>
+								</span>
+							</Show>
+							<Show when={query.error()}>
+								<span class="st-warn">last good result</span>
+							</Show>
+							<Show when={!query.error() && ranMany()}>
+								<span class="st-note">the last of {plural(ranMany(), "statement")}</span>
+							</Show>
+							<Show when={!query.loading() && !query.error() && r().truncated}>
+								<span class="st-warn">showing the first {r().rows.length.toLocaleString()}</span>
+							</Show>
 						</p>
 					)}
-				</Show>
-				<Show when={!query.loading() && !query.error() && query.data()?.truncated}>
-					<span class="warn">showing the first {query.data()?.rows.length.toLocaleString()}</span>
 				</Show>
 				<SelectionNote selection={selection} total={query.data()?.rows.length ?? 0} />
 				<span class="spacer" />

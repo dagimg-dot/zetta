@@ -1,5 +1,6 @@
 import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { getTable, type TableDetail } from "../api";
+import { relationshipCount } from "../refs";
 import { createRequest } from "../request";
 import { type Pane, setView, view } from "../url";
 import { formatBytes } from "../value";
@@ -25,7 +26,7 @@ const tabs: { pane: Pane; label: string; count?: (d: TableDetail) => number }[] 
 	{
 		pane: "relationships",
 		label: "Relationships",
-		count: (d) => d.foreignKeys.length + d.referencedBy.length,
+		count: relationshipCount,
 	},
 	{ pane: "triggers", label: "Triggers", count: (d) => d.triggers.length },
 	{ pane: "ddl", label: "DDL" },
@@ -78,7 +79,7 @@ export function DataPane(props: {
 		if (d.sizeBytes) out.push(formatBytes(d.sizeBytes.total));
 		out.push(plural(d.columns.length, "column"));
 		if (d.indexes.length) out.push(plural(d.indexes.length, "index", "indexes"));
-		const rels = d.foreignKeys.length + d.referencedBy.length;
+		const rels = relationshipCount(d);
 		if (rels) out.push(plural(rels, "relationship"));
 		if (d.triggers.length) out.push(plural(d.triggers.length, "trigger"));
 		return out;
@@ -144,8 +145,8 @@ export function DataPane(props: {
 				fallback={
 					<div class="empty">
 						<strong>Pick a table</strong>
-						Choose one on the left, or press <Kbd keys="/" /> to search. <Kbd keys="?" /> lists
-						every shortcut.
+						Choose one from the table list, or press <Kbd keys="/" /> to search. <Kbd keys="?" />{" "}
+						lists every shortcut.
 					</div>
 				}
 			>
@@ -218,6 +219,10 @@ export function DataPane(props: {
 							aria-labelledby={`subtab-${view().pane}`}
 						>
 							<Switch>
+								{/* A table that is gone fails the same way on every tab, Rows included. */}
+								<Match when={!current() && detail.error()?.code === "not_found" && detail.error()}>
+									{(err) => <ErrorBox error={err()} />}
+								</Match>
 								<Match when={view().pane === "rows"}>
 									<RowsPane
 										schema={t().schema}

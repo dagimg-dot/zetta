@@ -96,9 +96,10 @@ export function Inspector(props: {
 	const shown = () => {
 		const v = props.cell.value;
 		if (v === null) return "NULL";
+		if (v === "") return "Empty text";
 		if (mode() === "raw") return v;
 		if (kind() === "json") return JSON.stringify(parseJson(v), null, 2);
-		if (kind() === "blob") return hexDump(v);
+		if (kind() === "blob") return blobBytes(v) ? hexDump(v) : "No bytes";
 		return v;
 	};
 
@@ -213,7 +214,7 @@ export function Inspector(props: {
 								</span>
 							</Show>
 						</div>
-						<For each={shownRefs()} fallback={<div class="refs-empty">No table matches</div>}>
+						<For each={shownRefs()} fallback={<div class="refs-empty">No matching tables</div>}>
 							{action}
 						</For>
 					</Show>

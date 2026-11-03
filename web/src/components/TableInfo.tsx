@@ -23,6 +23,18 @@ function Section(props: { title: string; note?: JSX.Element; children: JSX.Eleme
 	);
 }
 
+const nouns: Record<TableKind, string> = {
+	table: "table",
+	view: "view",
+	materialized_view: "materialized view",
+	foreign_table: "foreign table",
+};
+
+/** What to call the relation in a sentence, so a view is not called a table. */
+export function kindNoun(kind: TableKind): string {
+	return nouns[kind];
+}
+
 function None(props: { children: JSX.Element }) {
 	return <p class="info-none">{props.children}</p>;
 }
@@ -100,14 +112,16 @@ export function StructurePane(props: { detail: TableDetail }) {
 											<td class="mono strong">{c.name}</td>
 											<td class="mono type">{c.type}</td>
 											<td>
-												<Show
-													when={c.nullable && !c.primaryKey}
-													fallback={<span class="muted">not null</span>}
-												>
-													<span class="tag">null</span>
+												<Show when={c.nullable && !c.primaryKey} fallback={<span>not null</span>}>
+													<span class="muted">null</span>
 												</Show>
 											</td>
-											<td class="mono def">
+											<td
+												class="mono def"
+												{...tip(
+													(c.default?.length ?? 0) > 36 ? (c.default ?? undefined) : undefined,
+												)}
+											>
 												<Show when={c.default !== null} fallback={<span class="muted">none</span>}>
 													{c.default}
 												</Show>
@@ -201,7 +215,9 @@ function ConstraintRow(props: { c: Constraint }) {
 					</span>
 				</Show>
 			</div>
-			<code class="def-line">{props.c.definition}</code>
+			<code class="def-line">
+				<Sql text={props.c.definition} />
+			</code>
 		</li>
 	);
 }
@@ -215,22 +231,29 @@ export function IndexesPane(props: { detail: TableDetail }) {
 			<Section
 				title="Indexes"
 				note={
-					<Show when={props.detail.sizeBytes} fallback={`${props.detail.indexes.length}`}>
-						{(s) => (
-							<>
-								{props.detail.indexes.length} · {formatBytes(s().indexes)} of{" "}
-								{formatBytes(s().total)} on disk
-							</>
-						)}
-					</Show>
+					props.detail.indexes.length ? (
+						<Show when={props.detail.sizeBytes} fallback={`${props.detail.indexes.length}`}>
+							{(s) => (
+								<>
+									{props.detail.indexes.length} · {formatBytes(s().indexes)} of{" "}
+									{formatBytes(s().total)} on disk
+								</>
+							)}
+						</Show>
+					) : undefined
 				}
 			>
 				<Show
 					when={props.detail.indexes.length}
 					fallback={
 						<None>
-							No indexes. Every filter on this table reads all of it
-							{props.detail.kind === "table" ? "; a primary key would add one." : "."}
+							<Show
+								when={props.detail.kind !== "view"}
+								fallback="A view has no indexes of its own; filters run on the tables it reads."
+							>
+								No indexes. Every filter on this {kindNoun(props.detail.kind)} reads all of it
+								{props.detail.kind === "table" ? "; a primary key would add one." : "."}
+							</Show>
 						</None>
 					}
 				>
@@ -296,7 +319,11 @@ function IndexRow(props: { ix: IndexInfo; stats: boolean }) {
 				</Show>
 			</div>
 			<Show when={props.ix.definition}>
-				<code class="def-line">{props.ix.definition}</code>
+				{(def) => (
+					<code class="def-line">
+						<Sql text={def()} />
+					</code>
+				)}
 			</Show>
 		</li>
 	);
@@ -311,7 +338,11 @@ export function TriggersPane(props: { detail: TableDetail }) {
 			>
 				<Show
 					when={props.detail.triggers.length}
-					fallback={<None>No triggers. Writes to this table run no hidden code.</None>}
+					fallback={
+						<None>
+							No triggers. Writes to this {kindNoun(props.detail.kind)} run no hidden code.
+						</None>
+					}
 				>
 					<ul class="info-list">
 						<For each={props.detail.triggers}>
