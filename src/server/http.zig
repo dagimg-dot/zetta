@@ -82,7 +82,39 @@ pub fn cookie(req: *const Request, name: []const u8) ?[]const u8 {
     return null;
 }
 
+/// True when `Accept-Encoding` lists gzip without `q=0`.
+pub fn acceptsGzip(req: *const Request) bool {
+    var it = req.iterateHeaders();
+    while (it.next()) |h| {
+        if (!std.ascii.eqlIgnoreCase(h.name, "accept-encoding")) continue;
+        if (gzipListed(h.value)) return true;
+    }
+    return false;
+}
+
+fn gzipListed(value: []const u8) bool {
+    var codings = mem.splitScalar(u8, value, ',');
+    while (codings.next()) |raw| {
+        var parts = mem.splitScalar(u8, mem.trim(u8, raw, " "), ';');
+        const name = mem.trim(u8, parts.first(), " ");
+        if (!std.ascii.eqlIgnoreCase(name, "gzip") and !mem.eql(u8, name, "*")) continue;
+        const q = mem.trim(u8, parts.rest(), " ");
+        if (mem.eql(u8, q, "q=0") or mem.eql(u8, q, "q=0.0") or mem.eql(u8, q, "q=0.000")) continue;
+        return true;
+    }
+    return false;
+}
+
 const testing = std.testing;
+
+test "gzip is accepted unless refused with q=0" {
+    try testing.expect(gzipListed("gzip, deflate, br, zstd"));
+    try testing.expect(gzipListed("br;q=1.0, GZIP;q=0.5"));
+    try testing.expect(gzipListed("*"));
+    try testing.expect(!gzipListed("gzip;q=0, br"));
+    try testing.expect(!gzipListed("identity"));
+    try testing.expect(!gzipListed(""));
+}
 
 test "query params are percent-decoded" {
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);

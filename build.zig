@@ -4,7 +4,7 @@ const zon = @import("build.zig.zon");
 const Ui = enum {
     /// Run `bun run build` in web/ before compiling.
     bun,
-    /// Use the existing web/dist/index.html as is.
+    /// Use the existing web/dist/index.html.gz as is.
     prebuilt,
 };
 
@@ -12,18 +12,23 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const ui = b.option(Ui, "ui", "How to get the web UI (default: bun)") orelse .bun;
-
+    // Release builds never print stack traces, so they need no unwind tables (about 125 KB).
+    const unwind: ?std.builtin.UnwindTables = if (optimize == .Debug) null else .none;
+    const strip = b.option(bool, "strip", "Strip symbols (default: on for release builds)");
     const options = b.addOptions();
     options.addOption([]const u8, "version", zon.version);
-    options.addOption([]const u8, "git_commit", gitShortHash(b));
+    const commit = b.option([]const u8, "commit", "Commit shown by --version (default: git rev-parse)");
+    options.addOption([]const u8, "git_commit", commit orelse gitShortHash(b));
     const options_mod = options.createModule();
 
-    const sqlite = addSqlite(b, target, optimize);
+    const sqlite = addSqlite(b, target, optimize, unwind);
 
     const db = b.createModule(.{
         .root_source_file = b.path("src/db/root.zig"),
         .target = target,
         .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
         .link_libc = true,
     });
     db.linkSystemLibrary("pq", .{});
@@ -34,12 +39,16 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/cli/root.zig"),
         .target = target,
         .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
     });
 
     const render = b.createModule(.{
         .root_source_file = b.path("src/render/root.zig"),
         .target = target,
         .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
         .imports = &.{.{ .name = "db", .module = db }},
     });
 
@@ -47,12 +56,14 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/server/root.zig"),
         .target = target,
         .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
         .imports = &.{
             .{ .name = "db", .module = db },
             .{ .name = "render", .module = render },
         },
     });
-    server.addAnonymousImport("ui_index", .{ .root_source_file = b.path("web/dist/index.html") });
+    server.addAnonymousImport("ui_index", .{ .root_source_file = b.path("web/dist/index.html.gz") });
 
     const exe = b.addExecutable(.{
         .name = "zetta",
@@ -60,6 +71,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .unwind_tables = unwind,
+            .strip = strip,
             .imports = &.{
                 .{ .name = "build_options", .module = options_mod },
                 .{ .name = "cli", .module = cli },
@@ -107,13 +120,19 @@ pub fn build(b: *std.Build) void {
     check.dependOn(b.getInstallStep());
 }
 
-fn addSqlite(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+fn addSqlite(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    unwind: ?std.builtin.UnwindTables,
+) *std.Build.Step.Compile {
     const lib = b.addLibrary(.{
         .linkage = .static,
         .name = "sqlite3",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .unwind_tables = unwind,
             .link_libc = true,
         }),
     });
@@ -127,6 +146,28 @@ fn addSqlite(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             "-DSQLITE_OMIT_LOAD_EXTENSION",
             "-DSQLITE_OMIT_DEPRECATED",
             "-DSQLITE_ENABLE_MATH_FUNCTIONS",
+            // C-level features zetta never calls. Parser-changing omits are left
+            // alone: they do not work with the amalgamation.
+            "-DSQLITE_OMIT_PROGRESS_CALLBACK",
+            "-DSQLITE_OMIT_UTF16",
+            "-DSQLITE_OMIT_TRACE",
+            "-DSQLITE_OMIT_COMPLETE",
+            "-DSQLITE_OMIT_GET_TABLE",
+            "-DSQLITE_OMIT_TCL_VARIABLE",
+            "-DSQLITE_OMIT_INCRBLOB",
+            "-DSQLITE_OMIT_AUTHORIZATION",
+            "-DSQLITE_OMIT_COMPILEOPTION_DIAGS",
+            "-DSQLITE_OMIT_DESERIALIZE",
+            "-DSQLITE_OMIT_SEH",
+            "-DSQLITE_UNTESTABLE",
+            "-DSQLITE_OMIT_SHARED_CACHE",
+            "-DSQLITE_OMIT_XFER_OPT",
+            "-DSQLITE_OMIT_OR_OPTIMIZATION",
+            "-DSQLITE_OMIT_BETWEEN_OPTIMIZATION",
+            "-DSQLITE_OMIT_LIKE_OPTIMIZATION",
+            "-DSQLITE_OMIT_TRUNCATE_OPTIMIZATION",
+            // mmap is off by default anyway; this drops its code.
+            "-DSQLITE_MAX_MMAP_SIZE=0",
         },
     });
     return lib;

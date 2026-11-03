@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
+		"build": "vite build && bun scripts/gzip.ts",
 		"check": "tsc --noEmit && biome check . && bun test",
 		"fmt": "biome format --write .",
 		"test": "bun test"

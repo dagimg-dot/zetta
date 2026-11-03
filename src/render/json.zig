@@ -69,8 +69,9 @@ pub fn columns(w: *Writer, cols: []const db.Column) Writer.Error!void {
     try s.endObject();
 }
 
-/// `elapsed_ms` is left out when null (the CLI does not time queries).
-pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ms: ?f64) Writer.Error!void {
+/// `elapsed_ns` is left out when null (the CLI does not time queries). It is written as
+/// milliseconds with one decimal, using integer maths so no float formatter is linked in.
+pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ns: ?u64) Writer.Error!void {
     var s: Stringify = .{ .writer = w };
     try s.beginObject();
     try s.objectField("columns");
@@ -89,7 +90,11 @@ pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ms: ?f64) Writer.Error!vo
     try field(&s, "rowCount", rs.row_count);
     try field(&s, "truncated", rs.truncated);
     try field(&s, "command", rs.command);
-    if (elapsed_ms) |ms| try field(&s, "elapsedMs", @round(ms * 10) / 10);
+    if (elapsed_ns) |ns| {
+        const tenths = (ns + 50_000) / 100_000;
+        try s.objectField("elapsedMs");
+        try s.print("{d}.{d}", .{ tenths / 10, tenths % 10 });
+    }
     try s.endObject();
 }
 
@@ -118,7 +123,7 @@ test "a result set matches the API shape" {
         .row_count = 1,
         .truncated = false,
         .command = "SELECT 1",
-    }, 3.14);
+    }, 3_140_000);
     try testing.expectEqualStrings(
         \\{"columns":[{"name":"id","type":"integer"},{"name":"note","type":"text"}],"rows":[["1",null]],"rowCount":1,"truncated":false,"command":"SELECT 1","elapsedMs":3.1}
     , w.buffered());

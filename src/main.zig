@@ -10,6 +10,10 @@ const log = @import("log.zig");
 const Cli = commands.Cli;
 const File = std.Io.File;
 
+/// Release builds carry no unwind tables, so a stack trace could not be printed anyway;
+/// the simple handler prints the message and traps, and keeps the trace code out (about 40 KB).
+pub const panic = if (@import("builtin").mode == .Debug) std.debug.FullPanic(std.debug.defaultPanic) else std.debug.simple_panic;
+
 pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = log.logFn,

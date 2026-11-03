@@ -9,7 +9,8 @@ const render = @import("render");
 const http = @import("http.zig");
 const auth = @import("auth.zig");
 
-const ui_index = @embedFile("ui_index");
+/// The UI page, gzipped at build time. Every browser accepts gzip, so it is never inflated here.
+const ui_index_gz = @embedFile("ui_index");
 
 pub const Context = struct {
     io: std.Io,
@@ -73,8 +74,17 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
         } });
         return .unauthorized;
     }
-    try req.respond(ui_index, .{ .extra_headers = &.{
+    if (!http.acceptsGzip(req)) {
+        try req.respond("zetta's UI needs a client that accepts gzip, such as any web browser.\n", .{
+            .status = .not_acceptable,
+            .extra_headers = &.{.{ .name = "content-type", .value = "text/plain; charset=utf-8" }},
+        });
+        return .not_acceptable;
+    }
+    try req.respond(ui_index_gz, .{ .extra_headers = &.{
         .{ .name = "content-type", .value = "text/html; charset=utf-8" },
+        .{ .name = "content-encoding", .value = "gzip" },
+        .{ .name = "vary", .value = "accept-encoding" },
         .{ .name = "cache-control", .value = "no-store" },
         .{ .name = "x-content-type-options", .value = "nosniff" },
         .{ .name = "referrer-policy", .value = "no-referrer" },
@@ -153,10 +163,9 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status 
 }
 
 fn respondResult(ctx: *const Context, arena: Allocator, req: *Request, rs: db.ResultSet, started: std.Io.Timestamp) !std.http.Status {
-    const elapsed = started.untilNow(ctx.io, .awake);
-    const ms = @as(f64, @floatFromInt(elapsed.toNanoseconds())) / std.time.ns_per_ms;
+    const elapsed: u64 = @intCast(@max(0, started.untilNow(ctx.io, .awake).toNanoseconds()));
     var out: std.Io.Writer.Allocating = .init(arena);
-    try render.json.resultSet(&out.writer, rs, ms);
+    try render.json.resultSet(&out.writer, rs, elapsed);
     try http.respondJson(req, .ok, out.written());
     return .ok;
 }

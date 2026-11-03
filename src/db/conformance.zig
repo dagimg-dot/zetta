@@ -147,13 +147,21 @@ test "sqlite read-only mode rejects writes" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     var diag: Diagnostic = .{};
-    const uri = "file:zetta_ro_test?mode=memory&cache=shared";
 
-    const rw = try open(testing.allocator, testing.io, try dsn.parse(arena, uri), .{}, &diag);
-    defer rw.deinit();
-    try exec(rw, "create table t (x integer); insert into t values (1);");
+    // An empty file is a valid empty database, and zetta never creates one itself.
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const file = try tmp.dir.createFile(testing.io, "ro.db", .{});
+    file.close(testing.io);
+    const path = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/ro.db", .{tmp.sub_path});
 
-    const ro = try open(testing.allocator, testing.io, try dsn.parse(arena, uri), .{ .read_only = true }, &diag);
+    {
+        const rw = try open(testing.allocator, testing.io, try dsn.parse(arena, path), .{}, &diag);
+        defer rw.deinit();
+        try exec(rw, "create table t (x integer); insert into t values (1);");
+    }
+
+    const ro = try open(testing.allocator, testing.io, try dsn.parse(arena, path), .{ .read_only = true }, &diag);
     defer ro.deinit();
     try testing.expect(ro.info().read_only);
     const res = try ro.query(arena, "select x from t", .{}, &diag);
