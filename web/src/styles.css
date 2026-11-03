@@ -1744,6 +1744,11 @@ body.resizing * {
 	gap: 1px;
 }
 
+/* With a filter the list holds its height, so the field stays put as matches drop. */
+.inspector .actions:has(.refs-find) {
+	height: 60%;
+}
+
 .inspector .refs-head {
 	position: sticky;
 	top: calc(-1 * var(--space-1-5));
