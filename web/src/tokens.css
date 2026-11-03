@@ -146,6 +146,13 @@
 	--accent-fill: light-dark(var(--ember-600), var(--ember-400));
 	--accent-fill-hover: light-dark(var(--ember-700), var(--ember-200));
 
+	/* SQL as text: keywords carry the brand, literals stay quiet. */
+	--syntax-keyword: var(--text-accent);
+	--syntax-string: var(--text-success);
+	--syntax-number: var(--text-warning);
+	--syntax-name: var(--text);
+	--syntax-comment: var(--text-tertiary);
+
 	--scrollbar: light-dark(var(--neutral-300), var(--neutral-800));
 	--scrollbar-hover: light-dark(var(--neutral-500), var(--neutral-600));
 

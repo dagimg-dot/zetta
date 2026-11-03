@@ -1,13 +1,23 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { announce } from "../announce";
 import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
-import { Icon } from "./icons";
+import { Icon, type IconName } from "./icons";
+import { IconButton } from "./Tip";
+
+export interface InspectorAction {
+	label: string;
+	detail?: string;
+	icon: IconName;
+	hint?: string;
+	run: () => void;
+}
 
 export interface InspectedCell {
 	column: string;
 	type: string;
 	value: string | null;
 	row: number;
+	actions?: InspectorAction[];
 }
 
 type Mode = "pretty" | "raw";
@@ -93,25 +103,19 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 				</span>
 				<span class="type">{props.cell.type}</span>
 				<span class="spacer" />
-				<button
-					type="button"
-					class="btn quiet icon-only"
-					aria-label="Copy value"
-					title="Copy value (C)"
+				<IconButton
+					icon={copied() ? "check" : "copy"}
+					label="Copy value"
+					kbd="C"
 					disabled={props.cell.value === null}
 					onClick={copy}
-				>
-					<Icon name={copied() ? "check" : "copy"} />
-				</button>
-				<button
-					type="button"
-					class="btn quiet icon-only"
-					aria-label="Close inspector"
-					title="Close (Esc)"
+				/>
+				<IconButton
+					icon="close"
+					label="Close inspector"
+					kbd="Esc"
 					onClick={() => props.onClose()}
-				>
-					<Icon name="close" />
-				</button>
+				/>
 			</header>
 			<div class="facts">
 				<span>row {props.cell.row.toLocaleString()}</span>
@@ -140,6 +144,24 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 					? withBreaks(shown())
 					: shown()}
 			</pre>
+			<Show when={props.cell.actions?.length}>
+				<nav class="actions" aria-label="Go to related rows">
+					<For each={props.cell.actions}>
+						{(a) => (
+							<button type="button" class="action" onClick={() => a.run()}>
+								<Icon name={a.icon} />
+								<span class="label">{a.label}</span>
+								<Show when={a.detail}>
+									<span class="detail mono">{a.detail}</span>
+								</Show>
+								<Show when={a.hint}>
+									<kbd>{a.hint}</kbd>
+								</Show>
+							</button>
+						)}
+					</For>
+				</nav>
+			</Show>
 			<footer>
 				<kbd>↑</kbd>
 				<kbd>↓</kbd>

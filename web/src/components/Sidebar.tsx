@@ -4,6 +4,7 @@ import { openTable, view } from "../url";
 import { ErrorBox } from "./ErrorBox";
 import { Icon, Mark } from "./icons";
 import { ThemeSwitch } from "./ThemeSwitch";
+import { IconButton } from "./Tip";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,
@@ -107,16 +108,12 @@ export function Sidebar(props: {
 					<b>zetta</b>
 					<Show when={props.meta}>{(m) => <span class="version">{m().version}</span>}</Show>
 					<span class="spacer" />
-					<button
-						type="button"
-						class="btn quiet icon-only"
-						aria-label="Reload tables"
-						title="Reload tables"
+					<IconButton
+						icon="refresh"
+						label="Reload tables"
 						disabled={props.loading}
 						onClick={() => props.onRefresh()}
-					>
-						<Icon name="refresh" />
-					</button>
+					/>
 				</div>
 				<Show when={props.meta}>
 					{(m) => (

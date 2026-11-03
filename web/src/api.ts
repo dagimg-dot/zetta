@@ -60,6 +60,7 @@ export type ErrorCode =
 	| "read_only"
 	| "connect_failed"
 	| "too_large"
+	| "timeout"
 	| "internal";
 
 export class ApiError extends Error {
@@ -133,10 +134,96 @@ export function browse(p: BrowseParams): Promise<ResultSet> {
 	return request<ResultSet>(`/api/browse?${query({ ...p })}`);
 }
 
+export interface RowCount {
+	count: number;
+	elapsedMs: number;
+}
+
+/** Exact row count for a table and filter. Fails with `timeout` past the server's budget. */
+export function countRows(p: { schema: string; table: string; filter: string }): Promise<RowCount> {
+	return request<RowCount>(`/api/count?${query({ ...p })}`);
+}
+
 export function runQuery(sql: string): Promise<ResultSet> {
 	return request<ResultSet>("/api/query", {
 		method: "POST",
 		headers: { "content-type": "text/plain" },
 		body: sql,
 	});
+}
+
+export type ConstraintKind = "primary_key" | "unique" | "check" | "foreign_key" | "exclusion";
+export type RefAction = "NO ACTION" | "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+
+export interface DetailColumn extends Column {
+	comment: string | null;
+}
+
+export interface Constraint {
+	name: string;
+	kind: ConstraintKind;
+	columns: string[];
+	definition: string;
+}
+
+export interface IndexInfo {
+	name: string;
+	columns: string[];
+	unique: boolean;
+	primary: boolean;
+	method: string;
+	predicate: string | null;
+	definition: string | null;
+	sizeBytes: number | null;
+	scans: number | null;
+}
+
+export interface ForeignKey {
+	name: string | null;
+	columns: string[];
+	refSchema: string;
+	refTable: string;
+	refColumns: string[];
+	onUpdate: RefAction;
+	onDelete: RefAction;
+}
+
+export interface Reference {
+	name: string | null;
+	schema: string;
+	table: string;
+	columns: string[];
+	refColumns: string[];
+	onUpdate: RefAction;
+	onDelete: RefAction;
+}
+
+export interface Trigger {
+	name: string;
+	timing: "BEFORE" | "AFTER" | "INSTEAD OF";
+	events: string[];
+	level: "ROW" | "STATEMENT";
+	function: string | null;
+	definition: string;
+	enabled: boolean;
+}
+
+export interface TableDetail {
+	schema: string;
+	name: string;
+	kind: TableKind;
+	approxRows: number | null;
+	sizeBytes: { total: number; table: number; indexes: number } | null;
+	comment: string | null;
+	columns: DetailColumn[];
+	constraints: Constraint[];
+	indexes: IndexInfo[];
+	foreignKeys: ForeignKey[];
+	referencedBy: Reference[];
+	triggers: Trigger[];
+	ddl: string;
+}
+
+export function getTable(schema: string, table: string): Promise<TableDetail> {
+	return request<TableDetail>(`/api/table?${query({ schema, table })}`);
 }

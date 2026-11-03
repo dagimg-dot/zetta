@@ -1,159 +1,102 @@
-import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
-import { announce } from "../announce";
-import { browse, type Column, getColumns } from "../api";
-import { formatMs } from "../format";
+import { createMemo, For, Match, Show, Switch } from "solid-js";
+import { getTable, type TableDetail } from "../api";
+import type { Dialect } from "../query";
 import { createRequest } from "../request";
-import { setView, view } from "../url";
-import { closest, unknownColumn } from "../value";
+import { type Pane, setView, view } from "../url";
+import { formatBytes } from "../value";
 import { ErrorBox } from "./ErrorBox";
-import { createHidden, Grid, HiddenButton, type Sort } from "./Grid";
 import { Icon } from "./icons";
+import { Relationships } from "./Relationships";
+import { RowsPane } from "./RowsPane";
+import { DdlPane, IndexesPane, StructurePane, TriggersPane } from "./TableInfo";
 
-const PAGE = 100;
+const kindLabel: Record<string, string> = {
+	table: "table",
+	view: "view",
+	materialized_view: "materialized view",
+	foreign_table: "foreign table",
+};
 
-function quoteIdent(name: string): string {
-	return `"${name.replaceAll('"', '""')}"`;
-}
+const tabs: { pane: Pane; label: string; count?: (d: TableDetail) => number }[] = [
+	{ pane: "rows", label: "Rows" },
+	{ pane: "structure", label: "Structure", count: (d) => d.columns.length },
+	{ pane: "indexes", label: "Indexes", count: (d) => d.indexes.length },
+	{
+		pane: "relationships",
+		label: "Relationships",
+		count: (d) => d.foreignKeys.length + d.referencedBy.length,
+	},
+	{ pane: "triggers", label: "Triggers", count: (d) => d.triggers.length },
+	{ pane: "ddl", label: "DDL" },
+];
 
-/** The sort icons only reflect an ORDER BY that is exactly one quoted column with an optional direction. */
-function parseSort(order: string): Sort | null {
-	const m = /^"((?:[^"]|"")+)"(?:\s+(asc|desc))?\s*$/i.exec(order.trim());
-	if (!m?.[1]) return null;
-	return {
-		col: m[1].replaceAll('""', '"'),
-		dir: m[2]?.toLowerCase() === "desc" ? "desc" : "asc",
-	};
-}
+const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
-function nextOrder(order: string, col: string): string {
-	const cur = parseSort(order);
-	if (!cur || cur.col !== col) return `${quoteIdent(col)} asc`;
-	return cur.dir === "asc" ? `${quoteIdent(col)} desc` : "";
+function plural(n: number, one: string, many = `${one}s`): string {
+	return `${n.toLocaleString()} ${n === 1 ? one : many}`;
 }
 
 export function DataPane(props: {
 	active: boolean;
+	dialect: Dialect;
 	approxRows: (schema: string, table: string) => number | null;
 	filterRef?: (el: HTMLInputElement) => void;
 }) {
-	const [filter, setFilter] = createSignal(view().filter);
-	const [order, setOrder] = createSignal(view().order);
-	const hidden = createHidden();
+	const target = createMemo(
+		() => {
+			const v = view();
+			return v.schema !== null && v.table !== null ? { schema: v.schema, table: v.table } : null;
+		},
+		undefined,
+		{ equals: (a, b) => a?.schema === b?.schema && a?.table === b?.table },
+	);
 
-	const applied = {
-		filter: createMemo(() => view().filter),
-		order: createMemo(() => view().order),
-		offset: createMemo(() => view().offset),
-	};
-	createEffect(on(applied.filter, (f) => setFilter(f)));
-	createEffect(on(applied.order, (o) => setOrder(o)));
-
-	const targetKey = createMemo(() => {
-		const v = view();
-		return v.schema !== null && v.table !== null ? `${v.schema}\u0000${v.table}` : "";
-	});
-	const target = createMemo(() => {
-		if (!targetKey()) return null;
-		const v = view();
-		return v.schema !== null && v.table !== null ? { schema: v.schema, table: v.table } : null;
-	});
-	createEffect(on(targetKey, () => hidden.clear(), { defer: true }));
-
-	const rows = createRequest(browse, () => {
-		const t = target();
-		if (!t || !props.active) return null;
-		return {
-			...t,
-			filter: applied.filter(),
-			order: applied.order(),
-			limit: PAGE,
-			offset: applied.offset(),
-		};
-	});
-
-	const columns = createRequest(
-		(t: { schema: string; table: string }) => getColumns(t.schema, t.table),
+	const detail = createRequest(
+		(t: { schema: string; table: string }) => getTable(t.schema, t.table),
 		() => (props.active ? target() : null),
 	);
 
-	const columnMap = createMemo(() => {
-		const m = new Map<string, Column>();
-		for (const c of columns.data()?.columns ?? []) m.set(c.name, c);
-		return m;
-	});
-
-	const apply = () => setView({ filter: filter().trim(), order: order().trim(), offset: 0 });
-
-	const sortBy = (col: string) => {
-		const next = nextOrder(view().order, col);
-		setOrder(next);
-		setView({ filter: filter().trim(), order: next, offset: 0 });
-	};
-
-	const onKey = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
-		if (e.key === "Enter") apply();
-		if (e.key === "Escape") {
-			setFilter(view().filter);
-			setOrder(view().order);
-		}
-	};
-
-	const dirty = () => filter().trim() !== view().filter || order().trim() !== view().order;
-
-	/** The last result for this table, kept on screen (dimmed) while a newer request failed. */
-	const result = () => {
-		const k = rows.dataKey();
+	/** Only the detail for the open table counts; a slower answer for the previous one is ignored. */
+	const current = () => {
+		const k = detail.dataKey();
 		const t = target();
-		if (!k || !t || k.schema !== t.schema || k.table !== t.table) return undefined;
-		return rows.data();
+		return k && t && k.schema === t.schema && k.table === t.table ? detail.data() : undefined;
 	};
 
-	const suggestion = () => {
-		const err = rows.error();
-		if (!err) return null;
-		const bad = unknownColumn(err.message);
-		if (!bad) return null;
-		const names = [...columnMap().keys()];
-		const fix = closest(bad, names.length ? names : (result()?.columns.map((c) => c.name) ?? []));
-		return fix && fix !== bad ? { bad, fix } : null;
-	};
-
-	const applySuggestion = (bad: string, fix: string) => {
-		const swap = (s: string) =>
-			s.replace(new RegExp(`\\b${bad.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"), fix);
-		const f = swap(filter());
-		const o = swap(order());
-		setFilter(f);
-		setOrder(o);
-		setView({ filter: f.trim(), order: o.trim(), offset: 0 });
-	};
-
-	const clearFilter = () => {
-		setFilter("");
-		setOrder("");
-		setView({ filter: "", order: "", offset: 0 });
-	};
-
-	const info = () => {
+	const approx = () => {
 		const t = target();
-		const r = result();
-		if (!t || !r) return "";
-		const offset = rows.dataKey()?.offset ?? 0;
-		const n = r.rows.length;
-		const range = n
-			? `rows ${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}`
-			: "no rows";
-		const total = props.approxRows(t.schema, t.table);
-		const of = total !== null && !view().filter ? ` of ~${total.toLocaleString()}` : "";
-		return `${range}${of} · ${formatMs(r.elapsedMs)}`;
+		return current()?.approxRows ?? (t ? props.approxRows(t.schema, t.table) : null);
 	};
 
-	createEffect(
-		on(rows.data, () => {
-			const t = target();
-			if (t && props.active) announce(`${t.table}: ${info()}`);
-		}),
-	);
+	const stats = () => {
+		const d = current();
+		if (!d) return [];
+		const out: string[] = [];
+		const rows = approx();
+		if (rows !== null)
+			out.push(`~${rows < 10000 ? rows.toLocaleString() : compact.format(rows)} rows`);
+		if (d.sizeBytes) out.push(formatBytes(d.sizeBytes.total));
+		out.push(plural(d.columns.length, "column"));
+		if (d.indexes.length) out.push(plural(d.indexes.length, "index", "indexes"));
+		const rels = d.foreignKeys.length + d.referencedBy.length;
+		if (rels) out.push(plural(rels, "relationship"));
+		if (d.triggers.length) out.push(plural(d.triggers.length, "trigger"));
+		return out;
+	};
+
+	const select = (pane: Pane) => {
+		if (view().pane !== pane) setView({ pane }, "push");
+	};
+
+	const onTabKey = (e: KeyboardEvent) => {
+		if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+		const at = tabs.findIndex((t) => t.pane === view().pane);
+		const next = tabs[(at + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+		if (!next) return;
+		select(next.pane);
+		queueMicrotask(() => document.getElementById(`subtab-${next.pane}`)?.focus());
+		e.preventDefault();
+	};
 
 	return (
 		<section
@@ -163,42 +106,6 @@ export function DataPane(props: {
 			role="tabpanel"
 			aria-labelledby="tab-data"
 		>
-			<div class="bar">
-				<input
-					ref={props.filterRef}
-					type="text"
-					class="grow mono"
-					aria-label="Filter rows, as a SQL WHERE condition"
-					placeholder="WHERE …   e.g.  id > 100 and email like '%@example.com'"
-					autocomplete="off"
-					spellcheck={false}
-					disabled={!target()}
-					value={filter()}
-					onInput={(e) => setFilter(e.currentTarget.value)}
-					onKeyDown={onKey}
-				/>
-				<input
-					type="text"
-					class="ord mono"
-					aria-label="Order rows, as a SQL ORDER BY list"
-					placeholder="ORDER BY …"
-					autocomplete="off"
-					spellcheck={false}
-					disabled={!target()}
-					value={order()}
-					onInput={(e) => setOrder(e.currentTarget.value)}
-					onKeyDown={onKey}
-				/>
-				<button
-					type="button"
-					class="btn"
-					classList={{ primary: dirty() }}
-					disabled={!target()}
-					onClick={apply}
-				>
-					Apply
-				</button>
-			</div>
 			<Show
 				when={target()}
 				fallback={
@@ -209,86 +116,119 @@ export function DataPane(props: {
 					</div>
 				}
 			>
-				<Show when={rows.error()}>
-					{(err) => (
-						<ErrorBox error={err()} inline>
-							<Show when={suggestion()}>
-								{(s) => (
-									<button
-										type="button"
-										class="btn"
-										onClick={() => applySuggestion(s().bad, s().fix)}
+				{(t) => (
+					<>
+						<header class="table-head">
+							<div class="table-title">
+								<Icon
+									name={current()?.kind === "table" || !current() ? "table" : "view"}
+									size={14}
+								/>
+								<h1>
+									<span class="schema">{t().schema}.</span>
+									{t().table}
+								</h1>
+								<Show when={current() && current()?.kind !== "table"}>
+									<span class="badge">{kindLabel[current()?.kind ?? "table"]}</span>
+								</Show>
+								<ul class="table-stats" aria-label="About this table">
+									<For each={stats()}>{(s) => <li>{s}</li>}</For>
+								</ul>
+							</div>
+							<Show when={current()?.comment}>
+								<p class="table-comment">{current()?.comment}</p>
+							</Show>
+							<div
+								class="subtabs"
+								role="tablist"
+								aria-label={`${t().table} views`}
+								onKeyDown={onTabKey}
+							>
+								<For each={tabs}>
+									{(tab) => (
+										<button
+											type="button"
+											class="subtab"
+											role="tab"
+											id={`subtab-${tab.pane}`}
+											aria-selected={view().pane === tab.pane}
+											aria-controls="table-panel"
+											tabIndex={view().pane === tab.pane ? 0 : -1}
+											onClick={() => select(tab.pane)}
+										>
+											{tab.label}
+											<Show when={tab.count && current()}>
+												{(_) => {
+													const n = () => {
+														const d = current();
+														return d && tab.count ? tab.count(d) : 0;
+													};
+													return (
+														<span class="count" classList={{ zero: n() === 0 }}>
+															{n()}
+														</span>
+													);
+												}}
+											</Show>
+										</button>
+									)}
+								</For>
+							</div>
+						</header>
+
+						<div
+							class="table-panel"
+							id="table-panel"
+							role="tabpanel"
+							aria-labelledby={`subtab-${view().pane}`}
+						>
+							<Switch>
+								<Match when={view().pane === "rows"}>
+									<RowsPane
+										schema={t().schema}
+										table={t().table}
+										active={props.active}
+										dialect={props.dialect}
+										detail={current()}
+										approxRows={approx()}
+										filterRef={props.filterRef}
+									/>
+								</Match>
+								<Match when={view().pane !== "rows"}>
+									<Show
+										when={current()}
+										fallback={
+											<Show when={detail.error()} fallback={<div class="empty">Loading…</div>}>
+												{(err) => <ErrorBox error={err()} />}
+											</Show>
+										}
 									>
-										Use <span class="mono">{s().fix}</span> instead of{" "}
-										<span class="mono">{s().bad}</span>
-									</button>
-								)}
-							</Show>
-							<Show when={view().filter || view().order}>
-								<button type="button" class="btn quiet" onClick={clearFilter}>
-									Clear filter and order
-								</button>
-							</Show>
-						</ErrorBox>
-					)}
-				</Show>
-				<Show
-					when={result()}
-					fallback={
-						<Show when={rows.loading()}>
-							<div class="empty">Loading…</div>
-						</Show>
-					}
-				>
-					{(r) => (
-						<div class="pane" classList={{ busy: rows.loading() }}>
-							<Grid
-								result={r()}
-								hidden={hidden}
-								label={`${target()?.schema}.${target()?.table}`}
-								offset={rows.dataKey()?.offset ?? 0}
-								sort={parseSort(view().order)}
-								onSort={sortBy}
-								columnInfo={(name) => columnMap().get(name)}
-								stale={!!rows.error()}
-							/>
+										{(d) => (
+											<Switch>
+												<Match when={view().pane === "structure"}>
+													<StructurePane detail={d()} />
+												</Match>
+												<Match when={view().pane === "indexes"}>
+													<IndexesPane detail={d()} />
+												</Match>
+												<Match when={view().pane === "relationships"}>
+													<Relationships detail={d()} />
+												</Match>
+												<Match when={view().pane === "triggers"}>
+													<TriggersPane detail={d()} />
+												</Match>
+												<Match when={view().pane === "ddl"}>
+													<DdlPane detail={d()} />
+												</Match>
+											</Switch>
+										)}
+									</Show>
+								</Match>
+							</Switch>
 						</div>
-					)}
-				</Show>
+					</>
+				)}
 			</Show>
-			<div class="status">
-				<span class="info">
-					{rows.loading() && !result()
-						? "Loading…"
-						: rows.error() && result()
-							? "Showing the last good result"
-							: info()}
-				</span>
-				<span class="spacer" />
-				<HiddenButton hidden={hidden} />
-				<button
-					type="button"
-					class="btn"
-					title="Previous page ([)"
-					disabled={!result() || view().offset === 0 || rows.loading()}
-					onClick={() => setView({ offset: Math.max(0, view().offset - PAGE) })}
-				>
-					<Icon name="prev" />
-					Prev
-				</button>
-				<button
-					type="button"
-					class="btn"
-					title="Next page (])"
-					disabled={!result() || (result()?.rows.length ?? 0) < PAGE || rows.loading()}
-					onClick={() => setView({ offset: view().offset + PAGE })}
-				>
-					Next
-					<Icon name="next" />
-				</button>
-			</div>
 		</section>
 	);
 }
-
-export const PAGE_SIZE = PAGE;

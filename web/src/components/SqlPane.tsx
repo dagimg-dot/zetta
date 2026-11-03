@@ -197,7 +197,28 @@ export function SqlPane(props: {
 				)}
 			</Show>
 			<div class="status">
-				<span class="info">{query.loading() ? "Running…" : query.error() ? "Failed" : info()}</span>
+				<Show
+					when={!query.loading() && !query.error() && query.data()}
+					fallback={
+						<span class="st-note">
+							{query.loading() ? "Running…" : query.error() ? "Failed" : ""}
+						</span>
+					}
+				>
+					{(r) => (
+						<p class="st-summary">
+							<Show
+								when={r().columns.length}
+								fallback={<span class="st-word st-strong">{r().command || "Done"}</span>}
+							>
+								<span class="st-num">{r().rowCount.toLocaleString()}</span>
+								<span class="st-word">{r().rowCount === 1 ? "row" : "rows"}</span>
+							</Show>
+							<span class="st-sep" aria-hidden="true" />
+							<span class="st-time">{formatMs(r().elapsedMs)}</span>
+						</p>
+					)}
+				</Show>
 				<Show when={!query.loading() && !query.error() && query.data()?.truncated}>
 					<span class="warn">showing the first {query.data()?.rows.length.toLocaleString()}</span>
 				</Show>

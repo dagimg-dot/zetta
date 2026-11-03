@@ -1,6 +1,7 @@
 import { For } from "solid-js";
 import { setTheme, type ThemePref, theme } from "../theme";
-import { Icon, type IconName } from "./icons";
+import type { IconName } from "./icons";
+import { IconButton } from "./Tip";
 
 const options: { value: ThemePref; label: string; icon: IconName }[] = [
 	{ value: "system", label: "Match the system", icon: "monitor" },
@@ -14,15 +15,15 @@ export function ThemeSwitch() {
 			<legend class="sr-only">Theme</legend>
 			<For each={options}>
 				{(o) => (
-					<button
-						type="button"
-						aria-pressed={theme() === o.value}
-						aria-label={`Theme: ${o.label}`}
-						title={`${o.label} (T cycles)`}
+					<IconButton
+						class="theme-btn"
+						icon={o.icon}
+						label={`Theme: ${o.label}`}
+						kbd="T"
+						placement="top"
+						pressed={theme() === o.value}
 						onClick={() => setTheme(o.value)}
-					>
-						<Icon name={o.icon} />
-					</button>
+					/>
 				)}
 			</For>
 		</fieldset>

@@ -44,7 +44,7 @@ The architecture lives in `docs/ARCHITECTURE.md` and the product brief in `docs/
   - Never log tokens, cookies or passwords. Redact the password in any DSN before printing it.
 - **Web.**
   - The UI talks to the server only through `web/src/api.ts`, whose types mirror the server's JSON.
-  - Runtime dependencies are `solid-js` and nothing else. Ask before adding any dependency on either side.
+  - Runtime dependencies are `solid-js` and `@ark-ui/solid`. Ark is headless and is used only for Combobox, Menu, Popover, Select and Tooltip, imported per component (`@ark-ui/solid/menu`), and styled by its `data-part` attributes with our tokens. Ask before adding any other dependency, or another Ark component, on either side.
 
 ## Zig 0.16 idioms
 

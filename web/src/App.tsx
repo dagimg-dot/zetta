@@ -6,6 +6,7 @@ import { Icon } from "./components/icons";
 import { Shortcuts } from "./components/Shortcuts";
 import { Sidebar } from "./components/Sidebar";
 import { SqlPane } from "./components/SqlPane";
+import { IconButton } from "./components/Tip";
 import { Unauthorized } from "./components/Unauthorized";
 import { createRequest } from "./request";
 import { cycleTheme } from "./theme";
@@ -52,9 +53,19 @@ export function App() {
 		if (view().tab !== t) setView({ tab: t }, "push");
 	};
 
+	/** The raw WHERE box when it is open, otherwise the builder: its first value, or a new filter. */
+	const focusFilter = () => {
+		if (filter?.isConnected) return filter.focus();
+		const value = document.querySelector<HTMLElement>(
+			"#pane-data .q-filters .q-value, #pane-data .q-filters select",
+		);
+		if (value) return value.focus();
+		document.querySelector<HTMLButtonElement>("#pane-data .q-compact button")?.click();
+	};
+
 	const clickPager = (which: "Prev" | "Next") => {
 		const btn = document.querySelector<HTMLButtonElement>(
-			`#pane-data .status button[title^="${which === "Prev" ? "Previous" : "Next"}"]`,
+			`#pane-data .status [data-name="${which === "Prev" ? "prev" : "next"}-page"]`,
 		);
 		if (btn && !btn.disabled) btn.click();
 	};
@@ -87,8 +98,9 @@ export function App() {
 				queueMicrotask(() => editor?.focus());
 				break;
 			case "f":
-				showTab("data");
-				queueMicrotask(() => filter?.focus());
+				if (view().tab !== "data" || view().pane !== "rows")
+					setView({ tab: "data", pane: "rows" }, "push");
+				queueMicrotask(focusFilter);
 				break;
 			case "g":
 				document.querySelector<HTMLElement>(`#pane-${view().tab} table[role="grid"]`)?.focus();
@@ -162,26 +174,19 @@ export function App() {
 							{tab("sql", "SQL")}
 						</div>
 						<span class="spacer" />
-						<Show when={view().table}>
-							<span class="where">
-								<Icon name="table" />
-								<span>
-									{view().schema}.<b>{view().table}</b>
-								</span>
-							</span>
-						</Show>
-						<button
-							type="button"
+						<IconButton
 							class="btn quiet icon-only tool"
-							aria-label="Keyboard shortcuts"
-							title="Keyboard shortcuts (?)"
+							icon="help"
+							size={14}
+							label="Keyboard shortcuts"
+							kbd="?"
+							placement="bottom"
 							onClick={() => shortcuts?.showModal()}
-						>
-							<Icon name="help" size={14} />
-						</button>
+						/>
 					</div>
 					<DataPane
 						active={view().tab === "data"}
+						dialect={meta.data()?.adapter === "sqlite" ? "sqlite" : "postgres"}
 						approxRows={approxRows}
 						filterRef={(el) => {
 							filter = el;

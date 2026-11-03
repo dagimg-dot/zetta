@@ -1,13 +1,26 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { announce } from "../announce";
-import type { Column, ResultSet } from "../api";
+import type { Column, ResultColumn, ResultSet } from "../api";
+import type { SortKey } from "../query";
 import { blobBytes, formatBytes, isBlob, isNumericType } from "../value";
-import { copyText, Inspector } from "./Inspector";
+import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu";
+import { copyText, Inspector, type InspectorAction } from "./Inspector";
 import { Icon } from "./icons";
 
-export interface Sort {
-	col: string;
-	dir: "asc" | "desc";
+export interface LinkTarget {
+	schema: string;
+	table: string;
+	column: string;
+}
+
+/** What the grid knows about foreign keys, so a value can take you to its row. */
+export interface Links {
+	/** Where a single-column foreign key in this table points. */
+	outgoing: (column: string) => LinkTarget | undefined;
+	/** Columns in other tables that point at this column. */
+	incoming: (column: string) => LinkTarget[];
+	follow: (target: LinkTarget, value: string) => void;
+	filterBy: (column: string, value: string | null) => void;
 }
 
 export function createHidden() {
@@ -41,7 +54,7 @@ export function HiddenButton(props: { hidden: Hidden }) {
 let gridSeq = 0;
 
 /** Body cells are built directly so large results do not create a reactive scope per cell. */
-function cell(v: string | null, numeric: boolean): HTMLTableCellElement {
+function cell(v: string | null, numeric: boolean, link: boolean): HTMLTableCellElement {
 	const td = document.createElement("td");
 	if (v === null) {
 		td.className = "null";
@@ -70,7 +83,24 @@ function cell(v: string | null, numeric: boolean): HTMLTableCellElement {
 		td.textContent = v;
 	}
 	if (v.length > 40) td.title = v.length > 400 ? `${v.slice(0, 400)}…` : v;
+	if (link) {
+		// Clicks are handled by the table; the keyboard uses O on the cursor cell.
+		const go = document.createElement("span");
+		go.className = "fk-go";
+		go.title = "Open the referenced row (O)";
+		go.textContent = "↗";
+		td.append(go);
+	}
 	return td;
+}
+
+function headerFacts(info: Column | undefined): string[] {
+	if (!info) return [];
+	const out: string[] = [];
+	if (info.primaryKey) out.push("primary key");
+	else if (!info.nullable) out.push("not null");
+	if (info.default !== null) out.push(`default ${info.default}`);
+	return out;
 }
 
 function headerTitle(name: string, type: string, info: Column | undefined): string {
@@ -92,9 +122,13 @@ export function Grid(props: {
 	hidden: Hidden;
 	label: string;
 	offset?: number;
-	sort?: Sort | null;
-	onSort?: (col: string) => void;
+	sorts?: SortKey[];
+	/** `additive` is true for shift-click, which adds a secondary sort key. */
+	onSort?: (col: string, additive: boolean) => void;
 	columnInfo?: (name: string) => Column | undefined;
+	links?: Links;
+	/** Turns on the column menu: sort, filter, hide and copy, from a header button or a right-click. */
+	actions?: Pick<HeaderActions, "sort" | "filter" | "open">;
 	stale?: boolean;
 }) {
 	const id = `g${++gridSeq}`;
@@ -105,8 +139,36 @@ export function Grid(props: {
 
 	const [cursor, setCursor] = createSignal<Cursor | null>(null);
 	const [inspecting, setInspecting] = createSignal(false);
+	const [menu, setMenu] = createSignal<HeaderTarget | null>(null);
+
+	/** Opens the column menu under the header, or at the pointer when `point` is given. */
+	const openMenu = (c: ResultColumn, th: HTMLElement, point?: { x: number; y: number }) => {
+		const rect = th.getBoundingClientRect();
+		const info = props.columnInfo?.(c.name);
+		const sorts = props.sorts ?? [];
+		const sort = sorts.find((s) => s.c === c.name)?.d ?? null;
+		const link = props.links?.outgoing(c.name);
+		setMenu({
+			name: c.name,
+			type: info?.type || c.type,
+			nullable: info ? info.nullable && !info.primaryKey : true,
+			sort,
+			othersSorted: sorts.some((s) => s.c !== c.name),
+			link: link ? { schema: link.schema, table: link.table } : null,
+			at: point ?? { x: rect.left, y: rect.bottom },
+			rect,
+			facts: headerFacts(info),
+		});
+	};
+
+	const closeMenu = (restoreFocus: boolean) => {
+		const name = menu()?.name;
+		setMenu(null);
+		if (restoreFocus && name !== undefined) queueMicrotask(() => focusHeader(name));
+	};
 
 	const numeric = createMemo(() => props.result.columns.map((c) => isNumericType(c.type)));
+	const linked = createMemo(() => props.result.columns.map((c) => !!props.links?.outgoing(c.name)));
 	const visibleCols = createMemo(() =>
 		props.result.columns.map((_, i) => i).filter((i) => !props.hidden.hidden().has(i)),
 	);
@@ -165,13 +227,52 @@ export function Grid(props: {
 		const col = props.result.columns[cur.col];
 		const row = props.result.rows[cur.row];
 		if (!col || !row) return null;
+		const value = row[cur.col] ?? null;
 		return {
 			column: col.name,
 			type: props.columnInfo?.(col.name)?.type || col.type,
-			value: row[cur.col] ?? null,
+			value,
 			row: (props.offset ?? 0) + cur.row + 1,
+			actions: actionsFor(col.name, value),
 		};
 	});
+
+	const actionsFor = (column: string, value: string | null): InspectorAction[] => {
+		const links = props.links;
+		if (!links) return [];
+		const out: InspectorAction[] = [
+			{
+				label: value === null ? `Rows where ${column} is null` : `Rows with this ${column}`,
+				icon: "filter",
+				run: () => links.filterBy(column, value),
+			},
+		];
+		if (value === null) return out;
+		const target = links.outgoing(column);
+		if (target)
+			out.push({
+				label: `Open in ${target.table}`,
+				icon: "go",
+				hint: "O",
+				run: () => links.follow(target, value),
+			});
+		for (const ref of links.incoming(column)) {
+			out.push({
+				label: `${ref.table} rows pointing here`,
+				detail: ref.column,
+				icon: "next",
+				run: () => links.follow(ref, value),
+			});
+		}
+		return out;
+	};
+
+	const followAt = (at: Cursor) => {
+		const col = props.result.columns[at.col];
+		const value = props.result.rows[at.row]?.[at.col];
+		const target = col && props.links?.outgoing(col.name);
+		if (target && value !== undefined && value !== null) props.links?.follow(target, value);
+	};
 
 	const move = (dRow: number, dCol: number, toEdge = false) => {
 		const rows = props.result.rows.length;
@@ -253,6 +354,12 @@ export function Grid(props: {
 				move(0, 0);
 				break;
 			}
+			case "o": {
+				const cur = cursor();
+				if (!cur || mod) return;
+				followAt(cur);
+				break;
+			}
 			default:
 				return;
 		}
@@ -271,6 +378,10 @@ export function Grid(props: {
 	const onClick = (e: MouseEvent) => {
 		const at = cellAt(e.target);
 		if (!at) return;
+		if ((e.target as HTMLElement).closest(".fk-go")) {
+			followAt(at);
+			return;
+		}
 		setCursor(at);
 		if (!window.getSelection()?.toString()) table?.focus({ preventScroll: true });
 	};
@@ -355,15 +466,27 @@ export function Grid(props: {
 									{(c, i) => {
 										const info = () => props.columnInfo?.(c.name);
 										const off = () => props.hidden.hidden().has(i());
-										const sorted = () => (props.sort?.col === c.name ? props.sort : null);
+										const sortAt = () => props.sorts?.findIndex((s) => s.c === c.name) ?? -1;
+										const sorted = () => props.sorts?.[sortAt()] ?? null;
 										return (
 											<th
 												scope="col"
 												classList={{ collapsed: off(), num: numeric()[i()] && !off() }}
-												title={off() ? c.name : headerTitle(c.name, c.type, info())}
+												title={
+													off()
+														? c.name
+														: props.actions
+															? undefined
+															: headerTitle(c.name, c.type, info())
+												}
+												onContextMenu={(e) => {
+													if (!props.actions || off()) return;
+													e.preventDefault();
+													openMenu(c, e.currentTarget, { x: e.clientX, y: e.clientY });
+												}}
 												aria-sort={
 													sorted()
-														? sorted()?.dir === "asc"
+														? sorted()?.d === "asc"
 															? "ascending"
 															: "descending"
 														: undefined
@@ -398,10 +521,21 @@ export function Grid(props: {
 																	type="button"
 																	class="label"
 																	data-col={c.name}
-																	aria-label={`${c.name}, ${c.type}${info()?.primaryKey ? ", primary key" : ""}. Sort`}
-																	onClick={() => {
+																	aria-label={`${c.name}, ${c.type}${info()?.primaryKey ? ", primary key" : ""}${props.links?.outgoing(c.name) ? `, links to ${props.links.outgoing(c.name)?.table}` : ""}. Sort; shift adds a secondary sort${props.actions ? "; the menu key opens column actions" : ""}`}
+																	onKeyDown={(e) => {
+																		const th = e.currentTarget.closest("th");
+																		if (!props.actions || !th) return;
+																		if (
+																			e.key === "ContextMenu" ||
+																			(e.key === "F10" && e.shiftKey)
+																		) {
+																			e.preventDefault();
+																			openMenu(c, th);
+																		}
+																	}}
+																	onClick={(e) => {
 																		focusAfterRender = c.name;
-																		onSort()(c.name);
+																		onSort()(c.name, e.shiftKey);
 																	}}
 																>
 																	<span class="name">{c.name}</span>
@@ -411,8 +545,14 @@ export function Grid(props: {
 																			<Icon name="key" size={11} />
 																		</span>
 																	</Show>
+																	<Show when={props.links?.outgoing(c.name)}>
+																		<span class="fk-mark">↗</span>
+																	</Show>
 																	<span class="sort-ind" classList={{ on: !!sorted() }}>
-																		<Icon name={sorted()?.dir ?? "sort"} size={11} />
+																		<Icon name={sorted()?.d ?? "sort"} size={11} />
+																		<Show when={sorted() && (props.sorts?.length ?? 0) > 1}>
+																			<span class="sort-n">{sortAt() + 1}</span>
+																		</Show>
 																	</span>
 																</button>
 															)}
@@ -421,6 +561,22 @@ export function Grid(props: {
 															<span class="pk" title="Primary key">
 																<Icon name="key" size={11} />
 															</span>
+														</Show>
+														<Show when={props.actions}>
+															<button
+																type="button"
+																class="ico more"
+																classList={{ open: menu()?.name === c.name }}
+																tabIndex={-1}
+																aria-label={`Column actions for ${c.name}`}
+																aria-haspopup="menu"
+																onClick={(e) => {
+																	const th = e.currentTarget.closest("th");
+																	if (th) openMenu(c, th);
+																}}
+															>
+																<Icon name="more" />
+															</button>
 														</Show>
 														<button
 															type="button"
@@ -443,7 +599,9 @@ export function Grid(props: {
 						<tbody>
 							<For each={props.result.rows}>
 								{(row, r) => {
-									const tds = row.map((v, k) => cell(v, numeric()[k] ?? false));
+									const tds = row.map((v, k) =>
+										cell(v, numeric()[k] ?? false, linked()[k] ?? false),
+									);
 									cells[r()] = tds;
 									return (
 										<tr>
@@ -461,6 +619,33 @@ export function Grid(props: {
 				</Show>
 			</div>
 			<Show when={inspected()}>{(c) => <Inspector cell={c()} onClose={closeInspector} />}</Show>
+			<Show when={props.actions}>
+				{(a) => (
+					<HeaderMenu
+						target={menu()}
+						actions={{
+							...a(),
+							// Sorting and filtering reload the rows, so focus returns to the header once they render.
+							sort: (name, dir, additive) => {
+								focusAfterRender = name;
+								a().sort(name, dir, additive);
+							},
+							filter: (f) => {
+								focusAfterRender = f.c;
+								a().filter(f);
+							},
+							hide: (name) => {
+								const i = props.result.columns.findIndex((c) => c.name === name);
+								if (i >= 0) toggleColumn(i, name, true);
+							},
+							copy: async (name) => {
+								if (await copyText(name)) announce(`Copied ${name}`);
+							},
+						}}
+						onClose={closeMenu}
+					/>
+				)}
+			</Show>
 		</div>
 	);
 }
