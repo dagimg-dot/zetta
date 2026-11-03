@@ -391,9 +391,23 @@ export function Grid(props: {
 			td.id = `${id}-${cur.row}-${cur.col}`;
 			td.parentElement?.classList.add("cur-row");
 			table.setAttribute("aria-activedescendant", td.id);
-			td.scrollIntoView({ block: "nearest", inline: "nearest" });
 		});
 	});
+
+	/**
+	 * Follows the cursor only when it moves. Scrolling redraws rows, and following on a redraw would
+	 * pull the view back to the cursor while it is still within the overscan.
+	 */
+	createEffect(
+		on(
+			cursor,
+			(cur) => {
+				if (cur)
+					cells.get(cur.row)?.[cur.col]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+			},
+			{ defer: true },
+		),
+	);
 
 	const inspected = createMemo(() => {
 		const cur = cursor();
