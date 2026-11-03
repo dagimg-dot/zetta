@@ -3,6 +3,7 @@
 //! then defaults, and the password file last.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const conninfo = @import("conninfo.zig");
@@ -33,6 +34,11 @@ pub const Settings = struct {
 /// Debian, Arch and Fedora patch libpq to /run/postgresql; upstream uses /tmp.
 const default_socket_dirs = [_][]const u8{ "/run/postgresql", "/tmp" };
 
+/// Where libpq's defaults differ. Windows has no socket directory to try, so the host is
+/// localhost, and the password file lives under %APPDATA%.
+pub const Platform = enum { posix, windows };
+const native: Platform = if (builtin.os.tag == .windows) .windows else .posix;
+
 fn envGet(env: Env, key: []const u8) ?[]const u8 {
     const map = env orelse return null;
     const v = map.get(key) orelse return null;
@@ -40,6 +46,18 @@ fn envGet(env: Env, key: []const u8) ?[]const u8 {
 }
 
 pub fn resolve(
+    arena: Allocator,
+    io: std.Io,
+    cfg: conninfo.Config,
+    env: Env,
+    read_only: bool,
+    diag: *Diagnostic,
+) error{ InvalidSettings, OutOfMemory }!Settings {
+    return resolveOn(native, arena, io, cfg, env, read_only, diag);
+}
+
+pub fn resolveOn(
+    platform: Platform,
     arena: Allocator,
     io: std.Io,
     cfg: conninfo.Config,
@@ -56,7 +74,7 @@ pub fn resolve(
     };
 
     var host: ?[]const u8 = null;
-    var socket_dirs: []const []const u8 = &default_socket_dirs;
+    var socket_dirs: []const []const u8 = if (platform == .windows) &.{} else &default_socket_dirs;
     if (host_raw) |h| {
         if (mem.indexOfScalar(u8, h, ',') != null) {
             diag.set("multiple hosts are not supported");
@@ -69,8 +87,9 @@ pub fn resolve(
         }
     }
     if (host == null and hostaddr != null) host = hostaddr;
+    if (host == null and socket_dirs.len == 0) host = "localhost";
 
-    const user = cfg.user orelse envGet(env, "PGUSER") orelse envGet(env, "USER") orelse envGet(env, "LOGNAME") orelse "postgres";
+    const user = cfg.user orelse envGet(env, "PGUSER") orelse envGet(env, "USER") orelse envGet(env, "LOGNAME") orelse envGet(env, "USERNAME") orelse "postgres";
     const dbname = cfg.dbname orelse envGet(env, "PGDATABASE") orelse user;
     const sslrootcert = cfg.sslrootcert orelse envGet(env, "PGSSLROOTCERT");
     const sslmode_text = cfg.sslmode orelse envGet(env, "PGSSLMODE") orelse conninfo.defaultSslMode(sslrootcert);
@@ -97,8 +116,7 @@ pub fn resolve(
 
     var password = cfg.password orelse envGet(env, "PGPASSWORD");
     if (password == null) {
-        const passfile = cfg.passfile orelse envGet(env, "PGPASSFILE") orelse
-            (if (envGet(env, "HOME")) |home| try std.fmt.allocPrint(arena, "{s}/.pgpass", .{home}) else null);
+        const passfile = cfg.passfile orelse envGet(env, "PGPASSFILE") orelse try defaultPassfile(arena, platform, env);
         if (passfile) |path| {
             const pass_host = host orelse "localhost";
             password = lookupPassfile(arena, io, path, pass_host, port_text, dbname, user);
@@ -120,6 +138,13 @@ pub fn resolve(
         .options = cfg.options orelse envGet(env, "PGOPTIONS"),
         .connect_timeout_s = timeout,
         .read_only = read_only,
+    };
+}
+
+fn defaultPassfile(arena: Allocator, platform: Platform, env: Env) Allocator.Error!?[]const u8 {
+    return switch (platform) {
+        .posix => if (envGet(env, "HOME")) |home| try std.fmt.allocPrint(arena, "{s}/.pgpass", .{home}) else null,
+        .windows => if (envGet(env, "APPDATA")) |dir| try std.fmt.allocPrint(arena, "{s}\\postgresql\\pgpass.conf", .{dir}) else null,
     };
 }
 
@@ -208,4 +233,24 @@ test "bad settings are reported, not guessed" {
     try testing.expectError(error.InvalidSettings, resolve(arena_state.allocator(), testing.io, .{ .port = "x" }, null, false, &diag));
     try testing.expectError(error.InvalidSettings, resolve(arena_state.allocator(), testing.io, .{ .sslmode = "maybe" }, null, false, &diag));
     try testing.expectEqualStrings("invalid sslmode value: \"maybe\"", diag.message());
+}
+
+test "on Windows the defaults are localhost, USERNAME and the password file under APPDATA" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var env: std.process.Environ.Map = .init(arena);
+    try env.put("USERNAME", "winuser");
+    try env.put("APPDATA", "C:\\Users\\winuser\\AppData\\Roaming");
+    var diag: Diagnostic = .{};
+
+    const s = try resolveOn(.windows, arena, testing.io, .{}, &env, false, &diag);
+    try testing.expectEqualStrings("localhost", s.host.?);
+    try testing.expectEqual(0, s.socket_dirs.len);
+    try testing.expectEqualStrings("winuser", s.user);
+    try testing.expectEqualStrings("C:\\Users\\winuser\\AppData\\Roaming\\postgresql\\pgpass.conf", (try defaultPassfile(arena, .windows, &env)).?);
+
+    const posix = try resolveOn(.posix, arena, testing.io, .{}, &env, false, &diag);
+    try testing.expectEqual(null, posix.host);
+    try testing.expectEqualStrings("/run/postgresql", posix.socket_dirs[0]);
 }

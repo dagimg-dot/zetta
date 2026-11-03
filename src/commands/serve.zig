@@ -91,12 +91,14 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
 }
 
 fn openBrowser(ctx: *Context, url: []const u8) void {
-    const opener = switch (@import("builtin").os.tag) {
-        .macos => "open",
-        else => "xdg-open",
+    const argv: []const []const u8 = switch (@import("builtin").os.tag) {
+        .macos => &.{ "open", url },
+        .windows => &.{ "rundll32", "url.dll,FileProtocolHandler", url },
+        else => &.{ "xdg-open", url },
     };
+    const opener = argv[0];
     var child = std.process.spawn(ctx.io, .{
-        .argv = &.{ opener, url },
+        .argv = argv,
         .stdin = .ignore,
         .stdout = .ignore,
         .stderr = .ignore,

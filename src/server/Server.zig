@@ -1,6 +1,7 @@
 //! Accepts connections and runs each one as a concurrent task.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Io = std.Io;
 const db = @import("db");
 const handlers = @import("handlers.zig");
@@ -94,7 +95,10 @@ const keep_between_requests = 256 * 1024;
 /// Results go out in chunks as they are written. With Nagle's algorithm on, the kernel holds a
 /// short final chunk until the client acknowledges the last one, which a client delaying its
 /// ACK makes about 40 ms on Linux.
+///
+/// Not on Windows: std.Io drives sockets there through AFD, and keeps its socket option call private.
 fn sendSmallWritesAtOnce(stream: Io.net.Stream) void {
+    if (builtin.os.tag == .windows) return;
     const on: c_int = 1;
     std.posix.setsockopt(stream.socket.handle, std.posix.IPPROTO.TCP, std.posix.TCP.NODELAY, std.mem.asBytes(&on)) catch |err|
         log.warn("could not set TCP_NODELAY, large responses may stall: {t}", .{err});
@@ -114,6 +118,7 @@ test "logged paths never include the query string" {
 }
 
 test "accepted connections send small writes without waiting for an ACK" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
     const io = std.testing.io;
     const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
     var listener = try address.listen(io, .{});
