@@ -13,6 +13,7 @@ import { announce } from "../announce";
 import type { Column, ResultColumn, ResultSet } from "../api";
 import { type FormatId, fileName, format, htmlTable, pick } from "../copy";
 import type { SortKey } from "../query";
+import { refName } from "../refs";
 import { blobBytes, formatBytes, isBlob, isNumericType } from "../value";
 import { Button } from "./Button";
 import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu";
@@ -29,6 +30,8 @@ export interface LinkTarget {
 
 /** What the grid knows about foreign keys, so a value can take you to its row. */
 export interface Links {
+	/** The schema of the table on show, so references from it can leave the schema out. */
+	schema: string;
 	/** Where a single-column foreign key in this table points. */
 	outgoing: (column: string) => LinkTarget | undefined;
 	/** Columns in other tables that point at this column. */
@@ -422,6 +425,7 @@ export function Grid(props: {
 			value,
 			row: (props.offset ?? 0) + cur.row + 1,
 			actions: actionsFor(col.name, value),
+			incoming: incomingFor(col.name, value),
 		};
 	});
 
@@ -444,15 +448,19 @@ export function Grid(props: {
 				hint: "O",
 				run: () => links.follow(target, value),
 			});
-		for (const ref of links.incoming(column)) {
-			out.push({
-				label: `${ref.table} rows pointing here`,
-				detail: ref.column,
-				icon: "next",
-				run: () => links.follow(ref, value),
-			});
-		}
 		return out;
+	};
+
+	/** One action per column elsewhere that points at this one, named by its table. */
+	const incomingFor = (column: string, value: string | null): InspectorAction[] => {
+		const links = props.links;
+		if (!links || value === null) return [];
+		return links.incoming(column).map((ref) => ({
+			label: refName(ref, links.schema),
+			detail: ref.column,
+			icon: "next",
+			run: () => links.follow(ref, value),
+		}));
 	};
 
 	const followAt = (at: Cursor) => {
@@ -585,7 +593,11 @@ export function Grid(props: {
 			rows: props.selection.rows().size,
 			cell:
 				column && value !== undefined
-					? { column: column.name, actions: actionsFor(column.name, value) }
+					? {
+							column: column.name,
+							actions: actionsFor(column.name, value),
+							incoming: incomingFor(column.name, value),
+						}
 					: null,
 		});
 	};

@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { announce } from "../announce";
 import { inspectorWidth } from "../layout";
+import { matchRefs } from "../refs";
 import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
 import { Button } from "./Button";
 import { Icon, type IconName } from "./icons";
@@ -22,7 +23,12 @@ export interface InspectedCell {
 	value: string | null;
 	row: number;
 	actions?: InspectorAction[];
+	/** Columns in other tables that point at this value. */
+	incoming?: InspectorAction[];
 }
+
+/** Past this many references the list gets a filter. */
+const FILTER_REFS_AT = 8;
 
 type Mode = "pretty" | "raw";
 
@@ -80,6 +86,19 @@ function withBreaks(text: string) {
 	));
 }
 
+function action(a: InspectorAction) {
+	return (
+		<button type="button" class="action" onClick={() => a.run()}>
+			<Icon name={a.icon} />
+			<span class="label">{a.label}</span>
+			<Show when={a.detail}>
+				<span class="detail mono">{a.detail}</span>
+			</Show>
+			<Show when={a.hint}>{(h) => <Kbd keys={h()} />}</Show>
+		</button>
+	);
+}
+
 export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 	const [mode, setMode] = createSignal<Mode>("pretty");
 	const [copied, setCopied] = createSignal(false);
@@ -88,6 +107,17 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 
 	const kind = createMemo(() => kindOf(props.cell.value));
 	createEffect(on(kind, () => setMode("pretty"), { defer: true }));
+
+	const [refQuery, setRefQuery] = createSignal("");
+	createEffect(
+		on(
+			() => props.cell.column,
+			() => setRefQuery(""),
+			{ defer: true },
+		),
+	);
+	const refs = () => props.cell.incoming ?? [];
+	const shownRefs = createMemo(() => matchRefs(refs(), refQuery()));
 
 	const shown = () => {
 		const v = props.cell.value;
@@ -162,20 +192,42 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 					? withBreaks(shown())
 					: shown()}
 			</pre>
-			<Show when={props.cell.actions?.length}>
+			<Show when={props.cell.actions?.length || refs().length}>
 				<nav class="actions" aria-label="Go to related rows">
-					<For each={props.cell.actions}>
-						{(a) => (
-							<button type="button" class="action" onClick={() => a.run()}>
-								<Icon name={a.icon} />
-								<span class="label">{a.label}</span>
-								<Show when={a.detail}>
-									<span class="detail mono">{a.detail}</span>
-								</Show>
-								<Show when={a.hint}>{(h) => <Kbd keys={h()} />}</Show>
-							</button>
-						)}
-					</For>
+					<For each={props.cell.actions}>{action}</For>
+					<Show when={refs().length}>
+						<div class="refs-head">
+							<span>Rows pointing here</span>
+							<span class="count">
+								{shownRefs().length === refs().length
+									? refs().length.toLocaleString()
+									: `${shownRefs().length.toLocaleString()} of ${refs().length.toLocaleString()}`}
+							</span>
+							<Show when={refs().length > FILTER_REFS_AT}>
+								<span class="refs-find">
+									<Icon name="search" size={12} />
+									<input
+										type="search"
+										aria-label="Filter the tables pointing here"
+										placeholder="Filter tables"
+										autocomplete="off"
+										spellcheck={false}
+										value={refQuery()}
+										onInput={(e) => setRefQuery(e.currentTarget.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Escape" && refQuery()) {
+												e.preventDefault();
+												setRefQuery("");
+											}
+										}}
+									/>
+								</span>
+							</Show>
+						</div>
+						<For each={shownRefs()} fallback={<div class="refs-empty">No table matches</div>}>
+							{action}
+						</For>
+					</Show>
 				</nav>
 			</Show>
 			<footer>

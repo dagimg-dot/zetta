@@ -225,6 +225,7 @@ export function RowsPane(props: {
 			into.set(rc, [...(into.get(rc) ?? []), { schema: r.schema, table: r.table, column: c }]);
 		}
 		return {
+			schema: d?.schema ?? "",
 			outgoing: (col) => out.get(col),
 			incoming: (col) => into.get(col) ?? [],
 			follow: (target, value) => openRowsWhere(target.schema, target.table, target.column, value),

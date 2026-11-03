@@ -12,8 +12,11 @@ export interface RowTarget {
 	/** Rows the copy actions take. */
 	rows: number;
 	/** The cell that was right-clicked; none for a row number. */
-	cell: { column: string; actions: InspectorAction[] } | null;
+	cell: { column: string; actions: InspectorAction[]; incoming: InspectorAction[] } | null;
 }
+
+/** More references than this go into their own submenu, so a much-referenced key keeps the menu short. */
+const INLINE_REFS = 3;
 
 export interface RowActions {
 	copyCell: () => void;
@@ -60,6 +63,7 @@ export function RowMenu(props: {
 		else if (verb === "all") a.selectAll();
 		else if (verb === "inspect") a.inspect();
 		else if (verb === "act") props.target?.cell?.actions[Number(arg)]?.run();
+		else if (verb === "ref") props.target?.cell?.incoming[Number(arg)]?.run();
 	};
 
 	const rowsLabel = () => {
@@ -67,14 +71,55 @@ export function RowMenu(props: {
 		return n === 1 ? "1 row" : `${n.toLocaleString()} rows`;
 	};
 
-	const item = (v: string, label: string, icon?: IconName, kbd?: string) => (
+	const item = (v: string, label: string, icon?: IconName, kbd?: string, detail?: string) => (
 		<Menu.Item value={v} class="pop-item">
 			<span class="pop-icon">
 				<Show when={icon}>{(i) => <Icon name={i()} />}</Show>
 			</span>
 			<span class="label">{label}</span>
+			<Show when={detail}>{(d) => <span class="type">{d()}</span>}</Show>
 			<Show when={kbd}>{(k) => <Kbd keys={k()} />}</Show>
 		</Menu.Item>
+	);
+
+	/** A few references sit in the menu under one label, each named by its table. */
+	const refsGroup = (refs: InspectorAction[]) => (
+		<Menu.ItemGroup>
+			<Menu.ItemGroupLabel class="pop-group">Rows pointing here</Menu.ItemGroupLabel>
+			<For each={refs}>{(a, i) => item(`ref:${i()}`, a.label, a.icon, undefined, a.detail)}</For>
+		</Menu.ItemGroup>
+	);
+
+	const refsMenu = (refs: InspectorAction[]) => (
+		<Menu.Root
+			positioning={{ placement: "right-start", gutter: 2 }}
+			onSelect={(d) => select(d.value)}
+		>
+			<Menu.TriggerItem class="pop-item">
+				<span class="pop-icon">
+					<Icon name="next" />
+				</span>
+				<span class="label">Rows pointing here</span>
+				<span class="type">{refs.length.toLocaleString()}</span>
+				<span class="pop-sub">
+					<Icon name="chevron" />
+				</span>
+			</Menu.TriggerItem>
+			<Portal>
+				<Menu.Positioner>
+					<Menu.Content class="pop menu list refs" aria-label="Rows pointing here">
+						<For each={refs}>
+							{(a, i) => (
+								<Menu.Item value={`ref:${i()}`} class="pop-item">
+									<span class="label">{a.label}</span>
+									<span class="type">{a.detail}</span>
+								</Menu.Item>
+							)}
+						</For>
+					</Menu.Content>
+				</Menu.Positioner>
+			</Portal>
+		</Menu.Root>
 	);
 
 	/** "Copy as" and "Save as" list the same formats, from the table in copy.ts. */
@@ -130,6 +175,13 @@ export function RowMenu(props: {
 										<For each={t().cell?.actions}>
 											{(a, i) => item(`act:${i()}`, a.label, a.icon, a.hint)}
 										</For>
+									</Show>
+									<Show when={t().cell?.incoming}>
+										{(refs) => (
+											<Show when={refs().length > INLINE_REFS} fallback={refsGroup(refs())}>
+												{refsMenu(refs())}
+											</Show>
+										)}
 									</Show>
 									<Menu.Separator class="pop-sep" />
 									{item("all", "Select all rows", undefined, "Mod+A")}
