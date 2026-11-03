@@ -176,7 +176,7 @@ export function RowMenu(props: {
 											{(a, i) => item(`act:${i()}`, a.label, a.icon, a.hint)}
 										</For>
 									</Show>
-									<Show when={t().cell?.incoming}>
+									<Show when={t().cell?.incoming.length ? t().cell?.incoming : undefined}>
 										{(refs) => (
 											<Show when={refs().length > INLINE_REFS} fallback={refsGroup(refs())}>
 												{refsMenu(refs())}
