@@ -1,4 +1,14 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createSignal,
+	For,
+	on,
+	onCleanup,
+	onMount,
+	Show,
+	untrack,
+} from "solid-js";
 import { announce } from "../announce";
 import type { Column, ResultColumn, ResultSet } from "../api";
 import type { SortKey } from "../query";
@@ -52,6 +62,9 @@ export function HiddenButton(props: { hidden: Hidden }) {
 }
 
 let gridSeq = 0;
+
+/** Rows drawn above and below the visible ones, so a fast scroll does not show blank space. */
+const OVERSCAN = 12;
 
 /** Body cells are built directly so large results do not create a reactive scope per cell. */
 function cell(v: string | null, numeric: boolean, link: boolean): HTMLTableCellElement {
@@ -134,10 +147,14 @@ export function Grid(props: {
 	const id = `g${++gridSeq}`;
 	let host: HTMLDivElement | undefined;
 	let table: HTMLTableElement | undefined;
-	let cells: HTMLTableCellElement[][] = [];
+	/** The cells of the rows currently drawn, by row index. Rows off screen have none. */
+	const cells = new Map<number, HTMLTableCellElement[]>();
 	let focusAfterRender: string | null = null;
 
 	const [cursor, setCursor] = createSignal<Cursor | null>(null);
+	const [scrollTop, setScrollTop] = createSignal(0);
+	const [viewHeight, setViewHeight] = createSignal(600);
+	const [rowHeight, setRowHeight] = createSignal(29);
 	const [inspecting, setInspecting] = createSignal(false);
 	const [menu, setMenu] = createSignal<HeaderTarget | null>(null);
 
@@ -173,13 +190,86 @@ export function Grid(props: {
 		props.result.columns.map((_, i) => i).filter((i) => !props.hidden.hidden().has(i)),
 	);
 
+	/**
+	 * Bumps whenever drawn rows go stale: a new result, or links and number columns that arrive after
+	 * it. Row keys carry it, so rows that stay in view are reused while scrolling and rebuilt here.
+	 */
+	let generation = 0;
+	const gen = createMemo(() => {
+		props.result;
+		numeric();
+		linked();
+		return ++generation;
+	});
+
+	/**
+	 * Column widths from every row, not just the drawn ones, so columns hold still while scrolling.
+	 * Cells are monospace, so a character count in `ch` is the width; long values stop at the cap.
+	 */
+	const colChars = createMemo(() => {
+		const { columns, rows } = props.result;
+		const widest = columns.map(() => 0);
+		for (const row of rows) {
+			for (let k = 0; k < row.length; k++) {
+				const v = row[k];
+				const n = v === null || v === undefined ? 4 : isBlob(v) ? 16 : Math.min(v.length, 60);
+				if (n > (widest[k] ?? 0)) widest[k] = n;
+			}
+		}
+		return widest.map((n, k) => n + (linked()[k] ? 2 : 0));
+	});
+
+	/** Only the rows in view, plus overscan, are in the DOM; spacers stand in for the rest. */
+	const range = createMemo(() => {
+		const n = props.result.rows.length;
+		const h = rowHeight();
+		const first = Math.max(0, Math.floor(scrollTop() / h) - OVERSCAN);
+		const last = Math.min(n, Math.ceil((scrollTop() + viewHeight()) / h) + OVERSCAN);
+		return { first, last: Math.max(first, last) };
+	});
+
+	const rowKeys = createMemo(() => {
+		const g = gen();
+		const { first, last } = range();
+		const keys: string[] = [];
+		for (let r = first; r < last; r++) keys.push(`${g}:${r}`);
+		return keys;
+	});
+
+	const headHeight = () => table?.tHead?.offsetHeight ?? 34;
+
+	/** Scrolls by arithmetic, since a row far off screen has no element to scroll to yet. */
+	const revealRow = (row: number) => {
+		if (!host) return;
+		const h = rowHeight();
+		const top = row * h;
+		const room = host.clientHeight - headHeight();
+		if (top < host.scrollTop) host.scrollTop = top;
+		else if (top + h > host.scrollTop + room) host.scrollTop = top + h - room;
+		setScrollTop(host.scrollTop);
+	};
+
+	onMount(() => {
+		if (!host) return;
+		const el = host;
+		setViewHeight(el.clientHeight);
+		const ro = new ResizeObserver(() => setViewHeight(el.clientHeight));
+		ro.observe(el);
+		onCleanup(() => ro.disconnect());
+	});
+
 	createEffect(
 		on(
 			() => props.result,
 			() => {
-				// The row callbacks below have already filled `cells` for this result; drop leftovers.
-				cells.length = props.result.rows.length;
 				if (host) host.scrollTop = 0;
+				setScrollTop(0);
+				// Every row is one line high, so one drawn row gives the height of them all.
+				queueMicrotask(() => {
+					const tr = table?.tBodies[0]?.querySelector<HTMLTableRowElement>("tr[data-row]");
+					const h = tr?.getBoundingClientRect().height;
+					if (h && Math.abs(h - rowHeight()) > 0.5) setRowHeight(h);
+				});
 				const cur = cursor();
 				const cols = props.result.columns.length;
 				setCursor(
@@ -204,21 +294,33 @@ export function Grid(props: {
 		(el ?? table)?.focus();
 	};
 
+	/**
+	 * Moves the cursor after scrolling its row into the drawn range, so the cell exists by the time
+	 * the effect below marks it. Scrolling from an effect instead would mark before the rows draw.
+	 */
+	const place = (at: Cursor) => {
+		revealRow(at.row);
+		setCursor(at);
+	};
+
 	createEffect(() => {
-		for (const row of cells) for (const td of row) td.classList.remove("cur");
-		for (const tr of host?.querySelectorAll("tr.cur-row") ?? []) tr.classList.remove("cur-row");
+		rowKeys();
 		const cur = cursor();
-		if (!cur || !table) {
-			table?.removeAttribute("aria-activedescendant");
-			return;
-		}
-		const td = cells[cur.row]?.[cur.col];
-		if (!td) return;
-		td.classList.add("cur");
-		td.id = `${id}-${cur.row}-${cur.col}`;
-		td.parentElement?.classList.add("cur-row");
-		table.setAttribute("aria-activedescendant", td.id);
-		td.scrollIntoView({ block: "nearest", inline: "nearest" });
+		untrack(() => {
+			for (const row of cells.values()) for (const td of row) td.classList.remove("cur");
+			for (const tr of host?.querySelectorAll("tr.cur-row") ?? []) tr.classList.remove("cur-row");
+			if (!cur || !table) {
+				table?.removeAttribute("aria-activedescendant");
+				return;
+			}
+			const td = cells.get(cur.row)?.[cur.col];
+			if (!td) return;
+			td.classList.add("cur");
+			td.id = `${id}-${cur.row}-${cur.col}`;
+			td.parentElement?.classList.add("cur-row");
+			table.setAttribute("aria-activedescendant", td.id);
+			td.scrollIntoView({ block: "nearest", inline: "nearest" });
+		});
 	});
 
 	const inspected = createMemo(() => {
@@ -293,10 +395,10 @@ export function Grid(props: {
 			row = Math.min(rows - 1, Math.max(0, row + dRow));
 			pos = Math.min(cols.length - 1, Math.max(0, pos + dCol));
 		}
-		setCursor({ row, col: cols[pos] ?? 0 });
+		place({ row, col: cols[pos] ?? 0 });
 	};
 
-	const pageRows = () => Math.max(1, Math.floor((host?.clientHeight ?? 400) / 28) - 2);
+	const pageRows = () => Math.max(1, Math.floor((viewHeight() - headHeight()) / rowHeight()) - 1);
 
 	const copyCurrent = async () => {
 		const cur = cursor();
@@ -369,8 +471,8 @@ export function Grid(props: {
 	const cellAt = (target: EventTarget | null): Cursor | null => {
 		const td = (target as HTMLElement | null)?.closest?.("td");
 		const tr = td?.parentElement as HTMLTableRowElement | null;
-		if (!td || !tr || td.classList.contains("rn")) return null;
-		const row = tr.sectionRowIndex;
+		if (!td || !tr?.dataset.row || td.classList.contains("rn")) return null;
+		const row = Number(tr.dataset.row);
 		const col = td.cellIndex - 1;
 		return col >= 0 && row >= 0 ? { row, col } : null;
 	};
@@ -382,14 +484,14 @@ export function Grid(props: {
 			followAt(at);
 			return;
 		}
-		setCursor(at);
+		place(at);
 		if (!window.getSelection()?.toString()) table?.focus({ preventScroll: true });
 	};
 
 	const onDblClick = (e: MouseEvent) => {
 		const at = cellAt(e.target);
 		if (!at) return;
-		setCursor(at);
+		place(at);
 		setInspecting(true);
 	};
 
@@ -417,13 +519,16 @@ export function Grid(props: {
 					: "",
 			);
 
-	onCleanup(() => {
-		cells = [];
-	});
+	onCleanup(() => cells.clear());
 
 	return (
 		<div class="work">
-			<div class="grid" ref={host} classList={{ stale: !!props.stale }}>
+			<div
+				class="grid"
+				ref={host}
+				classList={{ stale: !!props.stale }}
+				onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+			>
 				<Show
 					when={props.result.columns.length}
 					fallback={
@@ -456,6 +561,20 @@ export function Grid(props: {
 						onDblClick={onDblClick}
 						onFocus={onFocus}
 					>
+						<colgroup>
+							<col />
+							<For each={props.result.columns}>
+								{(_, i) => (
+									<col
+										style={{
+											width: props.hidden.hidden().has(i())
+												? undefined
+												: `calc(${colChars()[i()] ?? 0}ch + 24px)`,
+										}}
+									/>
+								)}
+							</For>
+						</colgroup>
 						<thead>
 							<tr>
 								<th class="rn" scope="col">
@@ -597,20 +716,37 @@ export function Grid(props: {
 							</tr>
 						</thead>
 						<tbody>
-							<For each={props.result.rows}>
-								{(row, r) => {
-									const tds = row.map((v, k) =>
-										cell(v, numeric()[k] ?? false, linked()[k] ?? false),
-									);
-									cells[r()] = tds;
+							{/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: these rows are not focusable; spacer rows only hold the height of rows not drawn; assistive tech reads row positions from aria-rowindex instead. */}
+							<tr class="pad" aria-hidden="true">
+								<td style={{ height: `${range().first * rowHeight()}px` }} />
+							</tr>
+							<For each={rowKeys()}>
+								{(key) => {
+									const r = Number(key.slice(key.indexOf(":") + 1));
+									const row = untrack(() => props.result.rows[r]) ?? [];
+									const num = untrack(numeric);
+									const link = untrack(linked);
+									const tds = row.map((v, k) => cell(v, num[k] ?? false, link[k] ?? false));
+									cells.set(r, tds);
+									onCleanup(() => {
+										if (cells.get(r) === tds) cells.delete(r);
+									});
 									return (
-										<tr>
-											<td class="rn">{(props.offset ?? 0) + r() + 1}</td>
+										<tr data-row={r} aria-rowindex={r + 2}>
+											<td class="rn">{(props.offset ?? 0) + r + 1}</td>
 											{tds}
 										</tr>
 									);
 								}}
 							</For>
+							{/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: these rows are not focusable; spacer rows only hold the height of rows not drawn; assistive tech reads row positions from aria-rowindex instead. */}
+							<tr class="pad" aria-hidden="true">
+								<td
+									style={{
+										height: `${(props.result.rows.length - range().last) * rowHeight()}px`,
+									}}
+								/>
+							</tr>
 						</tbody>
 					</table>
 					<Show when={!props.result.rows.length}>

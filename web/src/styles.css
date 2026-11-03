@@ -2658,3 +2658,15 @@ th:focus-within .ico.more,
 	color: var(--text-secondary);
 	font-weight: var(--weight-regular);
 }
+
+/* Grid rows outside the view are not drawn; these rows hold their space. */
+
+.grid tr.pad td {
+	padding: 0;
+	border: 0;
+	background: none;
+}
+
+.grid tbody tr.pad:hover td {
+	background: none;
+}
