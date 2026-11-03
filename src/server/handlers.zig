@@ -103,9 +103,14 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
 const unauthorized_page =
     \\<!doctype html><meta charset="utf-8"><title>zetta</title>
     \\<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23ea580c'/%3E%3Cg fill='%23fff'%3E%3Crect x='5' y='5' width='4' height='4' rx='1'/%3E%3Crect x='11' y='5' width='4' height='4' rx='1'/%3E%3Crect x='17' y='5' width='4' height='4' rx='1'/%3E%3Crect x='23' y='5' width='4' height='4' rx='1'/%3E%3Crect x='17' y='11' width='4' height='4' rx='1'/%3E%3Crect x='11' y='17' width='4' height='4' rx='1'/%3E%3Crect x='5' y='23' width='4' height='4' rx='1'/%3E%3Crect x='11' y='23' width='4' height='4' rx='1'/%3E%3Crect x='17' y='23' width='4' height='4' rx='1'/%3E%3Crect x='23' y='23' width='4' height='4' rx='1'/%3E%3C/g%3E%3C/svg%3E">
-    \\<body style="font:15px system-ui;margin:4rem auto;max-width:32rem;line-height:1.5">
-    \\<h1 style="font-size:20px">Open the link zetta printed</h1>
-    \\<p>zetta prints a URL with an access token when it starts. Open that URL to sign in.</p>
+    \\<meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark">
+    \\<body style="font:14px/1.5 system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;box-sizing:border-box">
+    \\<div role="alert" style="max-width:30rem;padding:20px 24px;border:1px solid #8885;border-radius:10px">
+    \\<h1 style="font-size:16px;margin:0 0 8px">This session is not signed in</h1>
+    \\<p>zetta only answers browsers that opened the link it printed at startup. Open the URL from
+    \\the terminal where you ran <code>zetta serve</code>, the one ending in <code>?token=…</code>.</p>
+    \\<p style="margin-bottom:0">If zetta was restarted, it printed a new link and the old one no longer works.</p>
+    \\</div>
 ;
 
 fn meta(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
