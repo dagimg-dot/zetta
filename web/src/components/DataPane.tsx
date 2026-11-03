@@ -5,6 +5,7 @@ import { type Pane, setView, view } from "../url";
 import { formatBytes } from "../value";
 import { ErrorBox } from "./ErrorBox";
 import { Icon } from "./icons";
+import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
 import { Relationships } from "./Relationships";
 import { RowsPane } from "./RowsPane";
@@ -110,8 +111,8 @@ export function DataPane(props: {
 				fallback={
 					<div class="empty">
 						<strong>Pick a table</strong>
-						Choose one on the left, or press <kbd>/</kbd> to search. <kbd>?</kbd> lists every
-						shortcut.
+						Choose one on the left, or press <Kbd keys="/" /> to search. <Kbd keys="?" /> lists
+						every shortcut.
 					</div>
 				}
 			>

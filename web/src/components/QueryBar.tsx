@@ -15,6 +15,8 @@ import { createRequest } from "../request";
 import { Choice } from "./Choice";
 import { type ColumnChoice, ColumnPicker } from "./ColumnPicker";
 import { Icon } from "./icons";
+import { Kbd } from "./Kbd";
+import { tip } from "./Tip";
 
 const placeholders: Record<Category, string> = {
 	number: "number",
@@ -280,7 +282,7 @@ export function QueryBar(props: {
 				</div>
 
 				<footer class="q-foot">
-					<code class="q-sql" title={sql()}>
+					<code class="q-sql" {...tip(sql())}>
 						{sql() || "No conditions yet"}
 					</code>
 					<button type="button" class="btn quiet" onClick={() => props.onEditSql()}>
@@ -298,7 +300,7 @@ export function QueryBar(props: {
 						onClick={() => props.onApply()}
 					>
 						Apply
-						<kbd>↵</kbd>
+						<Kbd keys="Enter" />
 					</button>
 				</footer>
 			</Show>

@@ -4,6 +4,7 @@ import { Portal } from "solid-js/web";
 import { type FormatId, formats } from "../copy";
 import type { InspectorAction } from "./Inspector";
 import { Icon, type IconName } from "./icons";
+import { Kbd } from "./Kbd";
 
 export interface RowTarget {
 	/** Where the menu opens: the pointer, or the cursor cell for the keyboard. */
@@ -72,9 +73,7 @@ export function RowMenu(props: {
 				<Show when={icon}>{(i) => <Icon name={i()} />}</Show>
 			</span>
 			<span class="label">{label}</span>
-			<Show when={kbd}>
-				<kbd class="pop-kbd">{kbd}</kbd>
-			</Show>
+			<Show when={kbd}>{(k) => <Kbd keys={k()} />}</Show>
 		</Menu.Item>
 	);
 
@@ -123,12 +122,7 @@ export function RowMenu(props: {
 										<Show when={t().cell}>{(c) => <span class="type">{c().column}</span>}</Show>
 									</div>
 									<Show when={t().cell}>{item("cell", "Copy cell", "copy", "C")}</Show>
-									{item(
-										"rows",
-										t().rows > 1 ? `Copy ${rowsLabel()}` : "Copy row",
-										"copy",
-										"Ctrl C",
-									)}
+									{item("rows", t().rows > 1 ? `Copy ${rowsLabel()}` : "Copy row", "copy", "Mod+C")}
 									{formatMenu("as", "Copy as", "code")}
 									{formatMenu("save", "Save as file", "save")}
 									<Show when={t().cell?.actions.length}>
@@ -138,8 +132,8 @@ export function RowMenu(props: {
 										</For>
 									</Show>
 									<Menu.Separator class="pop-sep" />
-									{item("all", "Select all rows", undefined, "Ctrl A")}
-									<Show when={t().cell}>{item("inspect", "Inspect cell", "inspect", "↵")}</Show>
+									{item("all", "Select all rows", undefined, "Mod+A")}
+									<Show when={t().cell}>{item("inspect", "Inspect cell", "inspect", "Enter")}</Show>
 								</>
 							)}
 						</Show>

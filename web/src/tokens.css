@@ -107,6 +107,7 @@
 	--z-overlay: 10;
 	--z-drawer: 11;
 	--z-popover: 20;
+	--z-tooltip: 30;
 
 	/* 2. Semantic tokens */
 

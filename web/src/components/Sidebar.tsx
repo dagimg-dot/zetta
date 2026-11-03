@@ -3,9 +3,10 @@ import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "
 import { openTable, view } from "../url";
 import { ErrorBox } from "./ErrorBox";
 import { Icon, Mark } from "./icons";
+import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
 import { ThemeSwitch } from "./ThemeSwitch";
-import { IconButton } from "./Tip";
+import { IconButton, tip } from "./Tip";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,
@@ -84,7 +85,7 @@ export function Sidebar(props: {
 				class="tbl"
 				classList={{ active: active() }}
 				aria-current={active() ? "page" : undefined}
-				title={`${p.schema}.${p.t.name}`}
+				{...tip(`${p.schema}.${p.t.name}`, undefined, "right")}
 				onClick={() => open(p.schema, p.t.name)}
 			>
 				<Icon name={p.t.kind === "table" ? "table" : "view"} />
@@ -93,7 +94,10 @@ export function Sidebar(props: {
 					<span class="badge">{kind}</span>
 				</Show>
 				<Show when={showRows() && p.t.approxRows !== null}>
-					<span class="rows" title={`About ${p.t.approxRows?.toLocaleString()} rows`}>
+					<span
+						class="rows"
+						{...tip(`About ${p.t.approxRows?.toLocaleString()} rows`, undefined, "right")}
+					>
 						{approx(p.t.approxRows ?? 0)}
 					</span>
 				</Show>
@@ -121,12 +125,15 @@ export function Sidebar(props: {
 					{(m) => (
 						<div class="meta">
 							<Icon name="database" />
-							<span class="db" title={m().database}>
+							<span class="db" {...tip(m().database, undefined, "bottom")}>
 								{m().database}
 							</span>
 							<span class="badge">{m().adapter}</span>
 							<Show when={m().readOnly}>
-								<span class="badge ro" title="Writes are refused by the server">
+								<span
+									class="badge ro"
+									{...tip("Writes are refused by the server", undefined, "bottom")}
+								>
 									<Icon name="lock" size={10} />
 									read-only
 								</span>
@@ -156,7 +163,7 @@ export function Sidebar(props: {
 						}
 					}}
 				/>
-				<kbd>/</kbd>
+				<Kbd keys="/" />
 			</div>
 			<div class="tree" classList={{ flat: flat() }}>
 				<Show when={props.error}>{(err) => <ErrorBox error={err()} />}</Show>

@@ -7,6 +7,7 @@ import { errorRange, isWrite } from "../value";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
 import { Icon, Loader } from "./icons";
+import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
 
 const INDENT = "  ";
@@ -159,7 +160,7 @@ export function SqlPane(props: {
 						<Loader size={14} />
 					</Show>
 					{query.loading() ? "Running" : writes() ? "Run write" : "Run"}
-					<kbd>Ctrl ↵</kbd>
+					<Kbd keys="Mod+Enter" />
 				</button>
 				<Show
 					when={writes()}
@@ -196,7 +197,7 @@ export function SqlPane(props: {
 					>
 						<div class="empty">
 							<strong>Run SQL against {props.database ?? "the database"}</strong>
-							<kbd>Ctrl</kbd> <kbd>↵</kbd> runs the editor, or only the selected text. Results are
+							<Kbd keys="Mod+Enter" /> runs the editor, or only the selected text. Results are
 							capped at 5,000 rows.
 						</div>
 					</Show>

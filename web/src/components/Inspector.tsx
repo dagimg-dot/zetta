@@ -2,7 +2,8 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { announce } from "../announce";
 import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
 import { Icon, type IconName } from "./icons";
-import { IconButton } from "./Tip";
+import { Kbd } from "./Kbd";
+import { IconButton, tip } from "./Tip";
 
 export interface InspectorAction {
 	label: string;
@@ -117,7 +118,7 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 	return (
 		<section class="inspector" aria-label={`Value of ${props.cell.column}, row ${props.cell.row}`}>
 			<header>
-				<span class="col" title={props.cell.column}>
+				<span class="col" {...tip(props.cell.column, undefined, "bottom")}>
 					{props.cell.column}
 				</span>
 				<span class="type">{props.cell.type}</span>
@@ -173,22 +174,20 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 								<Show when={a.detail}>
 									<span class="detail mono">{a.detail}</span>
 								</Show>
-								<Show when={a.hint}>
-									<kbd>{a.hint}</kbd>
-								</Show>
+								<Show when={a.hint}>{(h) => <Kbd keys={h()} />}</Show>
 							</button>
 						)}
 					</For>
 				</nav>
 			</Show>
 			<footer>
-				<kbd>↑</kbd>
-				<kbd>↓</kbd>
-				<kbd>←</kbd>
-				<kbd>→</kbd>
+				<Kbd keys="ArrowUp" />
+				<Kbd keys="ArrowDown" />
+				<Kbd keys="ArrowLeft" />
+				<Kbd keys="ArrowRight" />
 				<span>move</span>
 				<span class="spacer" />
-				<kbd>Esc</kbd>
+				<Kbd keys="Esc" />
 				<span>close</span>
 			</footer>
 		</section>

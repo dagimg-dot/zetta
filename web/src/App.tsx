@@ -6,7 +6,7 @@ import { Icon } from "./components/icons";
 import { Shortcuts } from "./components/Shortcuts";
 import { Sidebar } from "./components/Sidebar";
 import { SqlPane } from "./components/SqlPane";
-import { IconButton } from "./components/Tip";
+import { IconButton, TipLayer, tip } from "./components/Tip";
 import { Unauthorized } from "./components/Unauthorized";
 import { createRequest } from "./request";
 import { cycleTheme } from "./theme";
@@ -128,7 +128,7 @@ export function App() {
 			aria-selected={view().tab === t}
 			aria-controls={`pane-${t}`}
 			tabIndex={view().tab === t ? 0 : -1}
-			title={`${label} (${t === "data" ? "D" : "S"})`}
+			{...tip(`${label} tab`, t === "data" ? "D" : "S", "bottom")}
 			onClick={() => showTab(t)}
 			onKeyDown={(e) => {
 				if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -206,6 +206,7 @@ export function App() {
 					shortcuts = el;
 				}}
 			/>
+			<TipLayer />
 			<div class="sr-only" aria-live="polite" aria-atomic="true">
 				{announcement()}
 			</div>

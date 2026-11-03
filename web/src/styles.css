@@ -93,14 +93,35 @@ button:focus-visible,
 	outline-offset: -2px;
 }
 
-kbd {
-	font: var(--text-xs) var(--font-mono);
-	color: var(--text-secondary);
-	border: 1px solid var(--border);
-	border-bottom-width: 2px;
+/* Key caps, drawn by <Kbd>: one cap per key, the same height everywhere, tuned per surface below. */
+
+.keys {
+	display: inline-flex;
+	flex: none;
+	vertical-align: middle;
+	font: inherit;
+}
+
+.keys .caps {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+
+.keys kbd {
+	display: inline-grid;
+	place-items: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 4px;
 	border-radius: var(--radius-sm);
-	padding: 0 var(--space-1);
 	background: var(--surface);
+	box-shadow:
+		inset 0 0 0 1px var(--border),
+		inset 0 -1px 0 1px var(--border);
+	color: var(--text-secondary);
+	font: var(--weight-medium) 11px / 1 var(--font-sans);
+	white-space: nowrap;
 }
 
 .icon {
@@ -207,7 +228,7 @@ aside header {
 	padding-left: 26px;
 }
 
-.find kbd {
+.find .keys {
 	position: absolute;
 	right: 15px;
 	top: calc(50% - 4px);
@@ -513,12 +534,16 @@ main {
 	background: var(--surface-hover);
 }
 
-.btn kbd {
+.btn .keys {
+	margin-left: var(--space-0-5);
+}
+
+/* On a filled button the caps take the button's text color. */
+.btn.primary .keys kbd,
+.btn.danger .keys kbd {
+	background: oklch(1 0 0 / 0.18);
+	box-shadow: none;
 	color: inherit;
-	opacity: 0.8;
-	background: none;
-	border-color: currentColor;
-	border-bottom-width: 1px;
 }
 
 textarea.editor {
@@ -1055,8 +1080,18 @@ th.collapsed .ico.fold {
 
 .shortcuts dt {
 	display: flex;
-	gap: var(--space-1);
+	align-items: center;
+	gap: var(--space-2);
 	justify-content: flex-end;
+}
+
+.shortcuts dt .click {
+	color: var(--text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.shortcuts dd {
+	align-self: center;
 }
 
 .shortcuts dd {
@@ -1110,8 +1145,8 @@ th.collapsed .ico.fold {
 	padding: 1px 5px;
 }
 
-.find input:focus ~ kbd,
-.find input:not(:placeholder-shown) ~ kbd {
+.find input:focus ~ .keys,
+.find input:not(:placeholder-shown) ~ .keys {
 	display: none;
 }
 
@@ -1620,7 +1655,7 @@ th.collapsed .ico.fold {
 	flex: none;
 }
 
-.inspector .action kbd {
+.inspector .action .keys {
 	margin-left: auto;
 }
 
@@ -2179,28 +2214,78 @@ button.rel-node:hover,
 	z-index: var(--z-popover);
 }
 
+[data-scope="tooltip"][data-part="positioner"] {
+	z-index: var(--z-tooltip);
+}
+
+/* Tooltip: inverted, with an arrow, sliding in from its trigger. */
+
 .tip {
+	--arrow-size: 7px;
+	--arrow-background: var(--text);
 	display: flex;
 	align-items: center;
 	gap: var(--space-2);
-	padding: var(--space-1) var(--space-2);
-	border-radius: var(--radius-sm);
+	max-width: min(320px, calc(100vw - 16px));
+	padding: 5px var(--space-2);
+	border-radius: var(--radius-md);
 	background: var(--text);
 	color: var(--surface);
 	font-size: var(--text-xs);
 	font-weight: var(--weight-medium);
+	line-height: 1.35;
 	box-shadow: var(--shadow-overlay);
-	white-space: nowrap;
+	pointer-events: none;
 }
 
-.tip kbd {
+/* Ark hides the closed tooltip with the hidden attribute, which display: flex would undo. */
+.tip[hidden] {
+	display: none;
+}
+
+.tip-label {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	white-space: pre-line;
+}
+
+.tip .keys kbd {
+	background: color-mix(in oklab, currentColor 16%, transparent);
+	box-shadow: none;
 	color: inherit;
-	background: none;
-	border-color: currentColor;
-	opacity: 0.7;
 }
 
-.tip[data-state="open"],
+.tip-arrow [data-part="arrow-tip"] {
+	border-radius: 1.5px;
+}
+
+.tip[data-side="top"] {
+	--from: translateY(3px);
+}
+
+.tip[data-side="bottom"] {
+	--from: translateY(-3px);
+}
+
+.tip[data-side="left"] {
+	--from: translateX(3px);
+}
+
+.tip[data-side="right"] {
+	--from: translateX(-3px);
+}
+
+.tip[data-state="open"] {
+	animation: tip-in 140ms var(--ease-out);
+}
+
+@keyframes tip-in {
+	from {
+		opacity: 0;
+		transform: var(--from);
+	}
+}
+
 .pop[data-state="open"] {
 	animation: pop-in var(--duration) var(--ease-out);
 }
@@ -2332,20 +2417,24 @@ button.rel-node:hover,
 	color: var(--text-accent);
 }
 
-.pop-kbd,
+.pop-item .keys,
 .pop-sub {
 	flex: none;
 	margin-left: var(--space-3);
 	color: var(--text-tertiary);
 }
 
-.pop-kbd {
-	padding: 0;
-	border: 0;
+/* In a menu the shortcut is a quiet hint beside the item, not a row of buttons. */
+.pop-item .keys .caps {
+	gap: 1px;
+}
+
+.pop-item .keys kbd {
+	min-width: 0;
+	padding: 0 1px;
 	background: none;
 	box-shadow: none;
-	font-family: var(--font-mono);
-	font-size: var(--text-xs);
+	color: inherit;
 }
 
 .pop-item[data-state="open"] {

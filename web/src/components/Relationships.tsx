@@ -12,7 +12,7 @@ import type { RefAction, TableDetail } from "../api";
 import { openTable } from "../url";
 import { Icon } from "./icons";
 import { RefActions } from "./TableInfo";
-import { IconButton } from "./Tip";
+import { IconButton, tip } from "./Tip";
 
 interface Edge {
 	key: string;
@@ -270,7 +270,7 @@ export function Relationships(props: { detail: TableDetail }) {
 					ref={(el) => els.set(n.key, el)}
 					{...hover}
 					onClick={() => openTable(e.schema, e.table)}
-					title={`Open ${e.schema}.${e.table}`}
+					{...tip(`Open ${e.schema}.${e.table}`)}
 				>
 					<span class="t">
 						<Icon name="table" />
@@ -292,11 +292,11 @@ export function Relationships(props: { detail: TableDetail }) {
 				ref={(el) => els.set(n.key, el)}
 				{...hover}
 				onClick={() => scopeTo(n.kind === "group" ? `${n.schema}.` : "")}
-				title={
+				{...tip(
 					n.kind === "group"
 						? `List the ${count(n.edges.length, "key")} from ${n.schema}`
-						: "Search every relationship"
-				}
+						: "Search every relationship",
+				)}
 			>
 				<span class="t">
 					<Icon name={n.kind === "group" ? "database" : "search"} />

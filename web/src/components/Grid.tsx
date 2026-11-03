@@ -18,6 +18,7 @@ import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu"
 import { copyRich, copyText, Inspector, type InspectorAction } from "./Inspector";
 import { Icon } from "./icons";
 import { RowMenu, type RowTarget } from "./RowMenu";
+import { tip } from "./Tip";
 
 export interface LinkTarget {
 	schema: string;
@@ -156,12 +157,13 @@ function cell(v: string | null, numeric: boolean, link: boolean): HTMLTableCellE
 	} else {
 		td.textContent = v;
 	}
-	if (v.length > 40) td.title = v.length > 400 ? `${v.slice(0, 400)}…` : v;
+	if (v.length > 40) td.dataset.tip = v.length > 400 ? `${v.slice(0, 400)}…` : v;
 	if (link) {
 		// Clicks are handled by the table; the keyboard uses O on the cursor cell.
 		const go = document.createElement("span");
 		go.className = "fk-go";
-		go.title = "Open the referenced row (O)";
+		go.dataset.tip = "Open the referenced row";
+		go.dataset.tipKbd = "O";
 		go.textContent = "↗";
 		td.append(go);
 	}
@@ -841,13 +843,15 @@ export function Grid(props: {
 											<th
 												scope="col"
 												classList={{ collapsed: off(), num: numeric()[i()] && !off() }}
-												title={
+												{...tip(
 													off()
-														? c.name
+														? undefined
 														: props.actions
 															? undefined
-															: headerTitle(c.name, c.type, info())
-												}
+															: headerTitle(c.name, c.type, info()),
+													undefined,
+													"bottom",
+												)}
 												onContextMenu={(e) => {
 													if (!props.actions || off()) return;
 													e.preventDefault();
@@ -870,6 +874,7 @@ export function Grid(props: {
 																class="ico fold"
 																data-expand={c.name}
 																aria-label={`Show column ${c.name}`}
+																{...tip(`Show column ${c.name}`, undefined, "bottom")}
 																onClick={() => toggleColumn(i(), c.name, false)}
 															>
 																<Icon name="unfold" />
@@ -927,7 +932,7 @@ export function Grid(props: {
 															)}
 														</Show>
 														<Show when={!props.onSort && info()?.primaryKey}>
-															<span class="pk" title="Primary key">
+															<span class="pk" {...tip("Primary key", undefined, "bottom")}>
 																<Icon name="key" size={11} />
 															</span>
 														</Show>
@@ -938,6 +943,7 @@ export function Grid(props: {
 																classList={{ open: menu()?.name === c.name }}
 																tabIndex={-1}
 																aria-label={`Column actions for ${c.name}`}
+																{...tip("Column actions", "Shift+F10", "bottom")}
 																aria-haspopup="menu"
 																onClick={(e) => {
 																	const th = e.currentTarget.closest("th");
@@ -952,7 +958,7 @@ export function Grid(props: {
 															class="ico fold"
 															tabIndex={-1}
 															aria-label={`Hide column ${c.name}`}
-															title={`Hide column (H)`}
+															{...tip("Hide column", "H", "bottom")}
 															onClick={() => toggleColumn(i(), c.name, true)}
 														>
 															<Icon name="fold" />

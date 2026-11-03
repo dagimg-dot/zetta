@@ -5,6 +5,7 @@ import { openTable } from "../url";
 import { formatBytes } from "../value";
 import { copyText } from "./Inspector";
 import { Icon } from "./icons";
+import { tip } from "./Tip";
 
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
@@ -114,7 +115,7 @@ export function StructurePane(props: { detail: TableDetail }) {
 											<td>
 												<div class="key-row">
 													<Show when={c.primaryKey}>
-														<span class="key pk" title="Primary key">
+														<span class="key pk" {...tip("Primary key")}>
 															<Icon name="key" />
 															PK
 														</span>
@@ -124,7 +125,9 @@ export function StructurePane(props: { detail: TableDetail }) {
 															<button
 																type="button"
 																class="key fk"
-																title={`References ${t().schema}.${t().table}(${t().column}). Open it.`}
+																{...tip(
+																	`References ${t().schema}.${t().table}(${t().column}). Open it.`,
+																)}
 																onClick={() => openTable(t().schema, t().table)}
 															>
 																<Icon name="go" />
@@ -135,7 +138,7 @@ export function StructurePane(props: { detail: TableDetail }) {
 														)}
 													</Show>
 													<Show when={!c.primaryKey && keys().unique.has(c.name)}>
-														<span class="key" title="Unique">
+														<span class="key" {...tip("No two rows share this value")}>
 															unique
 														</span>
 													</Show>
@@ -146,7 +149,7 @@ export function StructurePane(props: { detail: TableDetail }) {
 															keys().indexed.has(c.name)
 														}
 													>
-														<span class="key quiet" title="Leads an index">
+														<span class="key quiet" {...tip("Leads an index")}>
 															indexed
 														</span>
 													</Show>
@@ -272,7 +275,7 @@ function IndexRow(props: { ix: IndexInfo; stats: boolean }) {
 				<Show when={props.stats}>
 					<span class="figures">
 						<Show when={props.ix.scans !== null}>
-							<span title={`${props.ix.scans?.toLocaleString()} scans`}>
+							<span {...tip(`${props.ix.scans?.toLocaleString()} scans`)}>
 								{props.ix.scans === 0
 									? "never scanned"
 									: `${compact.format(props.ix.scans ?? 0)} scans`}

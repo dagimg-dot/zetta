@@ -28,6 +28,7 @@ import { Icon, Loader } from "./icons";
 import { Loading } from "./Loading";
 import { Pager } from "./Pager";
 import { QueryBar } from "./QueryBar";
+import { tip } from "./Tip";
 
 export function RowsPane(props: {
 	schema: string;
@@ -326,7 +327,7 @@ export function RowsPane(props: {
 						type="button"
 						class="btn quiet"
 						onClick={toBuilder}
-						title="Back to the filter and sort builder"
+						{...tip("Back to the filter and sort builder")}
 					>
 						<Icon name="filter" />
 						Builder

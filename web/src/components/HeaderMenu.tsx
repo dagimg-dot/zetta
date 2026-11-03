@@ -5,6 +5,7 @@ import { Portal } from "solid-js/web";
 import { categoryOf, type Filter, type Op, opInfo, opsFor } from "../query";
 import { Choice } from "./Choice";
 import { Icon, type IconName } from "./icons";
+import { Kbd } from "./Kbd";
 
 export interface HeaderTarget {
 	name: string;
@@ -221,7 +222,7 @@ export function HeaderMenu(props: {
 											<span class="spacer" />
 											<button type="submit" class="btn primary">
 												Apply
-												<kbd>↵</kbd>
+												<Kbd keys="Enter" />
 											</button>
 										</div>
 									</form>
