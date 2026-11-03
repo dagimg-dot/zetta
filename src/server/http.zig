@@ -18,10 +18,22 @@ pub fn respondJson(req: *Request, status: std.http.Status, body: []const u8) !vo
 }
 
 pub fn respondError(req: *Request, status: std.http.Status, code: []const u8, message: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    render.json.err(&w, code, message[0..@min(message.len, 1500)]) catch unreachable;
-    try respondJson(req, status, w.buffered());
+    var buf: [16 * 1024]u8 = undefined;
+    try respondJson(req, status, errorBody(&buf, code, message));
+}
+
+/// The JSON for an error. Escaping can grow a message several times over, so one that does not
+/// fit `buf` is cut shorter until it does.
+fn errorBody(buf: []u8, code: []const u8, message: []const u8) []const u8 {
+    var keep = @min(message.len, 4096);
+    while (true) {
+        var w: std.Io.Writer = .fixed(buf);
+        render.json.err(&w, code, message[0..keep]) catch {
+            keep /= 2;
+            continue;
+        };
+        return w.buffered();
+    }
 }
 
 pub const Target = struct {
@@ -106,6 +118,19 @@ fn gzipListed(value: []const u8) bool {
 }
 
 const testing = std.testing;
+
+test "an error message that escapes past the buffer is cut, not lost" {
+    var buf: [256]u8 = undefined;
+    const body = errorBody(&buf, "db_error", "\"" ** 300);
+    try std.testing.expect(std.mem.startsWith(u8, body, "{\"error\":\"db_error\""));
+    try std.testing.expect(std.mem.endsWith(u8, body, "\"}"));
+}
+
+test "a long error message keeps its caret line" {
+    var buf: [16 * 1024]u8 = undefined;
+    const message = "syntax error\nLINE 1: " ++ "x" ** 2000 ++ "\n" ++ " " ** 2008 ++ "^";
+    try std.testing.expect(std.mem.indexOf(u8, errorBody(&buf, "db_error", message), "^") != null);
+}
 
 test "gzip is accepted unless refused with q=0" {
     try testing.expect(gzipListed("gzip, deflate, br, zstd"));

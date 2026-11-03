@@ -5,7 +5,8 @@ const std = @import("std");
 
 const Diagnostic = @This();
 
-buf: [1024]u8 = undefined,
+/// Room for a Postgres error with its LINE context and caret under a long statement.
+buf: [4096]u8 = undefined,
 len: usize = 0,
 
 pub fn set(d: *Diagnostic, text: []const u8) void {
@@ -27,7 +28,7 @@ pub fn message(d: *const Diagnostic) []const u8 {
 
 test "long messages are cut to the buffer instead of failing" {
     var d: Diagnostic = .{};
-    const long = "x" ** 2000;
+    const long = "x" ** 5000;
     d.set(long);
     try std.testing.expectEqual(d.buf.len, d.message().len);
     d.print("{s}", .{long});
