@@ -70,8 +70,7 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
     defer srv.deinit();
 
     const info = adapter.info();
-    const shown_host = if (std.mem.indexOfScalar(u8, args.host, ':') != null) "[::1]" else args.host;
-    const url = try std.fmt.allocPrint(ctx.arena, "http://{s}:{d}/?token={s}", .{ shown_host, args.port, token });
+    const url = try std.fmt.allocPrint(ctx.arena, "http://{s}:{d}/?token={s}", .{ try urlHost(ctx.arena, args.host), args.port, token });
     try ctx.stderr.print("zetta {s}: {t} database {s}{s}\n", .{ ctx.version, info.name, info.database, if (info.read_only) ", read-only" else "" });
     try ctx.stderr.flush();
     try ctx.stdout.print("{s}\n", .{url});
@@ -98,4 +97,22 @@ fn openBrowser(ctx: *Context, url: []const u8) void {
         return;
     };
     _ = child.wait(ctx.io) catch {};
+}
+
+/// The host to print in the startup URL. A wildcard bind is not an address anyone can open,
+/// so it prints as localhost; an IPv6 literal needs brackets.
+fn urlHost(arena: std.mem.Allocator, host: []const u8) ![]const u8 {
+    if (std.mem.eql(u8, host, "0.0.0.0") or std.mem.eql(u8, host, "::")) return "localhost";
+    if (std.mem.indexOfScalar(u8, host, ':') != null) return std.fmt.allocPrint(arena, "[{s}]", .{host});
+    return host;
+}
+
+test "wildcard binds print as localhost and IPv6 gets brackets" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    try std.testing.expectEqualStrings("localhost", try urlHost(arena, "0.0.0.0"));
+    try std.testing.expectEqualStrings("localhost", try urlHost(arena, "::"));
+    try std.testing.expectEqualStrings("[fe80::1]", try urlHost(arena, "fe80::1"));
+    try std.testing.expectEqualStrings("127.0.0.1", try urlHost(arena, "127.0.0.1"));
 }

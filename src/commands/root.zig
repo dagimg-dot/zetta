@@ -42,3 +42,7 @@ pub fn run(ctx: *Context, command: Cli.Command) !cli.ExitCode {
         .tables => |args| tables.run(ctx, args),
     };
 }
+
+test {
+    _ = @import("serve.zig");
+}

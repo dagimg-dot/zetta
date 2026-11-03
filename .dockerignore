@@ -1,0 +1,12 @@
+.git
+.zig-cache
+zig-out
+.claude
+.impeccable
+docs
+dev
+*.md
+web/node_modules
+web/dist
+Dockerfile
+.dockerignore

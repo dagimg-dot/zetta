@@ -105,3 +105,7 @@ fn useColor(io: std.Io, env: *const std.process.Environ.Map, when: commands.Colo
         .auto => env.get("NO_COLOR") == null and (file.isTty(io) catch false),
     };
 }
+
+test {
+    _ = commands;
+}
