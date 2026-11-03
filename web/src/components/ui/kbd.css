@@ -1,0 +1,29 @@
+/* Key caps, drawn by <Kbd>: one cap per key, the same height everywhere, tuned per surface below. */
+.keys {
+	display: inline-flex;
+	flex: none;
+	vertical-align: middle;
+	font: inherit;
+}
+
+.keys .caps {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+
+.keys kbd {
+	display: inline-grid;
+	place-items: center;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 4px;
+	border-radius: var(--radius-sm);
+	background: var(--surface);
+	box-shadow:
+		inset 0 0 0 1px var(--border),
+		inset 0 -1px 0 1px var(--border);
+	color: var(--text-secondary);
+	font: var(--weight-medium) 11px / 1 var(--font-sans);
+	white-space: nowrap;
+}

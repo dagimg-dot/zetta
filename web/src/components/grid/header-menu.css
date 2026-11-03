@@ -1,0 +1,59 @@
+/* Header column menu and filter popover */
+.ico.more {
+	opacity: 0;
+	transition: opacity var(--duration) var(--ease-out);
+}
+
+th:hover .ico.more,
+th:focus-within .ico.more,
+.ico.more.open {
+	opacity: 1;
+}
+
+.ico.more.open {
+	background: var(--surface-pressed);
+	color: var(--text);
+}
+
+.filter-pop {
+	width: 340px;
+	padding: var(--space-1) var(--space-2) var(--space-2);
+}
+
+.filter-pop .pop-head {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+.filter-pop .pop-head > span:first-child {
+	color: var(--text-secondary);
+	font-weight: var(--weight-medium);
+}
+
+.filter-row {
+	display: flex;
+	gap: var(--space-1-5);
+	margin: var(--space-1) 0 var(--space-2-5);
+}
+
+.filter-row .choice {
+	flex: 0 0 auto;
+	max-width: 50%;
+}
+
+.filter-row input {
+	flex: 1;
+	min-width: 0;
+	height: var(--control-height-sm);
+}
+
+.filter-foot {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.filter-foot .note {
+	color: var(--text-tertiary);
+	font-size: var(--text-xs);
+}

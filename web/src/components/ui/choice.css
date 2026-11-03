@@ -1,0 +1,40 @@
+/* Short fixed lists (Ark Select) */
+.choice-trigger {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	height: var(--control-height-sm);
+	padding: 0 7px 0 var(--space-2);
+	border: 1px solid var(--border-control);
+	border-radius: var(--radius-md);
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+	white-space: nowrap;
+	transition: border-color var(--duration) var(--ease-out);
+}
+
+.choice-trigger:hover {
+	background: var(--surface-hover);
+}
+
+.choice-trigger:focus-visible,
+.choice-trigger[data-state="open"] {
+	border-color: var(--accent);
+	outline: 2px solid var(--accent);
+	outline-offset: -1px;
+}
+
+.choice-indicator {
+	display: inline-flex;
+	color: var(--text-secondary);
+}
+
+.choice-indicator[data-state="open"] .icon.down {
+	transform: rotate(-90deg);
+}
+
+.choice-list {
+	min-width: max(var(--reference-width, 0px), 140px);
+}

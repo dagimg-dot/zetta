@@ -1,0 +1,89 @@
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1-5);
+	height: var(--control-height);
+	padding: 0 var(--space-3);
+	border: 1px solid var(--border-control);
+	background: var(--surface);
+	border-radius: var(--radius-md);
+	cursor: pointer;
+	white-space: nowrap;
+	transition:
+		background-color var(--duration) var(--ease-out),
+		border-color var(--duration) var(--ease-out);
+}
+
+.btn:hover {
+	background: var(--surface-hover);
+}
+
+.btn.primary {
+	background: var(--accent-fill);
+	border-color: var(--accent-fill);
+	color: var(--text-on-accent);
+	font-weight: var(--weight-medium);
+}
+
+.btn.primary:hover {
+	background: var(--accent-fill-hover);
+	border-color: var(--accent-fill-hover);
+}
+
+.btn.danger {
+	background: var(--surface-warning);
+	border-color: var(--text-warning);
+	color: var(--text-warning);
+	font-weight: var(--weight-medium);
+}
+
+.btn.danger:hover {
+	background: color-mix(in oklch, var(--surface-warning), var(--text-warning) 10%);
+}
+
+.btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.btn.icon-only {
+	height: auto;
+	padding: 5px;
+}
+
+.btn.sm {
+	height: var(--control-height-sm);
+	padding: 0 var(--space-2-5);
+	font-size: var(--text-sm);
+}
+
+/* A button that is waiting on its own work stays legible; only the loader says it is busy. */
+.btn[aria-busy="true"]:disabled {
+	opacity: 1;
+	cursor: progress;
+}
+
+.btn.quiet[aria-busy="true"] {
+	color: var(--text-accent);
+}
+
+.btn.quiet {
+	border-color: transparent;
+	background: none;
+}
+
+.btn.quiet:hover {
+	background: var(--surface-hover);
+}
+
+.btn .keys {
+	margin-left: var(--space-0-5);
+}
+
+/* On a colored button the caps are a tint of the button's own text color, so they show on any fill. */
+.btn.primary .keys kbd,
+.btn.danger .keys kbd {
+	background: color-mix(in oklch, currentColor 16%, transparent);
+	box-shadow: none;
+	color: inherit;
+}

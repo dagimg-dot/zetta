@@ -6,6 +6,8 @@ import { categoryOf, type Filter, type Op, opInfo, opsFor } from "../../lib/quer
 import { Button } from "../ui/Button";
 import { Choice } from "../ui/Choice";
 import { Icon, type IconName } from "../ui/icons";
+import "../ui/menu.css";
+import "./header-menu.css";
 
 export interface HeaderTarget {
 	name: string;

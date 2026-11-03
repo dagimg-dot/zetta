@@ -2,6 +2,7 @@ import { CopyButton } from "../../components/ui/CopyButton";
 import { SqlText } from "../../components/ui/SqlText";
 import type { TableDetail } from "../../lib/api";
 import { plural } from "../../lib/format";
+import "./info.css";
 
 export function DdlPane(props: { detail: TableDetail }) {
 	return (

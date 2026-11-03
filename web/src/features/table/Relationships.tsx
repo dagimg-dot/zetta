@@ -15,6 +15,7 @@ import type { RefAction, TableDetail } from "../../lib/api";
 import { kindNoun } from "../../lib/format";
 import { openTable } from "../../stores/view";
 import { RefActions } from "./parts";
+import "./relationships.css";
 
 interface Edge {
 	key: string;

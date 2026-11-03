@@ -3,6 +3,8 @@ import { Select } from "@ark-ui/solid/select";
 import { createMemo, For } from "solid-js";
 import { Portal } from "solid-js/web";
 import { Icon } from "./icons";
+import "./menu.css";
+import "./choice.css";
 
 export interface ChoiceOption<T extends string> {
 	value: T;

@@ -5,6 +5,8 @@ import { Button, type ButtonProps } from "../ui/Button";
 import { Icon } from "../ui/icons";
 import type { Hidden } from "./hidden";
 import { matchColumns, showOnly } from "./hidden";
+import "../ui/menu.css";
+import "./column-list.css";
 
 /**
  * Every column of a result as a checklist with a search, for keeping a handful of a wide table's

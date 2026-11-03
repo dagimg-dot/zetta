@@ -2,6 +2,7 @@ import { Tooltip as Ark, useTooltip } from "@ark-ui/solid/tooltip";
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { Kbd } from "./Kbd";
+import "./tip.css";
 
 export type TipSide = "top" | "right" | "bottom" | "left";
 

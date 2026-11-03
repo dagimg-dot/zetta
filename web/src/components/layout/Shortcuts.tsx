@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
+import "./shortcuts.css";
 
 /** Each shortcut once: the keys, as `Mod+Enter`, and what they do. `click` adds a mouse click. */
 interface Shortcut {

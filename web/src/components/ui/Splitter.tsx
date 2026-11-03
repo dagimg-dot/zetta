@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import type { Width } from "../../stores/layout";
 import { tip } from "./Tip";
+import "./splitter.css";
 
 /** Arrow keys move this far; Shift moves four times as far. */
 const STEP = 16;

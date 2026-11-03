@@ -1,6 +1,7 @@
 import { type JSX, Show } from "solid-js";
 import type { ApiError } from "../../lib/api";
 import { Icon } from "./icons";
+import "./error-box.css";
 
 const codeLabel: Record<string, string> = {
 	db_error: "Database error",

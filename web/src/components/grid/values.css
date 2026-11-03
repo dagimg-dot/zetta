@@ -1,0 +1,24 @@
+/*
+ * The spaces and tabs a value starts or ends with. Each keeps its real character, so copying and
+ * selecting still get it, and the mark is drawn over it with alt text for screen readers.
+ */
+.ws {
+	white-space: pre;
+}
+
+.ws > span {
+	position: relative;
+}
+
+.ws > span::before {
+	position: absolute;
+	inset: 0;
+	color: var(--text-tertiary);
+	text-align: center;
+	content: "·" / "space";
+}
+
+.ws > .tab::before {
+	text-align: start;
+	content: "→" / "tab";
+}

@@ -1,0 +1,21 @@
+.tk-k {
+	color: var(--syntax-keyword);
+	font-weight: var(--weight-medium);
+}
+
+.tk-s {
+	color: var(--syntax-string);
+}
+
+.tk-n {
+	color: var(--syntax-number);
+}
+
+.tk-q {
+	color: var(--syntax-name);
+}
+
+.tk-c {
+	color: var(--syntax-comment);
+	font-style: italic;
+}

@@ -1,5 +1,6 @@
 import { type JSX, Show } from "solid-js";
 import type { RefAction } from "../../lib/api";
+import "./info.css";
 
 export function Section(props: { title: string; note?: JSX.Element; children: JSX.Element }) {
 	return (

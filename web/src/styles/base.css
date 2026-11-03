@@ -1,0 +1,220 @@
+/* Components. Every value comes from tokens.css; see DESIGN.md. */
+* {
+	box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--scrollbar);
+	border: 3px solid transparent;
+	background-clip: content-box;
+	border-radius: var(--radius-lg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--scrollbar-hover);
+	background-clip: content-box;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--scrollbar) transparent;
+	}
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--surface-canvas);
+	color: var(--text);
+	font: var(--text-md) / var(--leading) var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+}
+
+.mono {
+	font-family: var(--font-mono);
+}
+
+.sr-only {
+	position: absolute;
+	/* Pinned to its container's corner: left at its static place, it can sit far below a scroller's fold and stretch the page. */
+	top: 0;
+	left: 0;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+input,
+textarea,
+button {
+	font: inherit;
+	color: inherit;
+}
+
+input[type="search"],
+input[type="text"] {
+	width: 100%;
+	height: var(--control-height);
+	padding: 0 9px;
+	border: 1px solid var(--border-control);
+	border-radius: var(--radius-md);
+	background: var(--surface);
+	outline: none;
+	transition: border-color var(--duration) var(--ease-out);
+}
+
+/* The browser's own clear button is blue; this one takes the field's colors. */
+input[type="search"]::-webkit-search-cancel-button {
+	appearance: none;
+	width: 12px;
+	height: 12px;
+	background: var(--text-secondary);
+	mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 3l6 6M9 3l-6 6' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	cursor: pointer;
+}
+
+input[type="search"]::-webkit-search-cancel-button:hover {
+	background: var(--text);
+}
+
+::placeholder {
+	color: var(--text-secondary);
+	opacity: 1;
+}
+
+input:focus-visible,
+textarea:focus-visible {
+	border-color: var(--accent);
+	outline: 2px solid var(--accent);
+	outline-offset: -1px;
+}
+
+button:focus-visible,
+[tabindex]:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.spacer {
+	flex: 1;
+}
+
+.hint {
+	color: var(--text-secondary);
+	font-size: var(--text-xs);
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1-5);
+}
+
+.busy {
+	opacity: 0.55;
+	transition: opacity var(--duration) var(--ease-out) 0.1s;
+}
+
+/* Empty and done states */
+.empty {
+	margin: auto;
+	color: var(--text-secondary);
+	padding: var(--space-10) var(--space-6);
+	text-align: center;
+	max-width: 44ch;
+	line-height: var(--leading-relaxed);
+}
+
+.empty .starter {
+	display: flex;
+	margin: var(--space-3) auto 0;
+	max-width: 100%;
+}
+
+.empty .starter .mono {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.empty strong {
+	display: block;
+	color: var(--text);
+	font-weight: var(--weight-semibold);
+	margin-bottom: var(--space-1);
+}
+
+.done {
+	margin: var(--space-4) var(--space-3);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2-5);
+	font-family: var(--font-mono);
+}
+
+.done .icon {
+	color: var(--text-accent);
+}
+
+.done .what {
+	font-weight: var(--weight-semibold);
+}
+
+.done .note {
+	color: var(--text-secondary);
+	font-family: var(--font-sans);
+}
+
+@media (max-width: 560px) {
+	.hint {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: reduced motion has to switch off every component's animation. */
+		animation: none !important;
+		/* biome-ignore lint/complexity/noImportantStyles: and every transition, whatever its selector. */
+		transition: none !important;
+	}
+}
+
+.refs-find {
+	position: relative;
+	flex: 1 1 100%;
+	font-weight: var(--weight-regular);
+}
+
+.refs-find svg {
+	position: absolute;
+	left: 8px;
+	top: 50%;
+	transform: translateY(-50%);
+	pointer-events: none;
+}
+
+.refs-find input {
+	width: 100%;
+	padding-left: 26px;
+}

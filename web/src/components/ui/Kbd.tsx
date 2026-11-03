@@ -1,5 +1,6 @@
 import { For } from "solid-js";
 import { isMac, keyCap, splitKeys } from "../../lib/keys";
+import "./kbd.css";
 
 const mac = isMac();
 

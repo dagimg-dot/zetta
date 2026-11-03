@@ -12,6 +12,7 @@ import { createRequest } from "./lib/request";
 import { announce, announcement } from "./stores/announce";
 import { cycleTheme } from "./stores/theme";
 import { setView, type Tab, view } from "./stores/view";
+import "./components/layout/shell.css";
 
 function typing(): boolean {
 	const el = document.activeElement;

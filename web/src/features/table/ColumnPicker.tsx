@@ -3,6 +3,8 @@ import { Combobox } from "@ark-ui/solid/combobox";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { Icon } from "../../components/ui/icons";
+import "../../components/ui/menu.css";
+import "./column-picker.css";
 
 export interface ColumnChoice {
 	name: string;

@@ -1,6 +1,7 @@
 import { For } from "solid-js";
 import { Button } from "./Button";
 import type { IconName } from "./icons";
+import "./segmented.css";
 
 export interface Segment<T extends string> {
 	value: T;

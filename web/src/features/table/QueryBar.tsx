@@ -16,6 +16,7 @@ import {
 } from "../../lib/query";
 import { createRequest } from "../../lib/request";
 import { type ColumnChoice, ColumnPicker } from "./ColumnPicker";
+import "./query-bar.css";
 
 const placeholders: Record<Category, string> = {
 	number: "number",

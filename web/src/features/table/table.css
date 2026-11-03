@@ -1,0 +1,150 @@
+/* A pane that failed as a whole: the box lines up with the sheet's content. */
+.table-panel > .error {
+	margin: var(--space-4);
+}
+
+/* Table view: header strip and sub-tabs */
+.table-head {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	padding: var(--space-2-5) var(--space-3) 0;
+	background: var(--surface-chrome);
+	border-bottom: 1px solid var(--border);
+}
+
+.table-title {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-1) var(--space-2);
+	min-width: 0;
+}
+
+.table-title > .icon {
+	color: var(--text-accent);
+}
+
+.table-title h1 {
+	margin: 0;
+	font: var(--weight-semibold) var(--text-md) var(--font-mono);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.table-title h1 .schema {
+	color: var(--text-secondary);
+	font-weight: var(--weight-regular);
+}
+
+.table-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0;
+	margin: 0 0 0 var(--space-1);
+	padding: 0;
+	list-style: none;
+	color: var(--text-secondary);
+	font-size: var(--text-sm);
+	font-variant-numeric: tabular-nums;
+}
+
+.table-stats li + li::before {
+	content: "·";
+	padding: 0 var(--space-1-5);
+	color: var(--text-tertiary);
+}
+
+.table-comment {
+	margin: 0;
+	color: var(--text-secondary);
+	font-size: var(--text-sm);
+	max-width: 90ch;
+}
+
+.subtabs {
+	display: flex;
+	gap: var(--space-0-5);
+	margin: var(--space-1) 0 -1px calc(-1 * var(--space-2));
+	overflow-x: auto;
+	scrollbar-width: none;
+	--fade: 32px;
+}
+
+/* A narrow window scrolls the tabs; the hidden side fades so the strip reads as scrollable. */
+.subtabs.more-right {
+	mask-image: linear-gradient(to right, #000 calc(100% - var(--fade)), transparent);
+}
+
+.subtabs.more-left {
+	mask-image: linear-gradient(to left, #000 calc(100% - var(--fade)), transparent);
+}
+
+.subtabs.more-left.more-right {
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 var(--fade),
+		#000 calc(100% - var(--fade)),
+		transparent
+	);
+}
+
+.subtab {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1-5);
+	padding: var(--space-1-5) var(--space-2);
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: none;
+	color: var(--text-secondary);
+	font-weight: var(--weight-medium);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.subtab:hover {
+	color: var(--text);
+}
+
+.subtab[aria-selected="true"] {
+	color: var(--text);
+	border-bottom-color: var(--accent);
+}
+
+.subtab .count {
+	min-width: 18px;
+	padding: 0 5px;
+	border-radius: var(--radius-full);
+	background: var(--surface-pressed);
+	color: var(--text);
+	font-size: var(--text-xs);
+	line-height: 16px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.subtab .count.zero {
+	background: none;
+	color: var(--text-tertiary);
+}
+
+.subtab[aria-selected="true"] .count:not(.zero) {
+	background: var(--surface-cursor);
+}
+
+.table-panel {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+
+@media (max-width: 760px) {
+	.table-panel > .error {
+		margin: var(--space-3);
+	}
+}

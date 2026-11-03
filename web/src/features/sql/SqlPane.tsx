@@ -22,6 +22,7 @@ import {
 	statements,
 } from "../../lib/sql";
 import { announce } from "../../stores/announce";
+import "./sql.css";
 
 const INDENT = "  ";
 

@@ -1,5 +1,6 @@
 import { Show } from "solid-js";
 import { edges, markOf } from "../../lib/value";
+import "./values.css";
 
 /** Past this many characters a run of whitespace is kept as it is but no longer marked. */
 const MARK_AT_MOST = 64;

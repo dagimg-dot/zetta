@@ -1,4 +1,5 @@
 import { Icon } from "../ui/icons";
+import "./unauthorized.css";
 
 export function Unauthorized() {
 	return (

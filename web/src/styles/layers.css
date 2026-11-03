@@ -1,0 +1,9 @@
+/* Floating layers: tooltips, menus, lists and popovers (Ark parts) */
+/* Ark portals each layer to the body and inlines --z-index: auto, so the stacking order is set here. */
+[data-part="positioner"] {
+	z-index: var(--z-popover);
+}
+
+[data-scope="tooltip"][data-part="positioner"] {
+	z-index: var(--z-tooltip);
+}

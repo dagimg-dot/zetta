@@ -10,6 +10,7 @@ import { Loading } from "../ui/Loading";
 import { Splitter } from "../ui/Splitter";
 import { tip } from "../ui/Tip";
 import { ThemeSwitch } from "./ThemeSwitch";
+import "./sidebar.css";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,

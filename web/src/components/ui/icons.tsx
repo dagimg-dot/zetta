@@ -1,4 +1,5 @@
 import type { JSX } from "solid-js";
+import "./loading.css";
 
 const paths = {
 	sort: () => <path d="M3.5 4.5 6 2l2.5 2.5M3.5 7.5 6 10l2.5-2.5" />,

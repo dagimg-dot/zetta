@@ -1,0 +1,138 @@
+.status {
+	margin-top: auto;
+	flex: none;
+	display: flex;
+	gap: var(--space-3);
+	align-items: center;
+	height: var(--foot-height);
+	padding: 0 var(--space-2) 0 var(--space-3);
+	border-top: 1px solid var(--border);
+	color: var(--text-secondary);
+	background: var(--surface-chrome);
+	font-size: var(--text-sm);
+}
+
+.st-loading {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1-5);
+	align-self: center;
+}
+
+.st-loading .loader {
+	color: var(--text-accent);
+}
+
+/* Status bar: what the grid holds, how long it took, and where you are in it */
+.st-summary {
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-1-5);
+	margin: 0;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.st-num {
+	color: var(--text);
+	font-weight: var(--weight-semibold);
+}
+
+.st-num.approx {
+	color: var(--text-secondary);
+	font-weight: var(--weight-medium);
+}
+
+.st-selected,
+.st-copied {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1-5);
+	margin-left: var(--space-3);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.st-selected .st-num {
+	color: var(--text-accent);
+}
+
+.st-clear {
+	display: inline-grid;
+	place-items: center;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--text-tertiary);
+	cursor: pointer;
+}
+
+.st-clear:hover {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.st-copied {
+	color: var(--text-success);
+	animation: pop-in var(--duration) var(--ease-out);
+}
+
+.st-dash {
+	margin: 0 -3px;
+	color: var(--text-tertiary);
+}
+
+.st-word,
+.st-note {
+	color: var(--text-secondary);
+}
+
+.st-strong {
+	color: var(--text);
+	font-weight: var(--weight-medium);
+}
+
+.st-sep {
+	align-self: center;
+	width: 3px;
+	height: 3px;
+	margin: 0 var(--space-1);
+	border-radius: var(--radius-full);
+	background: var(--border-strong);
+	flex: none;
+}
+
+.st-time {
+	color: var(--text-tertiary);
+}
+
+.st-pending {
+	color: var(--text-tertiary);
+}
+
+.st-warn {
+	color: var(--text-warning);
+	white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+	.status {
+		gap: var(--space-2);
+		padding-left: var(--space-3);
+	}
+
+	/* A selection says more than the page range, and there is room for only one. */
+	.status:has(.st-selected) .st-summary {
+		display: none;
+	}
+
+	.st-selected,
+	.st-copied {
+		margin-left: 0;
+	}
+}

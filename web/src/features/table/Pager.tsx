@@ -2,6 +2,7 @@ import { createEffect, createSignal } from "solid-js";
 import { Button } from "../../components/ui/Button";
 import { Choice } from "../../components/ui/Choice";
 import { pageSizes } from "../../stores/view";
+import "./pager.css";
 
 /**
  * Page size, first/previous/next/last and a page box you can type into. Without a known total,

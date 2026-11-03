@@ -2,6 +2,7 @@ import { Show } from "solid-js";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/icons";
 import type { Selection } from "./selection";
+import "./status.css";
 
 /** The status bar's selection count, or the note a copy just left. */
 export function SelectionNote(props: { selection: Selection; total: number }) {

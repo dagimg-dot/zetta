@@ -24,6 +24,7 @@ import { type Hidden, hiddenRuns } from "./hidden";
 import { Inspector, type InspectorAction } from "./Inspector";
 import { RowMenu, type RowTarget } from "./RowMenu";
 import type { Selection } from "./selection";
+import "./grid.css";
 
 export interface LinkTarget {
 	schema: string;

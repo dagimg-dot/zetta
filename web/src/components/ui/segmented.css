@@ -1,0 +1,33 @@
+.segmented {
+	display: inline-flex;
+	gap: var(--space-0-5);
+	margin: 0;
+	padding: var(--space-0-5);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	background: var(--surface-canvas);
+	min-width: 0;
+}
+
+.segmented .seg {
+	display: inline-flex;
+	padding: var(--space-1) var(--space-1-5);
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--text-secondary);
+	cursor: pointer;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.segmented .seg:hover {
+	color: var(--text);
+}
+
+.segmented .seg[aria-pressed="true"] {
+	background: var(--surface-raised);
+	color: var(--text-accent);
+	box-shadow: var(--shadow-raised);
+}

@@ -13,6 +13,7 @@ import { tip } from "../ui/Tip";
 import { Peek } from "./Peek";
 import type { PeekTarget } from "./referenced";
 import { withBreaks, withMarks } from "./values";
+import "./inspector.css";
 
 export interface InspectorAction {
 	label: string;

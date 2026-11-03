@@ -2,6 +2,7 @@ import { type JSX, Show, splitProps } from "solid-js";
 import { Icon, type IconName, Loader } from "./icons";
 import { Kbd } from "./Kbd";
 import { type TipSide, tip } from "./Tip";
+import "./button.css";
 
 /**
  * How a button looks. `bare` drops the shared look for a control drawn by its own class, such as

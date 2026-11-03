@@ -1,0 +1,66 @@
+/* Tooltip: inverted, with an arrow, sliding in from its trigger. */
+.tip {
+	--arrow-size: 7px;
+	--arrow-background: var(--text);
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	max-width: min(320px, calc(100vw - 16px));
+	padding: 5px var(--space-2);
+	border-radius: var(--radius-md);
+	background: var(--text);
+	color: var(--surface);
+	font-size: var(--text-xs);
+	font-weight: var(--weight-medium);
+	line-height: var(--leading-tight);
+	box-shadow: var(--shadow-overlay);
+	pointer-events: none;
+}
+
+/* Ark hides the closed tooltip with the hidden attribute, which display: flex would undo. */
+.tip[hidden] {
+	display: none;
+}
+
+.tip-label {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	white-space: pre-line;
+}
+
+.tip .keys kbd {
+	background: color-mix(in oklab, currentColor 16%, transparent);
+	box-shadow: none;
+	color: inherit;
+}
+
+.tip-arrow [data-part="arrow-tip"] {
+	border-radius: 1.5px;
+}
+
+.tip[data-side="top"] {
+	--from: translateY(3px);
+}
+
+.tip[data-side="bottom"] {
+	--from: translateY(-3px);
+}
+
+.tip[data-side="left"] {
+	--from: translateX(3px);
+}
+
+.tip[data-side="right"] {
+	--from: translateX(-3px);
+}
+
+.tip[data-state="open"] {
+	animation: tip-in 140ms var(--ease-out);
+}
+
+@keyframes tip-in {
+	from {
+		opacity: 0;
+		transform: var(--from);
+	}
+}

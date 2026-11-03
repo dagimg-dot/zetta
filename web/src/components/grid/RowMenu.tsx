@@ -5,6 +5,7 @@ import { Icon, type IconName } from "../ui/icons";
 import { Kbd } from "../ui/Kbd";
 import { type FormatId, formats } from "./formats";
 import type { InspectorAction } from "./Inspector";
+import "../ui/menu.css";
 
 export interface RowTarget {
 	/** Where the menu opens: the pointer, or the cursor cell for the keyboard. */

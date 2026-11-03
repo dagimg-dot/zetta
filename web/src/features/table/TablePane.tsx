@@ -14,6 +14,7 @@ import { Relationships } from "./Relationships";
 import { RowsPane } from "./RowsPane";
 import { StructurePane } from "./Structure";
 import { TriggersPane } from "./Triggers";
+import "./table.css";
 
 const kindLabel: Record<string, string> = {
 	table: "table",

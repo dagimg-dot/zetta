@@ -1,0 +1,109 @@
+.pager {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1-5);
+	flex: none;
+}
+
+.page-size .choice-trigger {
+	border-color: transparent;
+	background: none;
+	color: var(--text-secondary);
+	font-variant-numeric: tabular-nums;
+}
+
+.page-size .choice-trigger:hover {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.pager-group {
+	display: inline-flex;
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	align-items: stretch;
+	height: var(--control-height-sm);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	background: var(--surface);
+	box-shadow: var(--shadow-raised);
+}
+
+.pg-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--control-height-sm);
+	border: 0;
+	background: none;
+	color: var(--text-secondary);
+	cursor: pointer;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.pg-btn:first-of-type {
+	border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.pg-btn:last-of-type {
+	border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.pg-btn:hover:not(:disabled) {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.pg-btn:disabled {
+	color: var(--text-tertiary);
+	opacity: 0.45;
+	cursor: default;
+}
+
+.pg-page {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	padding: 0 var(--space-2);
+	border-inline: 1px solid var(--border-subtle);
+	color: var(--text-secondary);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.pg-page .pg-input {
+	width: auto;
+	height: auto;
+	min-width: 3ch;
+	padding: 1px var(--space-1);
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--text);
+	font-weight: var(--weight-semibold);
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.pg-page .pg-input:hover {
+	border-color: var(--border);
+}
+
+.pg-page .pg-input:focus-visible {
+	border-color: var(--accent);
+	background: var(--surface-field);
+}
+
+@media (max-width: 560px) {
+	.page-size,
+	.st-time,
+	.st-sep,
+	.pg-btn:first-of-type,
+	.pg-btn:last-of-type,
+	.status .wide-only {
+		display: none;
+	}
+}
