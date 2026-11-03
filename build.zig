@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     const ui = b.option(Ui, "ui", "How to get the web UI (default: bun)") orelse .bun;
     // Release builds never print stack traces, so they need no unwind tables (about 125 KB).
     const unwind: ?std.builtin.UnwindTables = if (optimize == .Debug) null else .none;
-    const strip = b.option(bool, "strip", "Strip symbols (default: on for release builds)");
+    const strip = b.option(bool, "strip", "Strip symbols (default: on for release builds)") orelse (optimize != .Debug);
     // Test-only: run the Postgres suite through libpq too and compare results.
     // Needs libpq installed; the zetta binary itself never links it.
     const pg_oracle = b.option(bool, "pg-oracle", "Also build the libpq differential tests (default: false)") orelse false;
