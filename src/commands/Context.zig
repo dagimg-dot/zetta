@@ -11,6 +11,7 @@ gpa: std.mem.Allocator,
 /// Lives until the process exits.
 arena: std.mem.Allocator,
 io: std.Io,
+env: *const std.process.Environ.Map,
 stdout: *std.Io.Writer,
 stderr: *std.Io.Writer,
 /// Whether stdout is a terminal that takes color.
@@ -44,7 +45,9 @@ pub fn openDatabase(ctx: *Context, text: []const u8, options: db.OpenOptions) un
         ),
     } };
     var diag: db.Diagnostic = .{};
-    const adapter = db.open(ctx.gpa, ctx.io, dsn, options, &diag) catch |err| {
+    var with_env = options;
+    with_env.env = ctx.env;
+    const adapter = db.open(ctx.gpa, ctx.io, dsn, with_env, &diag) catch |err| {
         var buf: [512]u8 = undefined;
         var w: std.Io.Writer = .fixed(&buf);
         db.dsn.redact(text, &w) catch {};

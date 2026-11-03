@@ -55,6 +55,7 @@ fn dispatch(init: std.process.Init, arena: std.mem.Allocator, stdout: *std.Io.Wr
                 .gpa = init.gpa,
                 .arena = arena,
                 .io = io,
+                .env = env,
                 .stdout = stdout,
                 .stderr = stderr,
                 .color_stdout = useColor(io, env, parsed.color, File.stdout()),

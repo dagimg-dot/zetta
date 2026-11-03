@@ -15,6 +15,10 @@ pub fn build(b: *std.Build) void {
     // Release builds never print stack traces, so they need no unwind tables (about 125 KB).
     const unwind: ?std.builtin.UnwindTables = if (optimize == .Debug) null else .none;
     const strip = b.option(bool, "strip", "Strip symbols (default: on for release builds)");
+    // Test-only: run the Postgres suite through libpq too and compare results.
+    // Needs libpq installed; the zetta binary itself never links it.
+    const pg_oracle = b.option(bool, "pg-oracle", "Also build the libpq differential tests (default: false)") orelse false;
+
     const options = b.addOptions();
     options.addOption([]const u8, "version", zon.version);
     const commit = b.option([]const u8, "commit", "Commit shown by --version (default: git rev-parse)");
@@ -31,7 +35,6 @@ pub fn build(b: *std.Build) void {
         .strip = strip,
         .link_libc = true,
     });
-    db.linkSystemLibrary("pq", .{});
     db.addIncludePath(b.path("vendor/sqlite3"));
     db.linkLibrary(sqlite);
 
@@ -113,6 +116,20 @@ pub fn build(b: *std.Build) void {
         const run = b.addRunArtifact(t);
         test_step.dependOn(&run.step);
         b.step(b.fmt("test-{s}", .{name}), b.fmt("Run the {s} tests", .{name})).dependOn(&run.step);
+    }
+
+    if (pg_oracle) {
+        const oracle = b.createModule(.{
+            .root_source_file = b.path("src/db/oracle.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        oracle.linkSystemLibrary("pq", .{});
+        oracle.addIncludePath(b.path("vendor/sqlite3"));
+        oracle.linkLibrary(sqlite);
+        const run = b.addRunArtifact(b.addTest(.{ .name = "pg-oracle", .root_module = oracle }));
+        b.step("test-oracle", "Compare the native Postgres adapter with libpq (needs ZETTA_TEST_PG_URL)").dependOn(&run.step);
     }
 
     const check = b.step("check", "zig fmt --check + full build");

@@ -75,6 +75,8 @@ pub const QueryOptions = struct {
 pub const OpenOptions = struct {
     read_only: bool = false,
     pool_size: usize = 4,
+    /// For PG* variables and the password file. Null means the environment is ignored.
+    env: ?*const @import("std").process.Environ.Map = null,
 };
 
 pub const Capabilities = struct {

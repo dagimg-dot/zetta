@@ -28,5 +28,10 @@ test {
     _ = @import("pool.zig");
     _ = @import("sqlite/Conn.zig");
     _ = @import("sqlite/Sqlite.zig");
+    _ = @import("postgres/conninfo.zig");
+    _ = @import("postgres/settings.zig");
+    _ = @import("postgres/auth.zig");
+    _ = @import("postgres/wire.zig");
+    _ = @import("postgres/Postgres.zig");
     _ = @import("conformance.zig");
 }

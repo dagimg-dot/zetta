@@ -1,4 +1,4 @@
-//! Postgres through libpq, behind a small connection pool.
+//! Postgres over the native wire protocol, behind a small connection pool.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -8,30 +8,71 @@ const Diagnostic = @import("../Diagnostic.zig");
 const types = @import("../types.zig");
 const Pool = @import("../pool.zig").Pool;
 const Conn = @import("Conn.zig");
+const conninfo = @import("conninfo.zig");
+const settings_mod = @import("settings.zig");
 const sql = @import("sql.zig");
-const c = @import("c.zig").c;
 
 const Postgres = @This();
 
 gpa: Allocator,
-conninfo: [:0]u8,
-pool: Pool(Conn),
-database: []u8,
+arena_state: std.heap.ArenaAllocator,
+settings: settings_mod.Settings,
+roots: Conn.Roots = .{},
+pool: Pool(PooledConn),
 read_only: bool,
 
+/// The pool hands out values; a Conn is already a pointer to its heap state.
+const PooledConn = struct {
+    conn: Conn,
+
+    pub const Config = Conn.Config;
+
+    pub fn connect(config: Config, diag: *Diagnostic) types.Error!PooledConn {
+        return .{ .conn = try Conn.connect(config, diag) };
+    }
+
+    pub fn close(self: *PooledConn) void {
+        self.conn.close();
+    }
+
+    pub fn healthy(self: *PooledConn) bool {
+        return self.conn.healthy();
+    }
+};
+
 /// Connects once up front so a bad DSN fails at startup, not on first use.
-pub fn open(gpa: Allocator, io: Io, conninfo: []const u8, options: types.OpenOptions, diag: *Diagnostic) types.Error!*Postgres {
+pub fn open(gpa: Allocator, io: Io, text: []const u8, options: types.OpenOptions, diag: *Diagnostic) types.Error!*Postgres {
     const self = try gpa.create(Postgres);
     errdefer gpa.destroy(self);
-    const owned = try gpa.dupeZ(u8, conninfo);
-    errdefer gpa.free(owned);
-    var pool: Pool(Conn) = try .init(gpa, io, .{ .conninfo = owned, .read_only = options.read_only }, @max(options.pool_size, 1));
-    errdefer pool.deinit(gpa);
+    self.* = .{
+        .gpa = gpa,
+        .arena_state = .init(gpa),
+        .settings = undefined,
+        .pool = undefined,
+        .read_only = options.read_only,
+    };
+    errdefer self.arena_state.deinit();
+    const arena = self.arena_state.allocator();
 
-    self.* = .{ .gpa = gpa, .conninfo = owned, .pool = pool, .database = &.{}, .read_only = options.read_only };
+    var parse_err: conninfo.ErrorText = .{};
+    const cfg = conninfo.parse(arena, text, &parse_err) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.InvalidConnInfo => {
+            diag.set(parse_err.message());
+            return error.ConnectFailed;
+        },
+    };
+    self.settings = settings_mod.resolve(arena, io, cfg, options.env, options.read_only, diag) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.InvalidSettings => return error.ConnectFailed,
+    };
+
+    self.pool = try .init(gpa, io, .{ .gpa = gpa, .io = io, .settings = &self.settings, .roots = &self.roots }, @max(options.pool_size, 1));
+    errdefer self.pool.deinit(gpa);
+    errdefer self.roots.deinit(gpa);
+
     const lease = try self.pool.acquire(diag);
-    defer lease.release();
-    self.database = try gpa.dupe(u8, lease.conn.database());
+    lease.release();
     return self;
 }
 
@@ -56,8 +97,8 @@ fn deinit(ptr: *anyopaque) void {
     const self = from(ptr);
     const gpa = self.gpa;
     self.pool.deinit(gpa);
-    gpa.free(self.database);
-    gpa.free(self.conninfo);
+    self.roots.deinit(gpa);
+    self.arena_state.deinit();
     gpa.destroy(self);
 }
 
@@ -65,33 +106,43 @@ fn info(ptr: *anyopaque) Adapter.Info {
     const self = from(ptr);
     return .{
         .name = .postgres,
-        .database = self.database,
+        .database = self.settings.dbname,
         .read_only = self.read_only,
         .capabilities = .{ .schemas = true, .approx_rows = true },
     };
 }
 
-fn catalog(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error!types.Catalog {
-    const self = from(ptr);
+fn run(self: *Postgres, arena: Allocator, text: []const u8, params: ?[]const Conn.Param, max_rows: usize, diag: *Diagnostic) types.Error!types.ResultSet {
     const lease = try self.pool.acquire(diag);
     defer lease.release();
-    const res = try lease.conn.exec(sql.catalog, &.{}, diag);
-    defer c.PQclear(res);
+    const conn = &lease.conn.conn;
+    defer if (conn.healthy() and conn.inTransaction()) {
+        // Each request stands alone: a BEGIN without COMMIT would otherwise hold its
+        // locks on a pooled connection and leak into whoever uses it next.
+        var scratch: Diagnostic = .{};
+        _ = conn.run(arena, "rollback", null, 0, &scratch) catch {};
+    };
+    return conn.run(arena, text, params, max_rows, diag);
+}
+
+fn catalog(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error!types.Catalog {
+    const self = from(ptr);
+    const res = try self.run(arena, sql.catalog, null, std.math.maxInt(usize), diag);
 
     var schemas: std.ArrayList(types.Schema) = .empty;
     var tables: std.ArrayList(types.Table) = .empty;
     var current: ?[]const u8 = null;
-    for (0..rowCount(res)) |r| {
-        const schema = value(res, r, 0).?;
+    for (res.rows) |row| {
+        const schema = row[0].?;
         if (current == null or !std.mem.eql(u8, current.?, schema)) {
             if (current) |name| try schemas.append(arena, .{ .name = name, .tables = try tables.toOwnedSlice(arena) });
-            current = try arena.dupe(u8, schema);
+            current = schema;
         }
-        const name = value(res, r, 1) orelse continue;
+        const name = row[1] orelse continue;
         try tables.append(arena, .{
-            .name = try arena.dupe(u8, name),
-            .kind = tableKind(value(res, r, 2).?),
-            .approx_rows = if (value(res, r, 3)) |v| std.fmt.parseInt(u64, v, 10) catch null else null,
+            .name = name,
+            .kind = tableKind(row[2].?),
+            .approx_rows = if (row[3]) |v| std.fmt.parseInt(u64, v, 10) catch null else null,
         });
     }
     if (current) |name| try schemas.append(arena, .{ .name = name, .tables = try tables.toOwnedSlice(arena) });
@@ -109,110 +160,59 @@ fn tableKind(relkind: []const u8) types.TableKind {
 
 fn columns(ptr: *anyopaque, arena: Allocator, table: types.TableRef, diag: *Diagnostic) types.Error![]const types.Column {
     const self = from(ptr);
-    const lease = try self.pool.acquire(diag);
-    defer lease.release();
-    const params = [_][:0]const u8{ try arena.dupeZ(u8, table.schema), try arena.dupeZ(u8, table.table) };
-    const res = try lease.conn.exec(sql.columns, &params, diag);
-    defer c.PQclear(res);
-
-    const n = rowCount(res);
-    if (n == 0) {
+    const res = try self.run(arena, sql.columns, &.{ table.schema, table.table }, std.math.maxInt(usize), diag);
+    if (res.rows.len == 0) {
         diag.print("no table named {s}.{s}", .{ table.schema, table.table });
         return error.NotFound;
     }
-    const out = try arena.alloc(types.Column, n);
-    for (out, 0..) |*col, r| {
+    const out = try arena.alloc(types.Column, res.rows.len);
+    for (out, res.rows) |*col, row| {
         col.* = .{
-            .name = try arena.dupe(u8, value(res, r, 0).?),
-            .type_name = try arena.dupe(u8, value(res, r, 1).?),
-            .nullable = isTrue(value(res, r, 2)),
-            .primary_key = isTrue(value(res, r, 3)),
-            .default = if (value(res, r, 4)) |d| try arena.dupe(u8, d) else null,
+            .name = row[0].?,
+            .type_name = row[1].?,
+            .nullable = isTrue(row[2]),
+            .primary_key = isTrue(row[3]),
+            .default = row[4],
         };
     }
     return out;
 }
 
+/// `name` becomes `"name"`, with embedded quotes doubled, as PQescapeIdentifier does.
+pub fn quoteIdent(arena: Allocator, ident: []const u8) Allocator.Error![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    try out.ensureTotalCapacity(arena, ident.len + 2);
+    out.appendAssumeCapacity('"');
+    for (ident) |ch| {
+        if (ch == '"') try out.append(arena, '"');
+        try out.append(arena, ch);
+    }
+    try out.append(arena, '"');
+    return out.items;
+}
+
 fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Diagnostic) types.Error!types.ResultSet {
     const self = from(ptr);
-    const lease = try self.pool.acquire(diag);
-    defer lease.release();
-
     var text: std.Io.Writer.Allocating = .init(arena);
     const w = &text.writer;
-    w.print("select * from {s}.{s}", .{
-        try lease.conn.quoteIdent(arena, req.table.schema, diag),
-        try lease.conn.quoteIdent(arena, req.table.table, diag),
-    }) catch return error.OutOfMemory;
+    w.print("select * from {s}.{s}", .{ try quoteIdent(arena, req.table.schema), try quoteIdent(arena, req.table.table) }) catch return error.OutOfMemory;
     if (req.filter) |f| if (f.len > 0) w.print(" where {s}", .{f}) catch return error.OutOfMemory;
     if (req.order) |o| if (o.len > 0) w.print(" order by {s}", .{o}) catch return error.OutOfMemory;
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
-
-    const res = try lease.conn.exec(try text.toOwnedSliceSentinel(0), &.{}, diag);
-    defer c.PQclear(res);
-    return resultSet(arena, lease.conn, res, req.limit, diag);
+    return self.run(arena, text.written(), null, req.limit, diag);
 }
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {
     const self = from(ptr);
-    const lease = try self.pool.acquire(diag);
-    defer lease.release();
-    const res = try lease.conn.exec(try arena.dupeZ(u8, text), &.{}, diag);
-    defer c.PQclear(res);
-    return resultSet(arena, lease.conn, res, options.max_rows, diag);
-}
-
-fn resultSet(arena: Allocator, conn: *Conn, res: *c.PGresult, max_rows: usize, diag: *Diagnostic) types.Error!types.ResultSet {
-    const ncols: usize = @intCast(c.PQnfields(res));
-    const total = rowCount(res);
-    const shown = @min(total, max_rows);
-
-    const cols = try arena.alloc(types.ResultColumn, ncols);
-    for (cols, 0..) |*col, k| {
-        col.* = .{
-            .name = try arena.dupe(u8, std.mem.span(c.PQfname(res, @intCast(k)))),
-            .type_name = try typeName(arena, conn, c.PQftype(res, @intCast(k)), diag),
-        };
-    }
-
-    const rows = try arena.alloc(types.Row, shown);
-    for (rows, 0..) |*row, r| {
-        const cells = try arena.alloc(?[]const u8, ncols);
-        for (cells, 0..) |*cell, k| cell.* = if (value(res, r, k)) |v| try arena.dupe(u8, v) else null;
-        row.* = cells;
-    }
-
-    const affected = std.mem.span(c.PQcmdTuples(res));
-    return .{
-        .columns = cols,
-        .rows = rows,
-        .row_count = if (c.PQresultStatus(res) == c.PGRES_TUPLES_OK) total else std.fmt.parseInt(u64, affected, 10) catch 0,
-        .truncated = total > shown,
-        .command = try arena.dupe(u8, std.mem.span(c.PQcmdStatus(res))),
-    };
-}
-
-fn typeName(arena: Allocator, conn: *Conn, oid: c.Oid, diag: *Diagnostic) types.Error![]const u8 {
-    if (sql.builtinTypeName(oid)) |name| return name;
-    var buf: [16]u8 = undefined;
-    const oid_text = std.fmt.bufPrintZ(&buf, "{d}", .{oid}) catch unreachable;
-    const res = try conn.exec(sql.type_name_lookup, &.{oid_text}, diag);
-    defer c.PQclear(res);
-    return arena.dupe(u8, value(res, 0, 0) orelse "unknown");
-}
-
-fn rowCount(res: *c.PGresult) usize {
-    return @intCast(c.PQntuples(res));
-}
-
-fn value(res: *c.PGresult, row: usize, col: usize) ?[]const u8 {
-    const r: c_int = @intCast(row);
-    const k: c_int = @intCast(col);
-    if (c.PQgetisnull(res, r, k) == 1) return null;
-    const len: usize = @intCast(c.PQgetlength(res, r, k));
-    return c.PQgetvalue(res, r, k)[0..len];
+    return self.run(arena, text, null, options.max_rows, diag);
 }
 
 fn isTrue(v: ?[]const u8) bool {
     return if (v) |s| s.len > 0 and s[0] == 't' else false;
+}
+
+test "identifiers are quoted with embedded quotes doubled" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    try std.testing.expectEqualStrings("\"we\"\"ird\"", try quoteIdent(arena_state.allocator(), "we\"ird"));
 }
