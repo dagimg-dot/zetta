@@ -20,8 +20,13 @@ export function isNumericType(type: string): boolean {
 	return numericTypes.some((n) => t.startsWith(n));
 }
 
-/** Postgres bytea and SQLite blobs both arrive as `\x` followed by hex. */
-export function isBlob(v: string): boolean {
+/**
+ * Postgres bytea and SQLite blobs both arrive as `\x` followed by hex. A declared type decides
+ * when there is one, so text that happens to look like that stays text; an untyped column, such
+ * as a SQLite expression, goes by the value alone.
+ */
+export function isBlob(v: string, type = ""): boolean {
+	if (type && !/blob|bytea|binary/i.test(type)) return false;
 	return v.length >= 2 && v[0] === "\\" && v[1] === "x" && /^\\x[0-9a-f]*$/i.test(v);
 }
 
@@ -39,9 +44,9 @@ export function parseJson(v: string): unknown | undefined {
 	}
 }
 
-export function kindOf(v: string | null): ValueKind {
+export function kindOf(v: string | null, type = ""): ValueKind {
 	if (v === null) return "null";
-	if (isBlob(v)) return "blob";
+	if (isBlob(v, type)) return "blob";
 	if (parseJson(v) !== undefined) return "json";
 	if (v.includes("\n")) return "multiline";
 	return "text";

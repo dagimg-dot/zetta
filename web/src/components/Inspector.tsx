@@ -105,7 +105,7 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	onCleanup(() => clearTimeout(timer));
 
-	const kind = createMemo(() => kindOf(props.cell.value));
+	const kind = createMemo(() => kindOf(props.cell.value, props.cell.type));
 	createEffect(on(kind, () => setMode("pretty"), { defer: true }));
 
 	const [refQuery, setRefQuery] = createSignal("");

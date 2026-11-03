@@ -133,18 +133,26 @@ export function SelectionNote(props: { selection: Selection; total: number }) {
 
 let gridSeq = 0;
 
+/** Longer values are not offered as filters: they would not fit in a URL. */
+const MAX_FILTER_VALUE = 1000;
+
 /** Rows drawn above and below the visible ones, so a fast scroll does not show blank space. */
 const OVERSCAN = 12;
 
 /** Body cells are built directly so large results do not create a reactive scope per cell. */
-function cell(v: string | null, numeric: boolean, link: boolean): HTMLTableCellElement {
+function cell(
+	v: string | null,
+	type: string,
+	numeric: boolean,
+	link: boolean,
+): HTMLTableCellElement {
 	const td = document.createElement("td");
 	if (v === null) {
 		td.className = "null";
 		td.textContent = "NULL";
 		return td;
 	}
-	if (isBlob(v)) {
+	if (isBlob(v, type)) {
 		const mark = document.createElement("span");
 		mark.className = "mark";
 		mark.textContent = `blob · ${formatBytes(blobBytes(v))}`;
@@ -290,7 +298,8 @@ export function Grid(props: {
 		for (const row of rows) {
 			for (let k = 0; k < row.length; k++) {
 				const v = row[k];
-				const n = v === null || v === undefined ? 4 : isBlob(v) ? 16 : Math.min(v.length, 60);
+				const blob = v != null && isBlob(v, columns[k]?.type);
+				const n = v === null || v === undefined ? 4 : blob ? 16 : Math.min(v.length, 60);
 				if (n > (widest[k] ?? 0)) widest[k] = n;
 			}
 		}
@@ -434,9 +443,14 @@ export function Grid(props: {
 		};
 	});
 
+	/** Whether a value can travel in a URL as a filter: blobs compare as bytes, and huge text will not fit. */
+	const filterable = (column: string, value: string | null) =>
+		value === null ||
+		(value.length <= MAX_FILTER_VALUE && !isBlob(value, props.columnInfo?.(column)?.type ?? ""));
+
 	const actionsFor = (column: string, value: string | null): InspectorAction[] => {
 		const links = props.links;
-		if (!links) return [];
+		if (!links || !filterable(column, value)) return [];
 		const out: InspectorAction[] = [
 			{
 				label: value === null ? `Rows where ${column} is null` : `Rows with this ${column}`,
@@ -459,7 +473,7 @@ export function Grid(props: {
 	/** One action per column elsewhere that points at this one, named by its table. */
 	const incomingFor = (column: string, value: string | null): InspectorAction[] => {
 		const links = props.links;
-		if (!links || value === null) return [];
+		if (!links || value === null || !filterable(column, value)) return [];
 		return links.incoming(column).map((ref) => ({
 			label: refName(ref, links.schema),
 			detail: ref.column,
@@ -472,7 +486,8 @@ export function Grid(props: {
 		const col = props.result.columns[at.col];
 		const value = props.result.rows[at.row]?.[at.col];
 		const target = col && props.links?.outgoing(col.name);
-		if (target && value !== undefined && value !== null) props.links?.follow(target, value);
+		if (target && value !== undefined && value !== null && filterable(col.name, value))
+			props.links?.follow(target, value);
 	};
 
 	const move = (dRow: number, dCol: number, toEdge = false) => {
@@ -1016,7 +1031,10 @@ export function Grid(props: {
 									const row = untrack(() => props.result.rows[r]) ?? [];
 									const num = untrack(numeric);
 									const link = untrack(linked);
-									const tds = row.map((v, k) => cell(v, num[k] ?? false, link[k] ?? false));
+									const cols = props.result.columns;
+									const tds = row.map((v, k) =>
+										cell(v, cols[k]?.type ?? "", num[k] ?? false, link[k] ?? false),
+									);
 									cells.set(r, tds);
 									onCleanup(() => {
 										if (cells.get(r) === tds) cells.delete(r);

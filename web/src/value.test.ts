@@ -9,6 +9,13 @@ describe("kindOf", () => {
 		expect(kindOf("a\nb")).toBe("multiline");
 		expect(kindOf("{not json")).toBe("text");
 	});
+
+	test("text shaped like a blob stays text when its column says so", () => {
+		expect(kindOf("\\x41", "text")).toBe("text");
+		expect(kindOf("\\x41", "bytea")).toBe("blob");
+		expect(kindOf("\\x41", "BLOB")).toBe("blob");
+		expect(kindOf("\\x41", "")).toBe("blob");
+	});
 });
 
 describe("did you mean", () => {
