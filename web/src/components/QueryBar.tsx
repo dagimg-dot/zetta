@@ -12,10 +12,9 @@ import {
 	type SortKey,
 } from "../query";
 import { createRequest } from "../request";
+import { Button } from "./Button";
 import { Choice } from "./Choice";
 import { type ColumnChoice, ColumnPicker } from "./ColumnPicker";
-import { Icon } from "./icons";
-import { Kbd } from "./Kbd";
 import { tip } from "./Tip";
 
 const placeholders: Record<Category, string> = {
@@ -117,29 +116,21 @@ export function QueryBar(props: {
 				when={!empty()}
 				fallback={
 					<div class="q-compact">
-						<button
-							type="button"
-							class="btn quiet"
+						<Button
+							variant="quiet"
+							icon="filter"
 							onClick={addFilter}
 							disabled={!props.columns.length}
 						>
-							<Icon name="filter" />
 							Filter
-						</button>
-						<button
-							type="button"
-							class="btn quiet"
-							onClick={addSort}
-							disabled={!props.columns.length}
-						>
-							<Icon name="sort" />
+						</Button>
+						<Button variant="quiet" icon="sort" onClick={addSort} disabled={!props.columns.length}>
 							Sort
-						</button>
+						</Button>
 						<span class="spacer" />
-						<button type="button" class="btn quiet" onClick={() => props.onEditSql()}>
-							<Icon name="code" />
+						<Button variant="quiet" icon="code" onClick={() => props.onEditSql()}>
 							Edit as SQL
-						</button>
+						</Button>
 					</div>
 				}
 			>
@@ -201,24 +192,22 @@ export function QueryBar(props: {
 														onInput={(e) => setFilter(i(), { v: e.currentTarget.value })}
 													/>
 												</Show>
-												<button
-													type="button"
+												<Button
+													variant="bare"
 													class="ico"
-													aria-label={`Remove the filter on ${f.c}`}
+													icon="close"
+													label={`Remove the filter on ${f.c}`}
 													onClick={() => props.onRemoveFilter(i())}
-												>
-													<Icon name="close" />
-												</button>
+												/>
 											</li>
 										);
 									}}
 								</For>
 							</ol>
 						</Show>
-						<button type="button" class="btn quiet q-add" onClick={addFilter}>
-							<Icon name="plus" />
+						<Button variant="quiet" class="q-add" icon="plus" onClick={addFilter}>
 							Add filter
-						</button>
+						</Button>
 					</section>
 
 					<section class="q-sorts" aria-label="Sort">
@@ -240,43 +229,39 @@ export function QueryBar(props: {
 												value={s.c}
 												onChange={(name) => setSort(i(), { c: name })}
 											/>
-											<button
-												type="button"
-												class="btn q-dir"
+											<Button
+												class="q-dir"
+												icon={s.d}
 												aria-label={`Direction: ${s.d === "asc" ? "ascending" : "descending"}`}
 												onClick={() => setSort(i(), { d: s.d === "asc" ? "desc" : "asc" })}
 											>
-												<Icon name={s.d} />
 												{s.d === "asc" ? "Ascending" : "Descending"}
-											</button>
+											</Button>
 											<Show when={props.draft.sorts.length > 1}>
-												<button
-													type="button"
+												<Button
+													variant="bare"
 													class="ico"
-													aria-label={`Move ${s.c} up`}
+													icon="up"
+													label={`Move ${s.c} up`}
 													disabled={i() === 0}
 													onClick={() => moveSort(i(), -1)}
-												>
-													<Icon name="up" />
-												</button>
+												/>
 											</Show>
-											<button
-												type="button"
+											<Button
+												variant="bare"
 												class="ico"
-												aria-label={`Remove the sort on ${s.c}`}
+												icon="close"
+												label={`Remove the sort on ${s.c}`}
 												onClick={() => props.onRemoveSort(i())}
-											>
-												<Icon name="close" />
-											</button>
+											/>
 										</li>
 									)}
 								</For>
 							</ol>
 						</Show>
-						<button type="button" class="btn quiet q-add" onClick={addSort}>
-							<Icon name="plus" />
+						<Button variant="quiet" class="q-add" icon="plus" onClick={addSort}>
 							Add sort
-						</button>
+						</Button>
 					</section>
 				</div>
 
@@ -284,23 +269,20 @@ export function QueryBar(props: {
 					<code class="q-sql" {...tip(sql())}>
 						{sql() || "No conditions yet"}
 					</code>
-					<button type="button" class="btn quiet" onClick={() => props.onEditSql()}>
-						<Icon name="code" />
+					<Button variant="quiet" icon="code" onClick={() => props.onEditSql()}>
 						Edit as SQL
-					</button>
-					<button type="button" class="btn quiet" onClick={() => props.onClear()}>
+					</Button>
+					<Button variant="quiet" onClick={() => props.onClear()}>
 						Clear
-					</button>
-					<button
-						type="button"
-						class="btn"
-						classList={{ primary: props.dirty }}
+					</Button>
+					<Button
+						variant={props.dirty ? "primary" : "default"}
+						kbd="Enter"
 						disabled={!props.dirty}
 						onClick={() => props.onApply()}
 					>
 						Apply
-						<Kbd keys="Enter" />
-					</button>
+					</Button>
 				</footer>
 			</Show>
 		</fieldset>

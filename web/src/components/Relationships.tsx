@@ -10,9 +10,10 @@ import {
 } from "solid-js";
 import type { RefAction, TableDetail } from "../api";
 import { openTable } from "../url";
+import { Button } from "./Button";
 import { Icon } from "./icons";
 import { RefActions } from "./TableInfo";
-import { IconButton, tip } from "./Tip";
+import { tip } from "./Tip";
 
 interface Edge {
 	key: string;
@@ -369,11 +370,11 @@ export function Relationships(props: { detail: TableDetail }) {
 												</span>
 												<RefActions onDelete={e.onDelete} onUpdate={e.onUpdate} />
 												<span class="spacer" />
-												<IconButton
-													class="btn quiet icon-only rel-open"
+												<Button
+													class="rel-open"
 													icon="go"
 													label={`Open ${e.schema}.${e.table}`}
-													placement="left"
+													tipSide="left"
 													onClick={() => openTable(e.schema, e.table)}
 												/>
 											</div>

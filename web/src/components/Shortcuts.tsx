@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { Icon } from "./icons";
+import { Button } from "./Button";
 import { Kbd } from "./Kbd";
 
 /** Each shortcut once: the keys, as `Mod+Enter`, and what they do. `click` adds a mouse click. */
@@ -60,9 +60,7 @@ export function Shortcuts(props: { ref: (el: HTMLDialogElement) => void }) {
 				<span id="shortcuts-title">Keyboard shortcuts</span>
 				<span class="spacer" />
 				<form method="dialog">
-					<button type="submit" class="btn quiet icon-only" aria-label="Close">
-						<Icon name="close" />
-					</button>
+					<Button type="submit" icon="close" label="Close" kbd="Esc" />
 				</form>
 			</header>
 			<dl>

@@ -1,7 +1,7 @@
 import { createEffect, createSignal } from "solid-js";
 import { pageSizes } from "../url";
+import { Button } from "./Button";
 import { Choice } from "./Choice";
-import { IconButton } from "./Tip";
 
 /**
  * Page size, first/previous/next/last and a page box you can type into. Without a known total,
@@ -53,21 +53,23 @@ export function Pager(props: {
 			/>
 			<fieldset class="pager-group">
 				<legend class="sr-only">Pages</legend>
-				<IconButton
+				<Button
+					variant="bare"
 					class="pg-btn"
 					icon="first"
 					label="First page"
-					placement="top"
+					tipSide="top"
 					disabled={props.busy || page() === 1}
 					onClick={() => go(1)}
 				/>
-				<IconButton
+				<Button
+					variant="bare"
 					class="pg-btn"
 					icon="prev"
 					label="Previous page"
 					kbd="["
-					name="prev-page"
-					placement="top"
+					data-name="prev-page"
+					tipSide="top"
 					disabled={props.busy || page() === 1}
 					onClick={() => go(page() - 1)}
 				/>
@@ -92,21 +94,23 @@ export function Pager(props: {
 					/>
 					<span class="pg-of">of {pages()?.toLocaleString() ?? "…"}</span>
 				</label>
-				<IconButton
+				<Button
+					variant="bare"
 					class="pg-btn"
 					icon="next"
 					label="Next page"
 					kbd="]"
-					name="next-page"
-					placement="top"
+					data-name="next-page"
+					tipSide="top"
 					disabled={props.busy || !hasNext()}
 					onClick={() => go(page() + 1)}
 				/>
-				<IconButton
+				<Button
+					variant="bare"
 					class="pg-btn"
 					icon="last"
 					label="Last page"
-					placement="top"
+					tipSide="top"
 					disabled={props.busy || pages() === null || page() === pages()}
 					onClick={() => go(pages() ?? page())}
 				/>

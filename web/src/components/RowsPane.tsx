@@ -16,6 +16,7 @@ import {
 import { createRequest } from "../request";
 import { openRowsWhere, openTable, setView, view } from "../url";
 import { closest, unknownColumn } from "../value";
+import { Button } from "./Button";
 import type { ColumnChoice } from "./ColumnPicker";
 import { ErrorBox } from "./ErrorBox";
 import {
@@ -26,11 +27,10 @@ import {
 	type Links,
 	SelectionNote,
 } from "./Grid";
-import { Icon, Loader } from "./icons";
+import { Loader } from "./icons";
 import { Loading } from "./Loading";
 import { Pager } from "./Pager";
 import { QueryBar } from "./QueryBar";
-import { tip } from "./Tip";
 
 export function RowsPane(props: {
 	schema: string;
@@ -367,18 +367,17 @@ export function RowsPane(props: {
 						onInput={(e) => setRawOrder(e.currentTarget.value)}
 						onKeyDown={(e) => e.key === "Enter" && applyRaw()}
 					/>
-					<button
-						type="button"
-						class="btn quiet"
+					<Button
+						variant="quiet"
+						icon="filter"
+						tip="Back to the filter and sort builder"
 						onClick={toBuilder}
-						{...tip("Back to the filter and sort builder")}
 					>
-						<Icon name="filter" />
 						Builder
-					</button>
-					<button type="button" class="btn" classList={{ primary: dirty() }} onClick={applyRaw}>
+					</Button>
+					<Button variant={dirty() ? "primary" : "default"} kbd="Enter" onClick={applyRaw}>
 						Apply
-					</button>
+					</Button>
 				</div>
 			</Show>
 
@@ -387,9 +386,7 @@ export function RowsPane(props: {
 					<ErrorBox error={err()} inline>
 						<Show when={suggestion()}>
 							{(s) => (
-								<button
-									type="button"
-									class="btn"
+								<Button
 									onClick={() => {
 										const swap = (t: string) => t.replaceAll(s().bad, s().fix);
 										const b = applied();
@@ -408,13 +405,12 @@ export function RowsPane(props: {
 								>
 									Use <span class="mono">{s().fix}</span> instead of{" "}
 									<span class="mono">{s().bad}</span>
-								</button>
+								</Button>
 							)}
 						</Show>
 						<Show when={query().q || query().filter || query().order}>
-							<button
-								type="button"
-								class="btn quiet"
+							<Button
+								variant="quiet"
 								onClick={() => {
 									setDraft(emptyBuilder);
 									setSqlMode(false);
@@ -422,7 +418,7 @@ export function RowsPane(props: {
 								}}
 							>
 								Clear filter and sort
-							</button>
+							</Button>
 						</Show>
 					</ErrorBox>
 				)}

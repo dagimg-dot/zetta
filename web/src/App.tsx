@@ -1,12 +1,12 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
 import { announce, announcement } from "./announce";
 import { getCatalog, getMeta, onUnauthorized } from "./api";
+import { Button } from "./components/Button";
 import { DataPane } from "./components/DataPane";
-import { Icon } from "./components/icons";
 import { Shortcuts } from "./components/Shortcuts";
 import { Sidebar } from "./components/Sidebar";
 import { SqlPane } from "./components/SqlPane";
-import { IconButton, TipLayer, tip } from "./components/Tip";
+import { TipLayer, tip } from "./components/Tip";
 import { Unauthorized } from "./components/Unauthorized";
 import { createRequest } from "./request";
 import { cycleTheme } from "./theme";
@@ -160,27 +160,25 @@ export function App() {
 				<div class="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />
 				<main>
 					<div class="tabs">
-						<button
-							type="button"
-							class="btn quiet icon-only menu-btn"
-							aria-label="Show tables"
+						<Button
+							class="menu-btn"
+							icon="menu"
+							iconSize={14}
+							label="Show tables"
 							aria-expanded={navOpen()}
 							onClick={() => setNavOpen(!navOpen())}
-						>
-							<Icon name="menu" size={14} />
-						</button>
+						/>
 						<div role="tablist" aria-label="View" style={{ display: "flex", gap: "2px" }}>
 							{tab("data", "Data")}
 							{tab("sql", "SQL")}
 						</div>
 						<span class="spacer" />
-						<IconButton
-							class="btn quiet icon-only tool"
+						<Button
+							class="tool"
 							icon="help"
-							size={14}
+							iconSize={14}
 							label="Keyboard shortcuts"
 							kbd="?"
-							placement="bottom"
 							onClick={() => shortcuts?.showModal()}
 						/>
 					</div>

@@ -2,10 +2,11 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { announce } from "../announce";
 import { inspectorWidth } from "../layout";
 import { blobBytes, formatBytes, hexDump, kindOf, parseJson } from "../value";
+import { Button } from "./Button";
 import { Icon, type IconName } from "./icons";
 import { Kbd } from "./Kbd";
 import { Splitter } from "./Splitter";
-import { IconButton, tip } from "./Tip";
+import { tip } from "./Tip";
 
 export interface InspectorAction {
 	label: string;
@@ -125,19 +126,14 @@ export function Inspector(props: { cell: InspectedCell; onClose: () => void }) {
 				</span>
 				<span class="type">{props.cell.type}</span>
 				<span class="spacer" />
-				<IconButton
+				<Button
 					icon={copied() ? "check" : "copy"}
 					label="Copy value"
 					kbd="C"
 					disabled={props.cell.value === null}
 					onClick={copy}
 				/>
-				<IconButton
-					icon="close"
-					label="Close inspector"
-					kbd="Esc"
-					onClick={() => props.onClose()}
-				/>
+				<Button icon="close" label="Close inspector" kbd="Esc" onClick={() => props.onClose()} />
 			</header>
 			<div class="facts">
 				<span>row {props.cell.row.toLocaleString()}</span>

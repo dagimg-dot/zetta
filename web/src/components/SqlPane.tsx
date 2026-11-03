@@ -4,9 +4,10 @@ import { runQuery } from "../api";
 import { formatMs, plural } from "../format";
 import { createRequest } from "../request";
 import { errorRange, isWrite } from "../value";
+import { Button } from "./Button";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
-import { Icon, Loader } from "./icons";
+import { Loader } from "./icons";
 import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
 
@@ -148,20 +149,16 @@ export function SqlPane(props: {
 				onKeyDown={onKey}
 			/>
 			<div class="bar">
-				<button
-					type="button"
-					class="btn"
-					classList={{ primary: !writes(), danger: writes() }}
-					disabled={query.loading() || !sql().trim()}
-					aria-busy={query.loading() || undefined}
+				<Button
+					variant={writes() ? "danger" : "primary"}
+					icon={writes() ? "warn" : "play"}
+					kbd="Mod+Enter"
+					busy={query.loading()}
+					disabled={!sql().trim()}
 					onClick={run}
 				>
-					<Show when={query.loading()} fallback={<Icon name={writes() ? "warn" : "play"} />}>
-						<Loader size={14} />
-					</Show>
 					{query.loading() ? "Running" : writes() ? "Run write" : "Run"}
-					<Kbd keys="Mod+Enter" />
-				</button>
+				</Button>
 				<Show
 					when={writes()}
 					fallback={<span class="hint">Select text to run only that statement</span>}
@@ -175,11 +172,7 @@ export function SqlPane(props: {
 				{(err) => (
 					<ErrorBox error={err()} inline>
 						<Show when={errorAt()}>
-							{(range) => (
-								<button type="button" class="btn" onClick={() => showError(range())}>
-									Show in editor
-								</button>
-							)}
+							{(range) => <Button onClick={() => showError(range())}>Show in editor</Button>}
 						</Show>
 					</ErrorBox>
 				)}

@@ -2,13 +2,14 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "../api";
 import { sidebarWidth } from "../layout";
 import { openTable, view } from "../url";
+import { Button } from "./Button";
 import { ErrorBox } from "./ErrorBox";
 import { Icon, Mark } from "./icons";
 import { Kbd } from "./Kbd";
 import { Loading } from "./Loading";
 import { Splitter } from "./Splitter";
 import { ThemeSwitch } from "./ThemeSwitch";
-import { IconButton, tip } from "./Tip";
+import { tip } from "./Tip";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,
@@ -109,10 +110,9 @@ export function Sidebar(props: {
 					<b>zetta</b>
 					<Show when={props.meta}>{(m) => <span class="version">{m().version}</span>}</Show>
 					<span class="spacer" />
-					<IconButton
+					<Button
 						icon="refresh"
 						label="Reload tables"
-						disabled={props.loading}
 						busy={props.loading}
 						onClick={() => props.onRefresh()}
 					/>

@@ -3,6 +3,7 @@ import { announce } from "../announce";
 import type { Constraint, IndexInfo, RefAction, TableDetail } from "../api";
 import { openTable } from "../url";
 import { formatBytes } from "../value";
+import { Button } from "./Button";
 import { copyText } from "./Inspector";
 import { Icon } from "./icons";
 import { tip } from "./Tip";
@@ -377,10 +378,9 @@ export function DdlPane(props: { detail: TableDetail }) {
 					{props.detail.ddl.split("\n").length.toLocaleString()} lines, rebuilt from the catalog
 				</span>
 				<span class="spacer" />
-				<button type="button" class="btn quiet" onClick={copy}>
-					<Icon name={copied() ? "check" : "copy"} />
+				<Button variant="quiet" icon={copied() ? "check" : "copy"} onClick={copy}>
 					{copied() ? "Copied" : "Copy"}
-				</button>
+				</Button>
 			</div>
 			{/* biome-ignore lint/a11y/noNoninteractiveTabindex: a long statement scrolls, and a scrollable region must be reachable by keyboard. */}
 			<pre class="def-block ddl-text" tabIndex={0}>

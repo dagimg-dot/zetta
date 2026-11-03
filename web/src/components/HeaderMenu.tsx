@@ -3,9 +3,9 @@ import { Popover } from "@ark-ui/solid/popover";
 import { batch, createEffect, createSignal, on, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { categoryOf, type Filter, type Op, opInfo, opsFor } from "../query";
+import { Button } from "./Button";
 import { Choice } from "./Choice";
 import { Icon, type IconName } from "./icons";
-import { Kbd } from "./Kbd";
 
 export interface HeaderTarget {
 	name: string;
@@ -220,10 +220,9 @@ export function HeaderMenu(props: {
 										<div class="filter-foot">
 											<span class="note">Adds to the filters above the grid.</span>
 											<span class="spacer" />
-											<button type="submit" class="btn primary">
+											<Button type="submit" variant="primary" kbd="Enter">
 												Apply
-												<Kbd keys="Enter" />
-											</button>
+											</Button>
 										</div>
 									</form>
 								)}

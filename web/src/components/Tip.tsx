@@ -1,7 +1,6 @@
 import { Tooltip as Ark, useTooltip } from "@ark-ui/solid/tooltip";
 import { createEffect, createSignal, on, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
-import { Icon, type IconName, Loader } from "./icons";
 import { Kbd } from "./Kbd";
 
 export type TipSide = "top" | "right" | "bottom" | "left";
@@ -163,40 +162,5 @@ export function TipLayer() {
 				</Ark.Positioner>
 			</Portal>
 		</Ark.RootProvider>
-	);
-}
-
-/** An icon-only button whose name shows as a tooltip on hover and keyboard focus. */
-export function IconButton(props: {
-	icon: IconName;
-	label: string;
-	kbd?: string;
-	size?: number;
-	class?: string;
-	pressed?: boolean;
-	disabled?: boolean;
-	/** Shows the loader in place of the icon while the button's work runs. */
-	busy?: boolean;
-	placement?: TipSide;
-	/** Set as data-name, for shortcuts that press the button. */
-	name?: string;
-	onClick: () => void;
-}) {
-	return (
-		<button
-			type="button"
-			class={props.class ?? "btn quiet icon-only"}
-			aria-label={props.label}
-			aria-pressed={props.pressed}
-			aria-busy={props.busy || undefined}
-			data-name={props.name}
-			disabled={props.disabled}
-			{...tip(props.label, props.kbd, props.placement ?? "bottom")}
-			onClick={() => props.onClick()}
-		>
-			<Show when={props.busy} fallback={<Icon name={props.icon} size={props.size} />}>
-				<Loader size={props.size ?? 12} />
-			</Show>
-		</button>
 	);
 }

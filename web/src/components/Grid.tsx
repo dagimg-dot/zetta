@@ -14,6 +14,7 @@ import type { Column, ResultColumn, ResultSet } from "../api";
 import { type FormatId, fileName, format, htmlTable, pick } from "../copy";
 import type { SortKey } from "../query";
 import { blobBytes, formatBytes, isBlob, isNumericType } from "../value";
+import { Button } from "./Button";
 import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu";
 import { copyRich, copyText, Inspector, type InspectorAction } from "./Inspector";
 import { Icon } from "./icons";
@@ -57,9 +58,9 @@ export function HiddenButton(props: { hidden: Hidden }) {
 	const n = () => props.hidden.hidden().size;
 	return (
 		<Show when={n()}>
-			<button type="button" class="btn quiet" onClick={() => props.hidden.clear()}>
+			<Button variant="quiet" onClick={() => props.hidden.clear()}>
 				Show {n()} hidden column{n() > 1 ? "s" : ""}
-			</button>
+			</Button>
 		</Show>
 	);
 }
@@ -103,14 +104,16 @@ export function SelectionNote(props: { selection: Selection; total: number }) {
 					<span class="st-selected">
 						<span class="st-num">{n().toLocaleString()}</span>
 						<span class="st-word">of {props.total.toLocaleString()} selected</span>
-						<button
-							type="button"
+						<Button
+							variant="bare"
 							class="st-clear"
-							aria-label="Clear the selection"
+							icon="close"
+							iconSize={10}
+							label="Clear the selection"
+							kbd="Esc"
+							tipSide="top"
 							onClick={() => props.selection.clear()}
-						>
-							<Icon name="close" size={10} />
-						</button>
+						/>
 					</span>
 				</Show>
 			}
@@ -869,16 +872,14 @@ export function Grid(props: {
 													<Show
 														when={!off()}
 														fallback={
-															<button
-																type="button"
+															<Button
+																variant="bare"
 																class="ico fold"
+																icon="unfold"
+																label={`Show column ${c.name}`}
 																data-expand={c.name}
-																aria-label={`Show column ${c.name}`}
-																{...tip(`Show column ${c.name}`, undefined, "bottom")}
 																onClick={() => toggleColumn(i(), c.name, false)}
-															>
-																<Icon name="unfold" />
-															</button>
+															/>
 														}
 													>
 														<Show
@@ -937,32 +938,30 @@ export function Grid(props: {
 															</span>
 														</Show>
 														<Show when={props.actions}>
-															<button
-																type="button"
+															<Button
+																variant="bare"
 																class="ico more"
 																classList={{ open: menu()?.name === c.name }}
+																icon="more"
+																label={`Column actions for ${c.name}`}
+																kbd="Shift+F10"
 																tabIndex={-1}
-																aria-label={`Column actions for ${c.name}`}
-																{...tip("Column actions", "Shift+F10", "bottom")}
 																aria-haspopup="menu"
 																onClick={(e) => {
 																	const th = e.currentTarget.closest("th");
 																	if (th) openMenu(c, th);
 																}}
-															>
-																<Icon name="more" />
-															</button>
+															/>
 														</Show>
-														<button
-															type="button"
+														<Button
+															variant="bare"
 															class="ico fold"
+															icon="fold"
+															label={`Hide column ${c.name}`}
+															kbd="H"
 															tabIndex={-1}
-															aria-label={`Hide column ${c.name}`}
-															{...tip("Hide column", "H", "bottom")}
 															onClick={() => toggleColumn(i(), c.name, true)}
-														>
-															<Icon name="fold" />
-														</button>
+														/>
 													</Show>
 												</div>
 											</th>
