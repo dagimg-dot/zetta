@@ -164,3 +164,51 @@ export function Mark(props: { size?: number }) {
 		</svg>
 	);
 }
+
+/** Wave timing from design/loader: one ripple every 1.6 s, each diagonal 0.09 s behind the last. */
+const WAVE = { dur: 1.6, step: 0.09 };
+
+/**
+ * The Grid Z loader, Wave variant: a diagonal ripple across the grid while the Z stays readable.
+ * It takes currentColor. At 24 px and below it draws on a 16 unit grid so no edge lands on half a
+ * pixel, and with reduced motion it rests on the full Z.
+ */
+export function Loader(props: { size?: number; class?: string }) {
+	const px = props.size ?? 16;
+	const small = px <= 24;
+	const g = small
+		? { vb: "0 0 16 16", o: 0.5, c: 3, gap: 1, r: 0.75 }
+		: { vb: "8 8 48 48", o: 10, c: 8, gap: 4, r: 2 };
+	const cells = [];
+	for (let row = 0; row < 4; row++) {
+		for (let col = 0; col < 4; col++) {
+			cells.push({
+				x: g.o + col * (g.c + g.gap),
+				y: g.o + row * (g.c + g.gap),
+				z: ON[row]?.includes(col) ?? false,
+				d: +((row + col) * WAVE.step - WAVE.dur).toFixed(3),
+			});
+		}
+	}
+	return (
+		<svg
+			class={`loader${small ? " sm" : ""}${props.class ? ` ${props.class}` : ""}`}
+			width={px}
+			height={px}
+			viewBox={g.vb}
+			aria-hidden="true"
+		>
+			{cells.map((c) => (
+				<rect
+					class={c.z ? "z" : "g"}
+					x={c.x}
+					y={c.y}
+					width={g.c}
+					height={g.c}
+					rx={g.r}
+					style={{ "--d": c.d }}
+				/>
+			))}
+		</svg>
+	);
+}

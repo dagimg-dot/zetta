@@ -1,7 +1,7 @@
 import { Tooltip } from "@ark-ui/solid/tooltip";
 import { type JSX, Show } from "solid-js";
 import { Portal } from "solid-js/web";
-import { Icon, type IconName } from "./icons";
+import { Icon, type IconName, Loader } from "./icons";
 
 /** Hover and focus delays shared by every tooltip, so moving along a toolbar feels like one control. */
 const timing = { openDelay: 450, closeDelay: 80 };
@@ -30,6 +30,8 @@ export function IconButton(props: {
 	class?: string;
 	pressed?: boolean;
 	disabled?: boolean;
+	/** Shows the loader in place of the icon while the button's work runs. */
+	busy?: boolean;
 	placement?: "top" | "bottom" | "left" | "right";
 	/** Set as data-name, for shortcuts that press the button. */
 	name?: string;
@@ -44,9 +46,12 @@ export function IconButton(props: {
 				aria-pressed={props.pressed}
 				data-name={props.name}
 				disabled={props.disabled}
+				aria-busy={props.busy || undefined}
 				onClick={() => props.onClick()}
 			>
-				<Icon name={props.icon} size={props.size} />
+				<Show when={props.busy} fallback={<Icon name={props.icon} size={props.size} />}>
+					<Loader size={props.size ?? 12} />
+				</Show>
 			</Tooltip.Trigger>
 			<TipContent label={props.label} kbd={props.kbd} />
 		</Tooltip.Root>

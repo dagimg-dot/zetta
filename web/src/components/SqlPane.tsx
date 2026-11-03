@@ -6,7 +6,8 @@ import { createRequest } from "../request";
 import { errorRange, isWrite } from "../value";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
-import { Icon } from "./icons";
+import { Icon, Loader } from "./icons";
+import { Loading } from "./Loading";
 
 const INDENT = "  ";
 
@@ -151,10 +152,13 @@ export function SqlPane(props: {
 					class="btn"
 					classList={{ primary: !writes(), danger: writes() }}
 					disabled={query.loading() || !sql().trim()}
+					aria-busy={query.loading() || undefined}
 					onClick={run}
 				>
-					<Icon name={writes() ? "warn" : "play"} />
-					{writes() ? "Run write" : "Run"}
+					<Show when={query.loading()} fallback={<Icon name={writes() ? "warn" : "play"} />}>
+						<Loader size={14} />
+					</Show>
+					{query.loading() ? "Running" : writes() ? "Run write" : "Run"}
 					<kbd>Ctrl ↵</kbd>
 				</button>
 				<Show
@@ -182,7 +186,14 @@ export function SqlPane(props: {
 			<Show
 				when={query.data()}
 				fallback={
-					<Show when={!query.loading() && !query.error()}>
+					<Show
+						when={!query.loading() && !query.error()}
+						fallback={
+							<Show when={query.loading()}>
+								<Loading label="Running query" />
+							</Show>
+						}
+					>
 						<div class="empty">
 							<strong>Run SQL against {props.database ?? "the database"}</strong>
 							<kbd>Ctrl</kbd> <kbd>↵</kbd> runs the editor, or only the selected text. Results are
@@ -208,7 +219,12 @@ export function SqlPane(props: {
 					when={!query.loading() && !query.error() && query.data()}
 					fallback={
 						<span class="st-note">
-							{query.loading() ? "Running…" : query.error() ? "Failed" : ""}
+							<Show when={query.loading()} fallback={query.error() ? "Failed" : ""}>
+								<span class="st-loading">
+									<Loader size={12} />
+									Running
+								</span>
+							</Show>
 						</span>
 					}
 				>

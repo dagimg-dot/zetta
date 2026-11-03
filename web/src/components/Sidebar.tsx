@@ -3,6 +3,7 @@ import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "
 import { openTable, view } from "../url";
 import { ErrorBox } from "./ErrorBox";
 import { Icon, Mark } from "./icons";
+import { Loading } from "./Loading";
 import { ThemeSwitch } from "./ThemeSwitch";
 import { IconButton } from "./Tip";
 
@@ -112,6 +113,7 @@ export function Sidebar(props: {
 						icon="refresh"
 						label="Reload tables"
 						disabled={props.loading}
+						busy={props.loading}
 						onClick={() => props.onRefresh()}
 					/>
 				</div>
@@ -159,7 +161,7 @@ export function Sidebar(props: {
 			<div class="tree" classList={{ flat: flat() }}>
 				<Show when={props.error}>{(err) => <ErrorBox error={err()} />}</Show>
 				<Show when={!props.catalog && props.loading}>
-					<div class="empty">Loading…</div>
+					<Loading label="Loading tables" size={24} />
 				</Show>
 				<Show when={props.catalog && !shown().length}>
 					<div class="empty">{query().trim() ? "No matching tables" : "No schemas"}</div>

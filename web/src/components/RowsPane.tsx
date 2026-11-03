@@ -24,7 +24,8 @@ import {
 	type Links,
 	SelectionNote,
 } from "./Grid";
-import { Icon } from "./icons";
+import { Icon, Loader } from "./icons";
+import { Loading } from "./Loading";
 import { Pager } from "./Pager";
 import { QueryBar } from "./QueryBar";
 
@@ -386,7 +387,7 @@ export function RowsPane(props: {
 				when={result()}
 				fallback={
 					<Show when={rows.loading()}>
-						<div class="empty">Loading…</div>
+						<Loading label="Loading rows" />
 					</Show>
 				}
 			>
@@ -412,7 +413,14 @@ export function RowsPane(props: {
 			<div class="status">
 				<Show
 					when={result()}
-					fallback={<span class="st-note">{rows.loading() ? "Loading rows…" : ""}</span>}
+					fallback={
+						<Show when={rows.loading()}>
+							<span class="st-note st-loading">
+								<Loader size={12} />
+								Loading rows
+							</span>
+						</Show>
+					}
 				>
 					{(r) => {
 						const offset = () => rows.dataKey()?.offset ?? 0;
@@ -432,11 +440,19 @@ export function RowsPane(props: {
 										<Show
 											when={total()}
 											fallback={
-												<span class="st-pending" classList={{ counting: counter.loading() }}>
-													{counter.error()?.code === "timeout"
-														? `${(offset() + r().rows.length).toLocaleString()}+`
-														: "counting"}
-												</span>
+												<Show
+													when={counter.error()?.code !== "timeout"}
+													fallback={
+														<span class="st-pending">
+															{(offset() + r().rows.length).toLocaleString()}+
+														</span>
+													}
+												>
+													<span class="st-pending st-loading">
+														<Loader size={12} />
+														counting
+													</span>
+												</Show>
 											}
 										>
 											{(t) => (
@@ -450,7 +466,15 @@ export function RowsPane(props: {
 									<span class="st-word">{filtered() ? "matching rows" : "rows"}</span>
 								</Show>
 								<span class="st-sep" aria-hidden="true" />
-								<span class="st-time">{formatMs(r().elapsedMs)}</span>
+								<Show
+									when={rows.loading()}
+									fallback={<span class="st-time">{formatMs(r().elapsedMs)}</span>}
+								>
+									<span class="st-time st-loading">
+										<Loader size={12} />
+										<span class="sr-only">Loading rows</span>
+									</span>
+								</Show>
 								<Show when={rows.error()}>
 									<span class="st-warn">last good result</span>
 								</Show>

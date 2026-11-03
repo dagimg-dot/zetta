@@ -5,6 +5,7 @@ import { type Pane, setView, view } from "../url";
 import { formatBytes } from "../value";
 import { ErrorBox } from "./ErrorBox";
 import { Icon } from "./icons";
+import { Loading } from "./Loading";
 import { Relationships } from "./Relationships";
 import { RowsPane } from "./RowsPane";
 import { DdlPane, IndexesPane, StructurePane, TriggersPane } from "./TableInfo";
@@ -195,7 +196,7 @@ export function DataPane(props: {
 									<Show
 										when={current()}
 										fallback={
-											<Show when={detail.error()} fallback={<div class="empty">Loading…</div>}>
+											<Show when={detail.error()} fallback={<Loading label="Loading table" />}>
 												{(err) => <ErrorBox error={err()} />}
 											</Show>
 										}
