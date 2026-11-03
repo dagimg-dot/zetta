@@ -6,7 +6,7 @@
 #
 #   docker build -t zetta --build-arg ZETTA_COMMIT=$(git rev-parse --short HEAD) .
 #   docker buildx build --platform linux/amd64,linux/arm64 -t zetta .
-#   docker run --rm -p 7777:7777 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://... zetta
+#   docker run --rm -p 1993:1993 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://... zetta
 #
 # The container listens on 0.0.0.0, so zetta refuses to start without ZETTA_TOKEN.
 
@@ -62,7 +62,7 @@ COPY --from=build /src/zig-out/bin/zetta /zetta
 USER 65532:65532
 ENV HOME=/ \
     ZETTA_HOST=0.0.0.0 \
-    ZETTA_PORT=7777
-EXPOSE 7777
+    ZETTA_PORT=1993
+EXPOSE 1993
 ENTRYPOINT ["/zetta"]
 CMD ["serve"]

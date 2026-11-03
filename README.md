@@ -97,14 +97,14 @@ docker build -t zetta --build-arg ZETTA_COMMIT=$(git rev-parse --short HEAD) .
 ```
 
 ```sh
-docker run --rm -p 7777:7777 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://user:password@db:5432/app zetta
+docker run --rm -p 1993:1993 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://user:password@db:5432/app zetta
 ```
 
 ```sh
-docker run --rm -p 7777:7777 -e ZETTA_TOKEN=change-me -v "$PWD/app.db:/data/app.db:ro" zetta serve /data/app.db --read-only
+docker run --rm -p 1993:1993 -e ZETTA_TOKEN=change-me -v "$PWD/app.db:/data/app.db:ro" zetta serve /data/app.db --read-only
 ```
 
-Inside the container zetta listens on `0.0.0.0`, so it refuses to start without `ZETTA_TOKEN`. Open `http://localhost:7777/?token=<your token>`. The CLI works too: `docker run --rm zetta query <dsn> "select 1"`.
+Inside the container zetta listens on `0.0.0.0`, so it refuses to start without `ZETTA_TOKEN`. Open `http://localhost:1993/?token=<your token>`. The CLI works too: `docker run --rm zetta query <dsn> "select 1"`.
 
 ## Shell completion
 
@@ -122,5 +122,5 @@ zig build test    # unit tests and the adapter conformance suite
 ZETTA_TEST_PG_URL=postgres://... zig build test   # also run the suite on Postgres
 ZETTA_TEST_PG_URL=postgres://... zig build test-oracle -Dpg-oracle=true   # compare with libpq, needs libpq installed
 dev/pg-matrix.sh  # auth methods, TLS and sslmode against real servers in Docker
-cd web && bun run dev   # UI dev server, proxies /api to zetta on port 7777
+cd web && bun run dev   # UI dev server, proxies /api to zetta on port 1993
 ```

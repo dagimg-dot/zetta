@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
 		server: {
 			proxy: {
 				"/api": {
-					target: "http://127.0.0.1:7777",
+					target: "http://127.0.0.1:1993",
 					changeOrigin: true,
 					headers: env.ZETTA_TOKEN ? { cookie: `zetta=${env.ZETTA_TOKEN}` } : {},
 				},
