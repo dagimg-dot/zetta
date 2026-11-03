@@ -842,9 +842,24 @@ th.collapsed .ico.fold {
 }
 
 .grid td.cur,
-.grid tbody tr:hover td.cur {
+.grid tbody tr:hover td.cur,
+.grid tbody tr.sel td.cur {
 	background: var(--surface-cursor);
 	box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.grid tr.sel td,
+.grid tbody tr.sel:hover td {
+	background: var(--surface-selected);
+}
+
+.grid tr.sel td.rn {
+	color: var(--text-accent);
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.grid td.rn {
+	cursor: pointer;
 }
 
 .grid tr.cur-row td.rn {
@@ -2106,6 +2121,11 @@ button.rel-node:hover,
 	outline: none;
 }
 
+/* Ark moves focus onto the panel itself; the highlighted item already shows where the keyboard is. */
+.pop[tabindex]:focus-visible {
+	outline: none;
+}
+
 .pop.list {
 	max-height: min(320px, var(--available-height, 320px));
 	overflow-y: auto;
@@ -2208,6 +2228,26 @@ button.rel-node:hover,
 
 .pop-item[data-highlighted] .pop-icon {
 	color: var(--text-accent);
+}
+
+.pop-kbd,
+.pop-sub {
+	flex: none;
+	margin-left: var(--space-3);
+	color: var(--text-tertiary);
+}
+
+.pop-kbd {
+	padding: 0;
+	border: 0;
+	background: none;
+	box-shadow: none;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+}
+
+.pop-item[data-state="open"] {
+	background: var(--surface-hover);
 }
 
 .pop-empty {
@@ -2415,6 +2455,43 @@ th:focus-within .ico.more,
 .st-num.approx {
 	color: var(--text-secondary);
 	font-weight: var(--weight-medium);
+}
+
+.st-selected,
+.st-copied {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-left: var(--space-3);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.st-selected .st-num {
+	color: var(--text-accent);
+}
+
+.st-clear {
+	display: inline-grid;
+	place-items: center;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--text-tertiary);
+	cursor: pointer;
+}
+
+.st-clear:hover {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.st-copied {
+	color: var(--text-success);
+	animation: pop-in var(--duration) var(--ease-out);
 }
 
 .st-dash {

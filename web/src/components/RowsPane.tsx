@@ -16,7 +16,14 @@ import { openRowsWhere, openTable, setView, view } from "../url";
 import { closest, unknownColumn } from "../value";
 import type { ColumnChoice } from "./ColumnPicker";
 import { ErrorBox } from "./ErrorBox";
-import { createHidden, Grid, HiddenButton, type Links } from "./Grid";
+import {
+	createHidden,
+	createSelection,
+	Grid,
+	HiddenButton,
+	type Links,
+	SelectionNote,
+} from "./Grid";
 import { Icon } from "./icons";
 import { Pager } from "./Pager";
 import { QueryBar } from "./QueryBar";
@@ -30,6 +37,7 @@ export function RowsPane(props: {
 	filterRef?: (el: HTMLInputElement) => void;
 }) {
 	const hidden = createHidden();
+	const selection = createSelection();
 	const applied = createMemo(() => decodeBuilder(view().q));
 	const raw = createMemo(() => !view().q && (view().filter !== "" || view().order !== ""));
 	const [sqlMode, setSqlMode] = createSignal(raw());
@@ -387,6 +395,7 @@ export function RowsPane(props: {
 						<Grid
 							result={r()}
 							hidden={hidden}
+							selection={selection}
 							label={`${props.schema}.${props.table}`}
 							offset={rows.dataKey()?.offset ?? 0}
 							sorts={applied()?.sorts ?? []}
@@ -449,6 +458,7 @@ export function RowsPane(props: {
 						);
 					}}
 				</Show>
+				<SelectionNote selection={selection} total={result()?.rows.length ?? 0} />
 				<span class="spacer" />
 				<HiddenButton hidden={hidden} />
 				<Show when={result()}>

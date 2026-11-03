@@ -5,7 +5,7 @@ import { formatMs, plural } from "../format";
 import { createRequest } from "../request";
 import { errorRange, isWrite } from "../value";
 import { ErrorBox } from "./ErrorBox";
-import { createHidden, Grid, HiddenButton } from "./Grid";
+import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
 import { Icon } from "./icons";
 
 const INDENT = "  ";
@@ -38,6 +38,7 @@ export function SqlPane(props: {
 	const [sql, setSql] = createSignal("");
 	const [ran, setRan] = createSignal("");
 	const hidden = createHidden();
+	const selection = createSelection();
 	const query = createRequest(runQuery);
 
 	createEffect(
@@ -192,7 +193,13 @@ export function SqlPane(props: {
 			>
 				{(r) => (
 					<div class="pane" classList={{ busy: query.loading() }}>
-						<Grid result={r()} hidden={hidden} label="Query result" stale={!!query.error()} />
+						<Grid
+							result={r()}
+							hidden={hidden}
+							selection={selection}
+							label="Query result"
+							stale={!!query.error()}
+						/>
 					</div>
 				)}
 			</Show>
@@ -222,6 +229,7 @@ export function SqlPane(props: {
 				<Show when={!query.loading() && !query.error() && query.data()?.truncated}>
 					<span class="warn">showing the first {query.data()?.rows.length.toLocaleString()}</span>
 				</Show>
+				<SelectionNote selection={selection} total={query.data()?.rows.length ?? 0} />
 				<span class="spacer" />
 				<HiddenButton hidden={hidden} />
 			</div>
