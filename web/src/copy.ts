@@ -85,13 +85,21 @@ export function jsonValue(v: string | null, category: Category): string {
 	return JSON.stringify(v);
 }
 
-/** Keys for each column; a repeated name, as from a join, gets a suffix so no value is lost. */
+/**
+ * Keys for each column; a repeated name, as from a join, gets a suffix so no value is lost. The
+ * suffix skips names already taken, so a real column called `a_2` keeps its own value.
+ */
 function keys(t: Rows): string[] {
-	const seen = new Map<string, number>();
+	const taken = new Set(t.columns.map((c) => c.name));
+	const used = new Set<string>();
 	return t.columns.map((c) => {
-		const n = (seen.get(c.name) ?? 0) + 1;
-		seen.set(c.name, n);
-		return JSON.stringify(n === 1 ? c.name : `${c.name}_${n}`);
+		let key = c.name;
+		for (let n = 2; used.has(key); n++) {
+			const next = `${c.name}_${n}`;
+			if (!taken.has(next)) key = next;
+		}
+		used.add(key);
+		return JSON.stringify(key);
 	});
 }
 

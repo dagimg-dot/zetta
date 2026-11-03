@@ -62,6 +62,18 @@ describe("JSON", () => {
 		expect(JSON.parse(write("json", t))).toEqual({ id: 1, id_2: 2 });
 	});
 
+	test("a suffix never takes the name of a real column", () => {
+		const t: Rows = {
+			columns: [
+				{ name: "a", type: "int" },
+				{ name: "a", type: "int" },
+				{ name: "a_2", type: "int" },
+			],
+			rows: [["1", "2", "3"]],
+		};
+		expect(JSON.parse(write("json", t))).toEqual({ a: 1, a_3: 2, a_2: 3 });
+	});
+
 	test("JSON lines put each row on one line", () => {
 		const lines = write("jsonl").split("\n");
 		expect(lines.length).toBe(3);
