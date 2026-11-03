@@ -142,25 +142,32 @@ export function TipLayer() {
 		}),
 	);
 
+	/** A modal dialog sits in the top layer, above any z-index, so a tip for its controls goes inside it. */
+	const host = () => shown()?.el.closest<HTMLElement>("dialog[open]") ?? document.body;
+
 	return (
 		<Ark.RootProvider value={api} lazyMount>
-			<Portal>
-				<Ark.Positioner>
-					<Ark.Content class="tip">
-						<Ark.Arrow class="tip-arrow">
-							<Ark.ArrowTip />
-						</Ark.Arrow>
-						<Show when={shown()}>
-							{(s) => (
-								<>
-									<span class="tip-label">{s().label}</span>
-									<Show when={s().kbd}>{(k) => <Kbd keys={k()} />}</Show>
-								</>
-							)}
-						</Show>
-					</Ark.Content>
-				</Ark.Positioner>
-			</Portal>
+			<Show when={host()} keyed>
+				{(mount) => (
+					<Portal mount={mount}>
+						<Ark.Positioner>
+							<Ark.Content class="tip">
+								<Ark.Arrow class="tip-arrow">
+									<Ark.ArrowTip />
+								</Ark.Arrow>
+								<Show when={shown()}>
+									{(s) => (
+										<>
+											<span class="tip-label">{s().label}</span>
+											<Show when={s().kbd}>{(k) => <Kbd keys={k()} />}</Show>
+										</>
+									)}
+								</Show>
+							</Ark.Content>
+						</Ark.Positioner>
+					</Portal>
+				)}
+			</Show>
 		</Ark.RootProvider>
 	);
 }
