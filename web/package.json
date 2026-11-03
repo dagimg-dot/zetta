@@ -1,0 +1,21 @@
+{
+	"name": "zetta-web",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"check": "tsc --noEmit && biome check .",
+		"fmt": "biome format --write ."
+	},
+	"dependencies": {
+		"solid-js": "^1.9.18"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.6.4",
+		"typescript": "^7.0.2",
+		"vite": "^8.3.5",
+		"vite-plugin-singlefile": "^2.3.4",
+		"vite-plugin-solid": "^2.11.15"
+	}
+}
