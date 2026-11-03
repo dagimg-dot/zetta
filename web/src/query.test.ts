@@ -1,5 +1,12 @@
-import { expect, test } from "bun:test";
-import { categoryOf, decodeBuilder, encodeBuilder, toggleSort } from "./query";
+import { describe, expect, test } from "bun:test";
+import {
+	categoryOf,
+	decodeBuilder,
+	dropFilter,
+	dropSort,
+	encodeBuilder,
+	toggleSort,
+} from "./query";
 
 test("header clicks cycle a column, shift adds a secondary key", () => {
 	expect(toggleSort([], "a", false)).toEqual([{ c: "a", d: "asc" }]);
@@ -30,4 +37,31 @@ test("column types map to operator families", () => {
 	expect(categoryOf("jsonb")).toBe("json");
 	expect(categoryOf("boolean")).toBe("bool");
 	expect(categoryOf("point")).toBe("other");
+});
+
+describe("removing a builder row", () => {
+	const applied = {
+		match: "all" as const,
+		filters: [
+			{ c: "status", op: "eq" as const, v: "paid" },
+			{ c: "total", op: "gt" as const, v: "10" },
+		],
+		sorts: [{ c: "id", d: "desc" as const }],
+	};
+
+	test("an applied filter comes out of what runs", () => {
+		expect(dropFilter(applied, { c: "status", op: "eq", v: "paid" })?.filters).toEqual([
+			{ c: "total", op: "gt", v: "10" },
+		]);
+	});
+
+	test("a filter only in the draft reloads nothing", () => {
+		expect(dropFilter(applied, { c: "status", op: "eq", v: "pending" })).toBeNull();
+		expect(dropFilter(null, { c: "status", op: "eq", v: "paid" })).toBeNull();
+	});
+
+	test("an applied sort comes out, and an unapplied one reloads nothing", () => {
+		expect(dropSort(applied, "id")?.sorts).toEqual([]);
+		expect(dropSort(applied, "name")).toBeNull();
+	});
 });

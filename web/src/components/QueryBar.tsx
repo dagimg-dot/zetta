@@ -35,6 +35,9 @@ export function QueryBar(props: {
 	onApply: () => void;
 	onRevert: () => void;
 	onClear: () => void;
+	/** Removing a filter or sort reloads the rows at once, as Clear does; it needs no Apply. */
+	onRemoveFilter: (i: number) => void;
+	onRemoveSort: (i: number) => void;
 	onEditSql: () => void;
 }) {
 	const typeOf = (name: string) => props.columns.find((c) => c.name === name)?.type ?? "";
@@ -202,9 +205,7 @@ export function QueryBar(props: {
 													type="button"
 													class="ico"
 													aria-label={`Remove the filter on ${f.c}`}
-													onClick={() =>
-														update({ filters: props.draft.filters.filter((_, k) => k !== i()) })
-													}
+													onClick={() => props.onRemoveFilter(i())}
 												>
 													<Icon name="close" />
 												</button>
@@ -263,9 +264,7 @@ export function QueryBar(props: {
 												type="button"
 												class="ico"
 												aria-label={`Remove the sort on ${s.c}`}
-												onClick={() =>
-													update({ sorts: props.draft.sorts.filter((_, k) => k !== i()) })
-												}
+												onClick={() => props.onRemoveSort(i())}
 											>
 												<Icon name="close" />
 											</button>

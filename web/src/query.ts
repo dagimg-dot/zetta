@@ -149,6 +149,22 @@ export function decodeBuilder(text: string | null): Builder | null {
 	}
 }
 
+/**
+ * The applied builder without one filter, found by its column, condition and value, since the draft
+ * may have reordered or added rows. Null when that filter was never applied, so nothing reloads.
+ */
+export function dropFilter(applied: Builder | null, f: Filter): Builder | null {
+	const i = applied?.filters.findIndex((x) => x.c === f.c && x.op === f.op && x.v === f.v) ?? -1;
+	if (!applied || i < 0) return null;
+	return { ...applied, filters: applied.filters.filter((_, k) => k !== i) };
+}
+
+/** The applied builder without the sort on one column, or null when it was never applied. */
+export function dropSort(applied: Builder | null, column: string): Builder | null {
+	if (!applied?.sorts.some((s) => s.c === column)) return null;
+	return { ...applied, sorts: applied.sorts.filter((s) => s.c !== column) };
+}
+
 /** Header clicks: a plain click sorts by that column alone, shift-click adds or flips it. */
 export function toggleSort(sorts: SortKey[], col: string, additive: boolean): SortKey[] {
 	const at = sorts.findIndex((s) => s.c === col);

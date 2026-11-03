@@ -5,6 +5,8 @@ import { formatMs } from "../format";
 import {
 	type Builder,
 	decodeBuilder,
+	dropFilter,
+	dropSort,
 	emptyBuilder,
 	encodeBuilder,
 	type Filter,
@@ -47,7 +49,18 @@ export function RowsPane(props: {
 	const [rawFilter, setRawFilter] = createSignal(view().filter);
 	const [rawOrder, setRawOrder] = createSignal(view().order);
 
-	createEffect(on(applied, (b) => setDraft(b ?? emptyBuilder), { defer: true }));
+	/** The draft to show after the next apply, when an apply should keep edits not yet applied. */
+	let keepDraft: Builder | null = null;
+	createEffect(
+		on(
+			applied,
+			(b) => {
+				setDraft(keepDraft ?? b ?? emptyBuilder);
+				keepDraft = null;
+			},
+			{ defer: true },
+		),
+	);
 	createEffect(on(raw, (r) => r && setSqlMode(true), { defer: true }));
 	createEffect(
 		on(
@@ -105,6 +118,19 @@ export function RowsPane(props: {
 		);
 	const applyRaw = () =>
 		setView({ q: "", filter: rawFilter().trim(), order: rawOrder().trim(), offset: 0 });
+
+	/**
+	 * Takes a row out of the builder. If it was applied, the rows reload without it straight away;
+	 * other edits still waiting for Apply stay in the builder either way.
+	 */
+	const removeRow = (next: Builder, reload: Builder | null) => {
+		if (!reload) {
+			setDraft(next);
+			return;
+		}
+		keepDraft = next;
+		applyBuilder(reload);
+	};
 
 	const dirty = () =>
 		sqlMode()
@@ -294,6 +320,24 @@ export function RowsPane(props: {
 						onClear={() => {
 							setDraft(emptyBuilder);
 							applyBuilder(emptyBuilder);
+						}}
+						onRemoveFilter={(i) => {
+							const d = draft();
+							const f = d.filters[i];
+							if (!f) return;
+							removeRow(
+								{ ...d, filters: d.filters.filter((_, k) => k !== i) },
+								dropFilter(applied(), f),
+							);
+						}}
+						onRemoveSort={(i) => {
+							const d = draft();
+							const s = d.sorts[i];
+							if (!s) return;
+							removeRow(
+								{ ...d, sorts: d.sorts.filter((_, k) => k !== i) },
+								dropSort(applied(), s.c),
+							);
 						}}
 						onEditSql={toSql}
 					/>
