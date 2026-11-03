@@ -4,6 +4,8 @@ import solid from "vite-plugin-solid";
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, ".", "ZETTA_");
+	// The zetta to proxy to; its session cookie is named after its port.
+	const port = env.ZETTA_PORT || "1993";
 	return {
 		plugins: [solid(), viteSingleFile()],
 		build: {
@@ -14,9 +16,9 @@ export default defineConfig(({ mode }) => {
 		server: {
 			proxy: {
 				"/api": {
-					target: "http://127.0.0.1:1993",
+					target: `http://127.0.0.1:${port}`,
 					changeOrigin: true,
-					headers: env.ZETTA_TOKEN ? { cookie: `zetta=${env.ZETTA_TOKEN}` } : {},
+					headers: env.ZETTA_TOKEN ? { cookie: `zetta_${port}=${env.ZETTA_TOKEN}` } : {},
 				},
 			},
 		},

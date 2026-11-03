@@ -76,6 +76,8 @@ Run `zetta <command> --help` for every option. Each option has an environment va
 
 The SQL tab and `query` run any statement with the privileges of the connecting role. With Postgres, `--read-only` sets `default_transaction_read_only`, which a statement can turn off again. For a hard guarantee, connect as a read-only role.
 
+`serve` listens on port 1993, or on the next free port when 1993 is taken, and says which. A port given with `--port` or `ZETTA_PORT` is used as is, and zetta stops if it is taken. `--port 0` lets the system pick one.
+
 In the web UI, a browse or a SQL tab query stops after 30 seconds and reports a timeout. Change that with `--statement-timeout` in milliseconds, or turn it off with 0. The `query` command has no limit.
 
 ## Postgres support
@@ -122,5 +124,5 @@ zig build test    # unit tests and the adapter conformance suite
 ZETTA_TEST_PG_URL=postgres://... zig build test   # also run the suite on Postgres
 ZETTA_TEST_PG_URL=postgres://... zig build test-oracle -Dpg-oracle=true   # compare with libpq, needs libpq installed
 dev/pg-matrix.sh  # auth methods, TLS and sslmode against real servers in Docker
-cd web && bun run dev   # UI dev server, proxies /api to zetta on port 1993
+cd web && bun run dev   # UI dev server, proxies /api to zetta on ZETTA_PORT or 1993
 ```

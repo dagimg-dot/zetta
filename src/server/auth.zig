@@ -2,7 +2,13 @@
 
 const std = @import("std");
 
-pub const cookie_name = "zetta";
+/// `zetta_1993`. Browsers keep one cookie per host whatever the port, so two zettas on one
+/// machine would otherwise sign each other out.
+pub fn cookieName(buf: *[cookie_name_max]u8, port: u16) []const u8 {
+    return std.fmt.bufPrint(buf, "zetta_{d}", .{port}) catch unreachable; // "zetta_65535" fits.
+}
+
+pub const cookie_name_max = "zetta_65535".len;
 
 /// 32 hex characters from the system CSPRNG.
 pub fn randomToken(io: std.Io) [32]u8 {
@@ -19,8 +25,9 @@ pub fn matches(given: []const u8, token: []const u8) bool {
     return diff == 0;
 }
 
-pub fn setCookie(buf: []u8, token: []const u8) []const u8 {
-    return std.fmt.bufPrint(buf, "{s}={s}; Path=/; HttpOnly; SameSite=Strict", .{ cookie_name, token }) catch unreachable;
+pub fn setCookie(buf: []u8, port: u16, token: []const u8) []const u8 {
+    var name_buf: [cookie_name_max]u8 = undefined;
+    return std.fmt.bufPrint(buf, "{s}={s}; Path=/; HttpOnly; SameSite=Strict", .{ cookieName(&name_buf, port), token }) catch unreachable;
 }
 
 pub fn isLoopback(host: []const u8) bool {
@@ -43,4 +50,13 @@ test "loopback hosts" {
     try testing.expect(isLoopback("::1"));
     try testing.expect(!isLoopback("0.0.0.0"));
     try testing.expect(!isLoopback("192.168.1.4"));
+}
+
+test "each port gets its own cookie, so two zettas on one host keep their sessions" {
+    var a: [cookie_name_max]u8 = undefined;
+    var b: [cookie_name_max]u8 = undefined;
+    try std.testing.expectEqualStrings("zetta_1993", cookieName(&a, 1993));
+    try std.testing.expectEqualStrings("zetta_65535", cookieName(&b, 65535));
+    var buf: [128]u8 = undefined;
+    try std.testing.expectEqualStrings("zetta_1994=abc; Path=/; HttpOnly; SameSite=Strict", setCookie(&buf, 1994, "abc"));
 }

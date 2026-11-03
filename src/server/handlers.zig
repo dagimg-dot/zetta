@@ -17,6 +17,8 @@ pub const Context = struct {
     io: std.Io,
     adapter: db.Adapter,
     token: []const u8,
+    /// Names the session cookie, since browsers share cookies across the ports of one host.
+    port: u16 = 0,
     statement_timeout_ms: ?u32 = null,
     name: []const u8,
     version: []const u8,
@@ -42,7 +44,8 @@ fn route(method: std.http.Method, path: []const u8) Route {
 pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
     const target = http.Target.parse(req.head.target);
     const r = route(req.head.method, target.path);
-    const authed = if (http.cookie(req, auth.cookie_name)) |c| auth.matches(c, ctx.token) else false;
+    var name_buf: [auth.cookie_name_max]u8 = undefined;
+    const authed = if (http.cookie(req, auth.cookieName(&name_buf, ctx.port))) |c| auth.matches(c, ctx.token) else false;
 
     if (r == .index) return index(ctx, arena, req, target, authed);
     if (!authed) {
@@ -71,7 +74,7 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
         var buf: [128]u8 = undefined;
         try req.respond("", .{ .status = .see_other, .extra_headers = &.{
             .{ .name = "location", .value = "/" },
-            .{ .name = "set-cookie", .value = auth.setCookie(&buf, ctx.token) },
+            .{ .name = "set-cookie", .value = auth.setCookie(&buf, ctx.port, ctx.token) },
             .{ .name = "cache-control", .value = "no-store" },
         } });
         return .see_other;
@@ -300,7 +303,8 @@ const Response = struct { status: std.http.Status, body: []const u8 };
 
 /// Runs one GET through `handle` over in-memory streams, signed in.
 fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response {
-    const raw = try std.fmt.allocPrint(arena, "GET {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\n\r\n", .{ target, auth.cookie_name, ctx.token });
+    var name_buf: [auth.cookie_name_max]u8 = undefined;
+    const raw = try std.fmt.allocPrint(arena, "GET {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\n\r\n", .{ target, auth.cookieName(&name_buf, ctx.port), ctx.token });
     var in: std.Io.Reader = .fixed(raw);
     var out: std.Io.Writer.Allocating = .init(arena);
     var server: std.http.Server = .init(&in, &out.writer);

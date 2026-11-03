@@ -7,7 +7,7 @@ const Context = @import("Context.zig");
 pub const Args = struct {
     dsn: ?[]const u8 = null,
     host: []const u8 = "127.0.0.1",
-    port: u16 = 1993,
+    port: ?u16 = null,
     token: ?[]const u8 = null,
     read_only: bool = false,
     statement_timeout: u32 = 30_000,
@@ -27,7 +27,12 @@ pub const Args = struct {
         \\
         \\Anything other than a loopback address needs --token.
         },
-        .{ .field = "port", .short = 'p', .env = &.{"ZETTA_PORT"}, .help = "Port to listen on" },
+        .{ .field = "port", .short = 'p', .env = &.{"ZETTA_PORT"}, .help =
+        \\Port to listen on
+        \\
+        \\Without it zetta takes 1993, or the next free port when 1993 is taken. A port you
+        \\choose is used as is: zetta stops if it is taken. 0 lets the system pick.
+        },
         .{ .field = "token", .env = &.{"ZETTA_TOKEN"}, .help =
         \\Access token instead of a random one
         \\
@@ -63,31 +68,56 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
     const random = server.auth.randomToken(ctx.io);
     const token = args.token orelse &random;
 
+    const wanted = args.port orelse default_port;
     var srv = server.Server.listen(ctx.io, adapter, .{
         .host = args.host,
-        .port = args.port,
+        .port = wanted,
+        .next_ports = if (args.port == null) next_ports else 0,
         .token = token,
         .statement_timeout_ms = if (args.statement_timeout == 0) null else args.statement_timeout,
         .name = "zetta",
         .version = ctx.version,
     }) catch |err| return switch (err) {
         error.InvalidAddress => ctx.usageError("'{s}' is not an IP address", .{args.host}),
-        error.AddressInUse => ctx.fail("port {d} is already in use; pick another with --port", .{args.port}),
-        else => ctx.fail("cannot listen on {s}:{d}: {t}", .{ args.host, args.port, err }),
+        error.AddressInUse => if (args.port == null)
+            ctx.fail("ports {d} to {d} are all in use; pick one with --port", .{ wanted, wanted + next_ports })
+        else
+            ctx.fail("port {d} is already in use; pick another with --port, or leave it out to take a free one", .{wanted}),
+        error.AddressUnavailable => ctx.usageError("{s} is not an address of this machine", .{args.host}),
+        error.AccessDenied => ctx.fail("not allowed to listen on port {d}; ports below 1024 need privileges", .{wanted}),
+        else => ctx.fail("cannot listen on {s}:{d}: {t}", .{ args.host, wanted, err }),
     };
     defer srv.deinit();
+    const port = srv.port();
 
     const info = adapter.info();
-    const url = try std.fmt.allocPrint(ctx.arena, "http://{s}:{d}/?token={s}", .{ try urlHost(ctx.arena, args.host), args.port, token });
+    const url = try std.fmt.allocPrint(ctx.arena, "http://{s}:{d}/?token={s}", .{ try urlHost(ctx.arena, args.host), port, token });
     try ctx.stderr.print("zetta {s}: {t} database {s}{s}\n", .{ ctx.version, info.name, info.database, if (info.read_only) ", read-only" else "" });
+    if (port != wanted and wanted != 0) try ctx.stderr.print("port {d} is in use, so zetta took {d}\n", .{ wanted, port });
+    if (isWildcard(args.host)) {
+        for (try server.net.lanAddresses(ctx.arena)) |a| {
+            try ctx.stderr.print("network: http://{d}.{d}.{d}.{d}:{d}/?token={s}\n", .{ a[0], a[1], a[2], a[3], port, token });
+        }
+    }
     try ctx.stderr.flush();
     try ctx.stdout.print("{s}\n", .{url});
     try ctx.stdout.flush();
 
     if (args.open orelse ctx.color_stdout) openBrowser(ctx, url);
 
-    srv.run() catch {};
+    srv.run() catch |err| switch (err) {
+        // Cancelled means the server was told to stop, which is how it ends.
+        error.Canceled => {},
+    };
     return .success;
+}
+
+/// The port zetta takes when none is given, and how many above it to try when it is taken.
+const default_port = 1993;
+const next_ports = 20;
+
+fn isWildcard(host: []const u8) bool {
+    return std.mem.eql(u8, host, "0.0.0.0") or std.mem.eql(u8, host, "::");
 }
 
 fn openBrowser(ctx: *Context, url: []const u8) void {
@@ -112,7 +142,7 @@ fn openBrowser(ctx: *Context, url: []const u8) void {
 /// The host to print in the startup URL. A wildcard bind is not an address anyone can open,
 /// so it prints as localhost; an IPv6 literal needs brackets.
 fn urlHost(arena: std.mem.Allocator, host: []const u8) ![]const u8 {
-    if (std.mem.eql(u8, host, "0.0.0.0") or std.mem.eql(u8, host, "::")) return "localhost";
+    if (isWildcard(host)) return "localhost";
     if (std.mem.indexOfScalar(u8, host, ':') != null) return std.fmt.allocPrint(arena, "[{s}]", .{host});
     return host;
 }

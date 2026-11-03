@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const Io = std.Io;
 const db = @import("db");
 const handlers = @import("handlers.zig");
+const net = @import("net.zig");
 
 const log = std.log.scoped(.server);
 
@@ -16,7 +17,10 @@ group: Io.Group = .init,
 
 pub const Config = struct {
     host: []const u8,
+    /// 0 asks the system for a free port.
     port: u16,
+    /// How many ports above `port` to try when it is taken. 0 makes `port` the only choice.
+    next_ports: u16 = 0,
     token: []const u8,
     /// Applied to every browse and query. Null means no limit.
     statement_timeout_ms: ?u32,
@@ -24,15 +28,38 @@ pub const Config = struct {
     version: []const u8,
 };
 
-pub const ListenError = error{InvalidAddress} || Io.net.IpAddress.ListenError;
+pub const ListenError = error{InvalidAddress} || net.ListenError;
 
+/// Takes `config.port`, or with `next_ports` the first free port above it, the way Vite does:
+/// a port counts as taken when anything holds it on the wildcard addresses or on `host`.
 pub fn listen(io: Io, adapter: db.Adapter, config: Config) ListenError!Server {
-    const address = Io.net.IpAddress.parse(config.host, config.port) catch return error.InvalidAddress;
-    const listener = try address.listen(io, .{ .reuse_address = true });
+    var candidate = config.port;
+    const listener = while (true) : (candidate += 1) {
+        const address = Io.net.IpAddress.parse(config.host, candidate) catch return error.InvalidAddress;
+        const last = candidate == config.port +| config.next_ports or candidate == std.math.maxInt(u16);
+        if (!last and candidate != 0 and net.heldOnWildcard(io, candidate)) continue;
+        break net.listen(io, address) catch |err| switch (err) {
+            error.AddressInUse => if (last) return err else continue,
+            else => return err,
+        };
+    };
     return .{
-        .ctx = .{ .io = io, .adapter = adapter, .token = config.token, .statement_timeout_ms = config.statement_timeout_ms, .name = config.name, .version = config.version },
+        .ctx = .{
+            .io = io,
+            .adapter = adapter,
+            .token = config.token,
+            .port = listener.socket.address.getPort(),
+            .statement_timeout_ms = config.statement_timeout_ms,
+            .name = config.name,
+            .version = config.version,
+        },
         .listener = listener,
     };
+}
+
+/// The port listened on, which differs from the one asked for after a move or with port 0.
+pub fn port(self: *const Server) u16 {
+    return self.ctx.port;
 }
 
 pub fn deinit(self: *Server) void {
@@ -180,4 +207,29 @@ test "accepted connections send small writes without waiting for an ACK" {
     var len: std.posix.socklen_t = @sizeOf(c_int);
     try std.testing.expectEqual(0, std.posix.system.getsockopt(accepted.socket.handle, std.posix.IPPROTO.TCP, std.posix.TCP.NODELAY, std.mem.asBytes(&value), &len));
     try std.testing.expect(value != 0);
+}
+
+fn testListen(start: u16, next_ports: u16) ListenError!Server {
+    return listen(std.testing.io, undefined, .{ .host = "127.0.0.1", .port = start, .next_ports = next_ports, .token = "t", .statement_timeout_ms = null, .name = "zetta", .version = "test" });
+}
+
+test "a taken port moves to the next free one when moving is allowed" {
+    var held = try net.listen(std.testing.io, try Io.net.IpAddress.parse("127.0.0.1", 0));
+    defer held.deinit(std.testing.io);
+    const taken = held.socket.address.getPort();
+    var srv = try testListen(taken, 20);
+    defer srv.deinit();
+    try std.testing.expect(srv.port() > taken and srv.port() <= taken + 20);
+}
+
+test "a taken port is refused when it is the only choice" {
+    var held = try net.listen(std.testing.io, try Io.net.IpAddress.parse("127.0.0.1", 0));
+    defer held.deinit(std.testing.io);
+    try std.testing.expectError(error.AddressInUse, testListen(held.socket.address.getPort(), 0));
+}
+
+test "port 0 reports the port the system picked" {
+    var srv = try testListen(0, 0);
+    defer srv.deinit();
+    try std.testing.expect(srv.port() != 0);
 }
