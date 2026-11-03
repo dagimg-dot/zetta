@@ -1,17 +1,17 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
-import { announce, announcement } from "./announce";
-import { getCatalog, getMeta, onUnauthorized } from "./api";
-import { Button } from "./components/Button";
-import { DataPane } from "./components/DataPane";
-import { Shortcuts } from "./components/Shortcuts";
-import { Sidebar } from "./components/Sidebar";
-import { SqlPane } from "./components/SqlPane";
-import { TipLayer, tip } from "./components/Tip";
-import { Unauthorized } from "./components/Unauthorized";
-import { createRequest } from "./request";
-import { starterSql } from "./starter";
-import { cycleTheme } from "./theme";
-import { setView, type Tab, view } from "./url";
+import { Shortcuts } from "./components/layout/Shortcuts";
+import { Sidebar } from "./components/layout/Sidebar";
+import { Unauthorized } from "./components/layout/Unauthorized";
+import { Button } from "./components/ui/Button";
+import { TipLayer, tip } from "./components/ui/Tip";
+import { SqlPane } from "./features/sql/SqlPane";
+import { starterSql } from "./features/sql/starter";
+import { TablePane } from "./features/table/TablePane";
+import { getCatalog, getMeta, onUnauthorized } from "./lib/api";
+import { createRequest } from "./lib/request";
+import { announce, announcement } from "./stores/announce";
+import { cycleTheme } from "./stores/theme";
+import { setView, type Tab, view } from "./stores/view";
 
 function typing(): boolean {
 	const el = document.activeElement;
@@ -183,7 +183,7 @@ export function App() {
 							onClick={() => shortcuts?.showModal()}
 						/>
 					</div>
-					<DataPane
+					<TablePane
 						active={view().tab === "data"}
 						approxRows={approxRows}
 						filterRef={(el) => {
