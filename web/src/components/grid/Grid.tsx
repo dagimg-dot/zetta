@@ -11,20 +11,19 @@ import {
 } from "solid-js";
 import type { Column, ResultColumn, ResultSet } from "../../lib/api";
 import { copyRich, copyText } from "../../lib/clipboard";
-import { plural } from "../../lib/format";
 import type { SortKey } from "../../lib/query";
 import { refName } from "../../lib/refs";
-import { blobBytes, edges, formatBytes, isBlob, isNumericType } from "../../lib/value";
-import { announce } from "../../stores/announce";
+import { isBlob, isNumericType } from "../../lib/value";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/icons";
 import { tip } from "../ui/Tip";
+import { cell } from "./cells";
 import { type FormatId, fileName, format, htmlTable, pick } from "./formats";
 import { type HeaderActions, HeaderMenu, type HeaderTarget } from "./HeaderMenu";
-import { hiddenRuns } from "./hidden";
+import { type Hidden, hiddenRuns } from "./hidden";
 import { Inspector, type InspectorAction } from "./Inspector";
-import { whitespace } from "./marks";
 import { RowMenu, type RowTarget } from "./RowMenu";
+import type { Selection } from "./selection";
 
 export interface LinkTarget {
 	schema: string;
@@ -44,81 +43,6 @@ export interface Links {
 	filterBy: (column: string, value: string | null) => void;
 }
 
-/**
- * Which columns are hidden, by name, so the choice survives a new page of rows and can live in the
- * URL. The rows view keeps it there; the SQL tab keeps it in memory with `createHidden`.
- */
-export interface Hidden {
-	hidden: () => ReadonlySet<string>;
-	set: (next: ReadonlySet<string>) => void;
-}
-
-export function createHidden(): Hidden {
-	const [hidden, set] = createSignal<ReadonlySet<string>>(new Set());
-	return { hidden, set };
-}
-
-/**
- * Rows picked for copying, by index into the loaded result. It is plain data rather than marks on
- * elements, because the grid draws only the rows in view. It also carries the short note a copy
- * leaves in the status bar.
- */
-export function createSelection() {
-	const [rows, setRows] = createSignal<ReadonlySet<number>>(new Set());
-	const [note, setNote] = createSignal("");
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	onCleanup(() => clearTimeout(timer));
-	return {
-		rows,
-		set: (next: ReadonlySet<number>) => setRows(next),
-		clear() {
-			if (rows().size) setRows(new Set<number>());
-		},
-		note,
-		tell(text: string) {
-			clearTimeout(timer);
-			setNote(text);
-			announce(text);
-			timer = setTimeout(() => setNote(""), 2400);
-		},
-	};
-}
-
-export type Selection = ReturnType<typeof createSelection>;
-
-/** The status bar's selection count, or the note a copy just left. */
-export function SelectionNote(props: { selection: Selection; total: number }) {
-	const n = () => props.selection.rows().size;
-	return (
-		<Show
-			when={props.selection.note()}
-			fallback={
-				<Show when={n()}>
-					<span class="st-selected">
-						<span class="st-num">{n().toLocaleString()}</span>
-						<span class="st-word">of {props.total.toLocaleString()} selected</span>
-						<Button
-							variant="bare"
-							class="st-clear"
-							icon="close"
-							iconSize={10}
-							label="Clear the selection"
-							kbd="Esc"
-							tipSide="top"
-							onClick={() => props.selection.clear()}
-						/>
-					</span>
-				</Show>
-			}
-		>
-			<span class="st-copied">
-				<Icon name="check" size={11} />
-				{props.selection.note()}
-			</span>
-		</Show>
-	);
-}
-
 let gridSeq = 0;
 
 /** Longer values are not offered as filters: they would not fit in a URL. */
@@ -126,62 +50,6 @@ const MAX_FILTER_VALUE = 1000;
 
 /** Rows drawn above and below the visible ones, so a fast scroll does not show blank space. */
 const OVERSCAN = 12;
-
-/** Body cells are built directly so large results do not create a reactive scope per cell. */
-function cell(
-	v: string | null,
-	type: string,
-	numeric: boolean,
-	link: boolean,
-): HTMLTableCellElement {
-	const td = document.createElement("td");
-	if (v === null) {
-		td.className = "null";
-		td.textContent = "NULL";
-		return td;
-	}
-	// Blobs, empty text and text of only spaces would otherwise look alike, or like nothing.
-	const blank = v.trim() === "";
-	if (isBlob(v, type) || blank) {
-		const mark = document.createElement("span");
-		mark.className = "mark";
-		mark.textContent = !blank
-			? `blob · ${formatBytes(blobBytes(v))}`
-			: v === ""
-				? "empty"
-				: `blank · ${plural([...v].length, "char")}`;
-		td.append(mark);
-		return td;
-	}
-	if (numeric) td.className = "num";
-	const { lead, body, trail } = edges(v);
-	if (!lead && !trail && !v.includes("\n")) {
-		td.textContent = v;
-	} else {
-		if (lead) td.append(whitespace(lead));
-		body.split("\n").forEach((line, i) => {
-			if (i > 0) {
-				const nl = document.createElement("span");
-				nl.className = "nl";
-				nl.textContent = "↵";
-				td.append(nl);
-			}
-			td.append(line);
-		});
-		if (trail) td.append(whitespace(trail));
-	}
-	if (v.length > 40) td.dataset.tip = v.length > 400 ? `${v.slice(0, 400)}…` : v;
-	if (link) {
-		// Clicks are handled by the table; the keyboard uses O on the cursor cell.
-		const go = document.createElement("span");
-		go.className = "fk-go";
-		go.dataset.tip = "Open the referenced row";
-		go.dataset.tipKbd = "O";
-		go.textContent = "↗";
-		td.append(go);
-	}
-	return td;
-}
 
 function headerFacts(info: Column | undefined): string[] {
 	if (!info) return [];

@@ -12,8 +12,9 @@ import { Button } from "../../components/ui/Button";
 import { Icon } from "../../components/ui/icons";
 import { tip } from "../../components/ui/Tip";
 import type { RefAction, TableDetail } from "../../lib/api";
+import { kindNoun } from "../../lib/format";
 import { openTable } from "../../stores/view";
-import { kindNoun, RefActions } from "./TableInfo";
+import { RefActions } from "./parts";
 
 interface Edge {
 	key: string;

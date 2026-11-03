@@ -3,7 +3,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { Button, type ButtonProps } from "../ui/Button";
 import { Icon } from "../ui/icons";
-import type { Hidden } from "./Grid";
+import type { Hidden } from "./hidden";
 import { matchColumns, showOnly } from "./hidden";
 
 /**

@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
+import { formatBytes } from "../../lib/format";
 import { matchRefs } from "../../lib/refs";
-import { blobBytes, edges, formatBytes, hexDump, kindOf, parseJson } from "../../lib/value";
+import { blobBytes, edges, hexDump, kindOf, parseJson } from "../../lib/value";
 import { inspectorWidth } from "../../stores/layout";
 import { Button } from "../ui/Button";
 import { CopyButton } from "../ui/CopyButton";

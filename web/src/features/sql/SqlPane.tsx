@@ -1,6 +1,9 @@
 import { createEffect, createMemo, createSignal, on, Show } from "solid-js";
 import { ColumnList } from "../../components/grid/ColumnList";
-import { createHidden, createSelection, Grid, SelectionNote } from "../../components/grid/Grid";
+import { Grid } from "../../components/grid/Grid";
+import { createHidden } from "../../components/grid/hidden";
+import { SelectionNote } from "../../components/grid/SelectionNote";
+import { createSelection } from "../../components/grid/selection";
 import { Button } from "../../components/ui/Button";
 import { ErrorBox } from "../../components/ui/ErrorBox";
 import { Loader } from "../../components/ui/icons";
@@ -17,7 +20,7 @@ import {
 	statementAt,
 	statementRanges,
 	statements,
-} from "../../lib/value";
+} from "../../lib/sql";
 import { announce } from "../../stores/announce";
 
 const INDENT = "  ";

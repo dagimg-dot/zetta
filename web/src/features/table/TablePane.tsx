@@ -4,13 +4,16 @@ import { Icon } from "../../components/ui/icons";
 import { Kbd } from "../../components/ui/Kbd";
 import { Loading } from "../../components/ui/Loading";
 import { getTable, type TableDetail } from "../../lib/api";
+import { formatBytes } from "../../lib/format";
 import { relationshipCount } from "../../lib/refs";
 import { createRequest } from "../../lib/request";
-import { formatBytes } from "../../lib/value";
 import { type Pane, setView, view } from "../../stores/view";
+import { DdlPane } from "./Ddl";
+import { IndexesPane } from "./Indexes";
 import { Relationships } from "./Relationships";
 import { RowsPane } from "./RowsPane";
-import { DdlPane, IndexesPane, StructurePane, TriggersPane } from "./TableInfo";
+import { StructurePane } from "./Structure";
+import { TriggersPane } from "./Triggers";
 
 const kindLabel: Record<string, string> = {
 	table: "table",

@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
-import { plural } from "../../lib/format";
-import { blobBytes, edges, formatBytes, kindOf } from "../../lib/value";
+import { formatBytes, plural } from "../../lib/format";
+import { blobBytes, edges, kindOf } from "../../lib/value";
 import { whitespace } from "./marks";
 
 /** Draws line breaks as a visible ↵ while keeping the text selectable and copyable. */

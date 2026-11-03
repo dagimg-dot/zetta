@@ -1,0 +1,114 @@
+import { describe, expect, test } from "bun:test";
+import {
+	changesSchema,
+	closest,
+	errorRange,
+	isWrite,
+	statementAt,
+	statementRanges,
+	statements,
+	unknownColumn,
+} from "./sql";
+
+describe("did you mean", () => {
+	test("finds the column in both databases' messages", () => {
+		expect(unknownColumn("no such column: balanc")).toBe("balanc");
+		// Builder queries quote names, and SQLite then quotes them back in the message.
+		expect(
+			unknownColumn('no such column: "balanc" - should this be a string literal in single-quotes?'),
+		).toBe("balanc");
+		expect(unknownColumn('column "c.balanc" does not exist')).toBe("balanc");
+		expect(closest("balanc", ["id", "name", "balance"])).toBe("balance");
+		expect(closest("zzz", ["id", "name"])).toBeNull();
+	});
+});
+
+describe("errorRange", () => {
+	test("follows the Postgres caret onto the right line", () => {
+		const sql = "select 1;\nselec 2";
+		const msg = 'syntax error at or near "selec"\nLINE 2: selec 2\n        ^';
+		expect(errorRange(sql, msg)).toEqual([10, 15]);
+	});
+	test("finds SQLite's near token", () => {
+		expect(errorRange("selec 1", 'near "selec": syntax error')).toEqual([0, 5]);
+	});
+});
+
+describe("isWrite", () => {
+	test("flags any statement that changes data, ignoring comments", () => {
+		expect(isWrite("select 1")).toBe(false);
+		expect(isWrite("select 1; update t set x = 1")).toBe(true);
+		expect(isWrite("-- delete everything\nselect 1")).toBe(false);
+	});
+
+	test("a keyword or semicolon inside a string is not a statement", () => {
+		expect(isWrite("select 'a; delete everything'")).toBe(false);
+		expect(isWrite('select 1 as "x; drop table t"')).toBe(false);
+		expect(isWrite("select $q$; delete from t$q$")).toBe(false);
+		expect(isWrite("select 'it''s'; delete from t")).toBe(true);
+	});
+
+	test("assigning pragmas, attach and writing CTEs count as writes", () => {
+		expect(isWrite("pragma user_version = 5")).toBe(true);
+		expect(isWrite("pragma table_info(t)")).toBe(false);
+		expect(isWrite("attach database 'x.db' as x")).toBe(true);
+		expect(isWrite("with d as (delete from t returning *) select * from d")).toBe(true);
+		expect(isWrite("with c as (select 1) select * from c")).toBe(false);
+	});
+});
+
+test("statements split on semicolons outside comments and quotes", () => {
+	const parts = statements("select 1; /* ; */ select ';'; -- ;\n").map((s) => s.trim());
+	expect(parts).toEqual(["select 1", "select ''"]);
+});
+
+test("only create, drop and alter change the table list", () => {
+	expect(changesSchema("create table t (x int)")).toBe(true);
+	expect(changesSchema("select 1;\n  DROP VIEW v")).toBe(true);
+	expect(changesSchema("insert into t values (1)")).toBe(false);
+	expect(changesSchema("select 'create table'")).toBe(false);
+});
+
+describe("statement at the caret", () => {
+	const script = "select 1;\n\nselect 'a; b';\n-- note\nselect 3";
+	const at = (needle: string, shift = 0) => script.indexOf(needle) + shift;
+	const textAt = (caret: number) => {
+		const r = statementAt(script, caret);
+		return r ? script.slice(r[0], r[1]) : null;
+	};
+
+	test("ranges leave out the whitespace and the semicolon", () => {
+		expect(statementRanges(script).map(([a, b]) => script.slice(a, b))).toEqual([
+			"select 1",
+			"select 'a; b'",
+			"-- note\nselect 3",
+		]);
+	});
+
+	test("a caret inside a statement, or right after its semicolon, means that statement", () => {
+		expect(textAt(0)).toBe("select 1");
+		expect(textAt(at("1;", 2))).toBe("select 1");
+		expect(textAt(at("'a;", 2))).toBe("select 'a; b'");
+		expect(textAt(script.length)).toBe("-- note\nselect 3");
+	});
+
+	test("a caret on the blank line between two statements means the one above", () => {
+		expect(textAt(at("\n\n", 1))).toBe("select 1");
+	});
+
+	test("a comment before a statement belongs to it", () => {
+		expect(textAt(at("-- note", 3))).toBe("-- note\nselect 3");
+	});
+
+	test("semicolons in strings, quoted names, comments and $tag$ bodies do not split", () => {
+		const sql = `select '; x', "a;b" /* ; */ -- ;\n;select $f$ ; $f$`;
+		expect(statementRanges(sql).length).toBe(2);
+	});
+
+	test("a script without semicolons is one statement, and only comments are none", () => {
+		expect(statementRanges("select 1\nfrom t")).toEqual([[0, 15]]);
+		expect(statementAt("-- nothing here", 3)).toBeNull();
+		expect(statementAt("", 0)).toBeNull();
+		expect(statementAt("  \n select 1", 0)).toEqual([4, 12]);
+	});
+});

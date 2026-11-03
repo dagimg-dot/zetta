@@ -1,12 +1,9 @@
 import { createEffect, createMemo, createSignal, on, Show, untrack } from "solid-js";
 import { ColumnList } from "../../components/grid/ColumnList";
-import {
-	createSelection,
-	Grid,
-	type Hidden,
-	type Links,
-	SelectionNote,
-} from "../../components/grid/Grid";
+import { Grid, type Links } from "../../components/grid/Grid";
+import type { Hidden } from "../../components/grid/hidden";
+import { SelectionNote } from "../../components/grid/SelectionNote";
+import { createSelection } from "../../components/grid/selection";
 import { Button } from "../../components/ui/Button";
 import { ErrorBox } from "../../components/ui/ErrorBox";
 import { Loader } from "../../components/ui/icons";
@@ -25,7 +22,7 @@ import {
 	toggleSort,
 } from "../../lib/query";
 import { createRequest } from "../../lib/request";
-import { closest, unknownColumn } from "../../lib/value";
+import { closest, unknownColumn } from "../../lib/sql";
 import { announce } from "../../stores/announce";
 import { openRowsWhere, openTable, setView, view } from "../../stores/view";
 import type { ColumnChoice } from "./ColumnPicker";

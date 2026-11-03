@@ -1,3 +1,19 @@
+import { createSignal } from "solid-js";
+
+/**
+ * Which columns are hidden, by name, so the choice survives a new page of rows and can live in the
+ * URL. The rows view keeps it there; the SQL tab keeps it in memory with `createHidden`.
+ */
+export interface Hidden {
+	hidden: () => ReadonlySet<string>;
+	set: (next: ReadonlySet<string>) => void;
+}
+
+export function createHidden(): Hidden {
+	const [hidden, set] = createSignal<ReadonlySet<string>>(new Set());
+	return { hidden, set };
+}
+
 /**
  * Runs of adjacent hidden columns, keyed by the index of the first one, which draws as the one
  * stub for the whole run. Hiding 115 of 121 columns then leaves a few stubs, not 115.
