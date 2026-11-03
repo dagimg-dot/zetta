@@ -332,9 +332,11 @@ aside header {
 
 .sidebar-foot {
 	display: flex;
+	flex: none;
 	align-items: center;
 	gap: var(--space-2);
-	padding: var(--space-2) var(--space-3);
+	height: var(--foot-height);
+	padding: 0 var(--space-3);
 	border-top: 1px solid var(--border);
 	color: var(--text-secondary);
 	font-size: var(--text-xs);
@@ -2622,7 +2624,9 @@ th:focus-within .ico.more,
 
 .status {
 	gap: var(--space-3);
-	min-height: 40px;
+	flex: none;
+	height: var(--foot-height);
+	min-height: var(--foot-height);
 	padding: 0 var(--space-2) 0 var(--space-4);
 	font-size: var(--text-sm);
 }

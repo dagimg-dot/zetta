@@ -101,6 +101,8 @@
 	--bar-height: 41px;
 	--sidebar-width: 264px;
 	--inspector-width: 380px;
+	/* The sidebar footer and the status bar share one height, so their borders meet in one line. */
+	--foot-height: 40px;
 
 	--z-sticky: 1;
 	--z-sticky-corner: 2;

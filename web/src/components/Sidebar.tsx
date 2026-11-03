@@ -85,7 +85,6 @@ export function Sidebar(props: {
 				class="tbl"
 				classList={{ active: active() }}
 				aria-current={active() ? "page" : undefined}
-				{...tip(`${p.schema}.${p.t.name}`, undefined, "right")}
 				onClick={() => open(p.schema, p.t.name)}
 			>
 				<Icon name={p.t.kind === "table" ? "table" : "view"} />
@@ -94,10 +93,7 @@ export function Sidebar(props: {
 					<span class="badge">{kind}</span>
 				</Show>
 				<Show when={showRows() && p.t.approxRows !== null}>
-					<span
-						class="rows"
-						{...tip(`About ${p.t.approxRows?.toLocaleString()} rows`, undefined, "right")}
-					>
+					<span class="rows">
 						{approx(p.t.approxRows ?? 0)}
 					</span>
 				</Show>
