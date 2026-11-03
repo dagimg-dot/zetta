@@ -1,12 +1,13 @@
-//! Postgres through libpq, behind a small connection pool.
+//! Test oracle only: Postgres through libpq, for comparing the native driver
+//! against (see ../../oracle.zig). Never part of the zetta binary.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const Adapter = @import("../Adapter.zig");
-const Diagnostic = @import("../Diagnostic.zig");
-const types = @import("../types.zig");
-const Pool = @import("../pool.zig").Pool;
+const Adapter = @import("../../Adapter.zig");
+const Diagnostic = @import("../../Diagnostic.zig");
+const types = @import("../../types.zig");
+const Pool = @import("../../pool.zig").Pool;
 const Conn = @import("Conn.zig");
 const sql = @import("sql.zig");
 const c = @import("c.zig").c;

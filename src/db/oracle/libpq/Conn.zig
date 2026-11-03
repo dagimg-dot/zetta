@@ -2,8 +2,8 @@
 
 const std = @import("std");
 const c = @import("c.zig").c;
-const Diagnostic = @import("../Diagnostic.zig");
-const Error = @import("../types.zig").Error;
+const Diagnostic = @import("../../Diagnostic.zig");
+const Error = @import("../../types.zig").Error;
 
 const Conn = @This();
 

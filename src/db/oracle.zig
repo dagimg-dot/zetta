@@ -8,7 +8,7 @@ const Adapter = @import("Adapter.zig");
 const Diagnostic = @import("Diagnostic.zig");
 const types = @import("types.zig");
 const Native = @import("postgres/Postgres.zig");
-const Libpq = @import("postgres_libpq/Postgres.zig");
+const Libpq = @import("oracle/libpq/Postgres.zig");
 
 const setup =
     \\drop schema if exists zetta_oracle cascade;
