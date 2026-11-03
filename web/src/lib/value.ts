@@ -1,3 +1,4 @@
+import { formatBytes, plural } from "./format";
 import { categoryOf } from "./query";
 
 /** What a cell holds, for inline markers in the grid and the inspector. */
@@ -54,6 +55,19 @@ export function edges(v: string): { lead: string; body: string; trail: string } 
 	let b = v.length;
 	while (b > a && isSpace(v[b - 1])) b--;
 	return { lead: v.slice(0, a), body: v.slice(a, b), trail: v.slice(b) };
+}
+
+/**
+ * The muted mark a value draws as instead of its text: NULL, empty and whitespace-only text, and
+ * blobs. Null for a value whose text is shown. Blobs, empty text and text of only spaces would
+ * otherwise look alike, or like nothing.
+ */
+export function markOf(v: string | null, type = ""): string | null {
+	if (v === null) return "NULL";
+	if (v === "") return "empty";
+	if (v.trim() === "") return `blank · ${plural([...v].length, "char")}`;
+	if (isBlob(v, type)) return `blob · ${formatBytes(blobBytes(v))}`;
+	return null;
 }
 
 /** `ab12cd34` as `ab12 cd34 …`, sixteen bytes to a line. */

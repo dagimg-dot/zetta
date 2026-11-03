@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { edges, hexDump, isNumericType, kindOf } from "./value";
+import { edges, hexDump, isNumericType, kindOf, markOf } from "./value";
 
 describe("kindOf", () => {
 	test("tells blobs, JSON and multi-line text apart", () => {
@@ -57,4 +57,14 @@ test("only number types are right-aligned, not ones that start like them", () =>
 
 test("hexDump groups bytes with offsets", () => {
 	expect(hexDump("\\x0011223344")).toBe("000000  0011 2233 44");
+});
+
+test("NULL, empty, blank and blob values draw as marks, other text as itself", () => {
+	expect(markOf(null)).toBe("NULL");
+	expect(markOf("")).toBe("empty");
+	expect(markOf("   ")).toBe("blank · 3 chars");
+	expect(markOf("\t")).toBe("blank · 1 char");
+	expect(markOf("\\xdeadbeef", "bytea")).toBe("blob · 4 B");
+	expect(markOf("\\x41", "text")).toBeNull();
+	expect(markOf(" a ")).toBeNull();
 });

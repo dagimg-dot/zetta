@@ -1,7 +1,26 @@
 import { Show } from "solid-js";
-import { formatBytes, plural } from "../../lib/format";
-import { blobBytes, edges, kindOf } from "../../lib/value";
-import { whitespace } from "./marks";
+import { edges, markOf } from "../../lib/value";
+
+/** Past this many characters a run of whitespace is kept as it is but no longer marked. */
+const MARK_AT_MOST = 64;
+
+/**
+ * Spaces and tabs as typed, each with a · or → drawn over it, so they can be seen and a copy or a
+ * text selection still gets the real characters. Built as DOM nodes so the grid can use it too.
+ */
+export function whitespace(run: string): HTMLSpanElement {
+	const out = document.createElement("span");
+	out.className = "ws";
+	const chars = [...run];
+	for (const ch of chars.slice(0, MARK_AT_MOST)) {
+		const c = document.createElement("span");
+		c.className = ch === "\t" ? "tab" : "sp";
+		c.textContent = ch;
+		out.append(c);
+	}
+	if (chars.length > MARK_AT_MOST) out.append(chars.slice(MARK_AT_MOST).join(""));
+	return out;
+}
 
 /** Draws line breaks as a visible ↵ while keeping the text selectable and copyable. */
 export function withBreaks(text: string) {
@@ -38,17 +57,8 @@ export function withMarks(text: string) {
  * text with its line breaks and edge whitespace visible.
  */
 export function ValueLine(props: { value: string | null; type: string }) {
-	const kind = () => kindOf(props.value, props.type);
-	const mark = () => {
-		const v = props.value;
-		if (v === null) return "NULL";
-		if (v === "") return "empty";
-		if (kind() === "blank") return `blank · ${plural([...v].length, "char")}`;
-		if (kind() === "blob") return `blob · ${formatBytes(blobBytes(v))}`;
-		return null;
-	};
 	return (
-		<Show when={mark()} fallback={withMarks(props.value ?? "")}>
+		<Show when={markOf(props.value, props.type)} fallback={withMarks(props.value ?? "")}>
 			{(m) => <span class="mark">{m()}</span>}
 		</Show>
 	);

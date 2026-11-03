@@ -10,9 +10,9 @@ import { Kbd } from "../ui/Kbd";
 import { Segmented } from "../ui/Segmented";
 import { Splitter } from "../ui/Splitter";
 import { tip } from "../ui/Tip";
-import { withBreaks, withMarks } from "./Marked";
 import { Peek } from "./Peek";
 import type { PeekTarget } from "./referenced";
+import { withBreaks, withMarks } from "./values";
 
 export interface InspectorAction {
 	label: string;

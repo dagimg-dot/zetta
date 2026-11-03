@@ -15,8 +15,8 @@ import { ErrorBox } from "../ui/ErrorBox";
 import { Icon, Loader } from "../ui/icons";
 import { tip } from "../ui/Tip";
 import { matchColumns } from "./hidden";
-import { ValueLine } from "./Marked";
 import { clip, type PeekTarget, peekParams } from "./referenced";
+import { ValueLine } from "./values";
 
 /** Waits this long after the cursor settles, so holding an arrow key does not fetch every cell. */
 const DELAY_MS = 150;

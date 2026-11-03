@@ -1,6 +1,5 @@
-import { formatBytes, plural } from "../../lib/format";
-import { blobBytes, edges, isBlob } from "../../lib/value";
-import { whitespace } from "./marks";
+import { edges, markOf } from "../../lib/value";
+import { whitespace } from "./values";
 
 /** Body cells are built directly so large results do not create a reactive scope per cell. */
 export function cell(
@@ -10,22 +9,17 @@ export function cell(
 	link: boolean,
 ): HTMLTableCellElement {
 	const td = document.createElement("td");
+	const mark = markOf(v, type);
 	if (v === null) {
 		td.className = "null";
-		td.textContent = "NULL";
+		td.textContent = mark;
 		return td;
 	}
-	// Blobs, empty text and text of only spaces would otherwise look alike, or like nothing.
-	const blank = v.trim() === "";
-	if (isBlob(v, type) || blank) {
-		const mark = document.createElement("span");
-		mark.className = "mark";
-		mark.textContent = !blank
-			? `blob · ${formatBytes(blobBytes(v))}`
-			: v === ""
-				? "empty"
-				: `blank · ${plural([...v].length, "char")}`;
-		td.append(mark);
+	if (mark !== null) {
+		const span = document.createElement("span");
+		span.className = "mark";
+		span.textContent = mark;
+		td.append(span);
 		return td;
 	}
 	if (numeric) td.className = "num";
