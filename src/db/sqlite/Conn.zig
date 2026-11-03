@@ -91,7 +91,12 @@ pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, max_rows: usize, 
         var stmt: ?*c.sqlite3_stmt = null;
         var tail: [*c]const u8 = null;
         const rc = c.sqlite3_prepare_v2(self.raw, rest.ptr, @intCast(rest.len), &stmt, &tail);
-        if (rc != c.SQLITE_OK) return self.fail(rc, diag);
+        if (rc != c.SQLITE_OK) {
+            const err = self.fail(rc, diag);
+            const at = c.sqlite3_error_offset(self.raw);
+            if (at >= 0) pointAt(diag, text, rest.ptr - text.ptr + @as(usize, @intCast(at)));
+            return err;
+        }
         const consumed = @intFromPtr(tail) - @intFromPtr(rest.ptr);
         rest = rest[consumed..];
         const s = stmt orelse {
@@ -277,6 +282,24 @@ fn leadingKeyword(sql: []const u8) []const u8 {
     return sql[start..end];
 }
 
+/// Adds the line holding byte `at` of `sql` and a caret under it, the way libpq prints a
+/// Postgres error, so the UI finds the spot the same way for both databases.
+fn pointAt(diag: *Diagnostic, sql: []const u8, at: usize) void {
+    const pos = @min(at, sql.len);
+    const line_start = if (std.mem.lastIndexOfScalar(u8, sql[0..pos], '\n')) |i| i + 1 else 0;
+    const line_end = std.mem.indexOfScalarPos(u8, sql, pos, '\n') orelse sql.len;
+    const line = std.mem.trimEnd(u8, sql[line_start..line_end], "\r");
+    const line_no = std.mem.count(u8, sql[0..line_start], "\n") + 1;
+    const col = std.unicode.utf8CountCodepoints(sql[line_start..pos]) catch pos - line_start;
+    const prefix = std.fmt.count("LINE {d}: ", .{line_no});
+    var w: std.Io.Writer = .fixed(diag.buf[diag.len..]);
+    // A message that fills the buffer just goes without its caret.
+    w.print("\nLINE {d}: {s}\n", .{ line_no, line }) catch return;
+    w.splatByteAll(' ', prefix + col) catch return;
+    w.writeByte('^') catch return;
+    diag.len += w.end;
+}
+
 fn fail(self: *Conn, rc: c_int, diag: *Diagnostic) Error {
     diag.set(std.mem.span(c.sqlite3_errmsg(self.raw)));
     return switch (rc & 0xff) {
@@ -286,6 +309,17 @@ fn fail(self: *Conn, rc: c_int, diag: *Diagnostic) Error {
         c.SQLITE_INTERRUPT => error.Timeout,
         else => error.QueryFailed,
     };
+}
+
+test "a syntax error points at its statement's line, not the first match" {
+    var diag: Diagnostic = .{};
+    diag.set("near \"=\": syntax error");
+    pointAt(&diag, "select 1;\nselect 1 where 1 = = 2", 29);
+    try std.testing.expectEqualStrings(
+        \\near "=": syntax error
+        \\LINE 2: select 1 where 1 = = 2
+        \\                           ^
+    , diag.message());
 }
 
 test "identifiers are quoted with embedded quotes doubled" {
