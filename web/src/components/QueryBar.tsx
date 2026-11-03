@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { Index, Show } from "solid-js";
 import { compileBuilder } from "../api";
 import {
 	type Builder,
@@ -158,51 +158,51 @@ export function QueryBar(props: {
 						</header>
 						<Show when={props.draft.filters.length} fallback={<p class="q-empty">Every row.</p>}>
 							<ol class="q-rows">
-								<For each={props.draft.filters}>
+								<Index each={props.draft.filters}>
 									{(f, i) => {
-										const cat = () => categoryOf(typeOf(f.c));
+										const cat = () => categoryOf(typeOf(f().c));
 										return (
 											<li class="q-row">
 												<ColumnPicker
 													class="q-col"
 													label="Column"
 													columns={props.columns}
-													value={f.c}
-													onChange={(name) => changeColumn(i(), name)}
+													value={f().c}
+													onChange={(name) => changeColumn(i, name)}
 												/>
 												<Choice
 													class="q-op"
 													label="Condition"
 													options={opsFor(cat()).map((o) => ({ value: o.op, label: o.label }))}
-													value={f.op}
-													onChange={(op) => setFilter(i(), { op })}
+													value={f().op}
+													onChange={(op) => setFilter(i, { op })}
 												/>
 												<Show
-													when={opInfo(f.op).value}
+													when={opInfo(f().op).value}
 													fallback={<span class="q-value q-novalue" />}
 												>
 													<input
 														type="text"
 														class="q-value mono"
-														aria-label={`Value for ${f.c}`}
-														placeholder={f.op === "in" ? "a, b, c" : placeholders[cat()]}
-														value={f.v}
+														aria-label={`Value for ${f().c}`}
+														placeholder={f().op === "in" ? "a, b, c" : placeholders[cat()]}
+														value={f().v}
 														autocomplete="off"
 														spellcheck={false}
-														onInput={(e) => setFilter(i(), { v: e.currentTarget.value })}
+														onInput={(e) => setFilter(i, { v: e.currentTarget.value })}
 													/>
 												</Show>
 												<Button
 													variant="bare"
 													class="ico"
 													icon="close"
-													label={`Remove the filter on ${f.c}`}
-													onClick={() => props.onRemoveFilter(i())}
+													label={`Remove the filter on ${f().c}`}
+													onClick={() => props.onRemoveFilter(i)}
 												/>
 											</li>
 										);
 									}}
-								</For>
+								</Index>
 							</ol>
 						</Show>
 						<Button variant="quiet" class="q-add" icon="plus" onClick={addFilter}>
@@ -219,44 +219,44 @@ export function QueryBar(props: {
 						</header>
 						<Show when={props.draft.sorts.length} fallback={<p class="q-empty">Database order.</p>}>
 							<ol class="q-rows">
-								<For each={props.draft.sorts}>
+								<Index each={props.draft.sorts}>
 									{(s, i) => (
 										<li class="q-row">
 											<ColumnPicker
 												class="q-col"
 												label="Sort column"
 												columns={props.columns}
-												value={s.c}
-												onChange={(name) => setSort(i(), { c: name })}
+												value={s().c}
+												onChange={(name) => setSort(i, { c: name })}
 											/>
 											<Button
 												class="q-dir"
-												icon={s.d}
-												aria-label={`Direction: ${s.d === "asc" ? "ascending" : "descending"}`}
-												onClick={() => setSort(i(), { d: s.d === "asc" ? "desc" : "asc" })}
+												icon={s().d}
+												aria-label={`Direction: ${s().d === "asc" ? "ascending" : "descending"}`}
+												onClick={() => setSort(i, { d: s().d === "asc" ? "desc" : "asc" })}
 											>
-												{s.d === "asc" ? "Ascending" : "Descending"}
+												{s().d === "asc" ? "Ascending" : "Descending"}
 											</Button>
 											<Show when={props.draft.sorts.length > 1}>
 												<Button
 													variant="bare"
 													class="ico"
 													icon="up"
-													label={`Move ${s.c} up`}
-													disabled={i() === 0}
-													onClick={() => moveSort(i(), -1)}
+													label={`Move ${s().c} up`}
+													disabled={i === 0}
+													onClick={() => moveSort(i, -1)}
 												/>
 											</Show>
 											<Button
 												variant="bare"
 												class="ico"
 												icon="close"
-												label={`Remove the sort on ${s.c}`}
-												onClick={() => props.onRemoveSort(i())}
+												label={`Remove the sort on ${s().c}`}
+												onClick={() => props.onRemoveSort(i)}
 											/>
 										</li>
 									)}
-								</For>
+								</Index>
 							</ol>
 						</Show>
 						<Button variant="quiet" class="q-add" icon="plus" onClick={addSort}>
