@@ -4,7 +4,7 @@ A small database explorer for Postgres and SQLite that runs as a single binary. 
 
 ## Status
 
-Early development. Postgres and SQLite work in both the web UI and the CLI. A Docker image is planned.
+Early development. Postgres and SQLite work in both the web UI and the CLI.
 
 ## Features
 
@@ -21,7 +21,6 @@ Early development. Postgres and SQLite work in both the web UI and the CLI. A Do
 ## Requirements
 
 - Zig 0.16.0
-- libpq (from your Postgres client package)
 - bun (to build the web UI)
 
 SQLite is compiled in.
@@ -33,7 +32,12 @@ cd web && bun install && cd ..
 zig build -Doptimize=ReleaseSmall
 ```
 
-The binary is written to `zig-out/bin/zetta`. `zig build` runs `bun run build` in `web/` first. Pass `-Dui=prebuilt` to use an existing `web/dist/index.html` instead.
+The binary is written to `zig-out/bin/zetta`, about 1.3 MB, and links nothing but libc. `zig build` runs `bun run build` in `web/` first. Pass `-Dui=prebuilt` to use an existing `web/dist/index.html.gz` instead.
+
+| Option | Description |
+|---|---|
+| `-Dtarget=x86_64-linux-musl` | Cross-compile; a musl target gives a fully static binary |
+| `-Dcommit=<hash>` | Commit shown by `--version` when there is no `.git` |
 
 ## Usage
 
@@ -64,6 +68,34 @@ Run `zetta <command> --help` for every option. Each option has an environment va
 
 The SQL tab and `query` run any statement with the privileges of the connecting role. With Postgres, `--read-only` sets `default_transaction_read_only`, which a statement can turn off again. For a hard guarantee, connect as a read-only role.
 
+## Postgres support
+
+zetta speaks the Postgres protocol itself; there is no libpq or OpenSSL.
+
+- Connection strings: `postgres://` URIs and `key=value` strings, parsed as libpq does, plus `PG*` environment variables and `~/.pgpass`.
+- Authentication: SCRAM-SHA-256, MD5, cleartext password and trust.
+- TLS: every `sslmode` from `disable` to `verify-full`, with `sslrootcert=<file>` or `system`. With `verify-ca` or `verify-full` and no `sslrootcert`, the system certificate store is used.
+- TCP, IPv6 and Unix sockets (`/run/postgresql`, then `/tmp`).
+- Not supported: channel binding, client certificates, Kerberos/GSSAPI, multiple hosts, and `COPY`.
+
+## Docker
+
+The image is a single static binary on `scratch`: under 1 MB to pull, and it runs as a non-root user. The build cross-compiles, so one machine builds both architectures (`docker buildx build --platform linux/amd64,linux/arm64 .`).
+
+```sh
+docker build -t zetta --build-arg ZETTA_COMMIT=$(git rev-parse --short HEAD) .
+```
+
+```sh
+docker run --rm -p 7777:7777 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://user:password@db:5432/app zetta
+```
+
+```sh
+docker run --rm -p 7777:7777 -e ZETTA_TOKEN=change-me -v "$PWD/app.db:/data/app.db:ro" zetta serve /data/app.db --read-only
+```
+
+Inside the container zetta listens on `0.0.0.0`, so it refuses to start without `ZETTA_TOKEN`. Open `http://localhost:7777/?token=<your token>`. The CLI works too: `docker run --rm zetta query <dsn> "select 1"`.
+
 ## Shell completion
 
 ```sh
@@ -78,5 +110,7 @@ zetta completion fish > ~/.config/fish/completions/zetta.fish
 zig build check   # format check and full build
 zig build test    # unit tests and the adapter conformance suite
 ZETTA_TEST_PG_URL=postgres://... zig build test   # also run the suite on Postgres
+ZETTA_TEST_PG_URL=postgres://... zig build test-oracle -Dpg-oracle=true   # compare with libpq, needs libpq installed
+dev/pg-matrix.sh  # auth methods, TLS and sslmode against real servers in Docker
 cd web && bun run dev   # UI dev server, proxies /api to zetta on port 7777
 ```

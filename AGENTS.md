@@ -2,12 +2,12 @@
 
 A single-binary database explorer. Point it at Postgres or SQLite, browse and query in the browser, or script it from the shell.
 
-The design lives in `docs/DESIGN.md`. It is local reference and not tracked. Nothing in it is decided until it lands in code.
+The architecture lives in `docs/ARCHITECTURE.md` and the product brief in `docs/PRODUCT.md`. It is local reference and not tracked. Nothing in it is decided until it lands in code.
 
 ## Stack
 
 - **Zig 0.16.0 only.** The global `zig` on this machine may point at another version, so check `zig version`. Use `~/.zvm/0.16.0/zig` when they differ.
-- **Postgres** goes through libpq. **SQLite** is the official amalgamation in `vendor/sqlite3`, compiled into the binary. Keep `EXPLAIN` and the introspection pragmas enabled, because an explorer needs them.
+- **Postgres** speaks the wire protocol natively in `src/db/postgres/`, with TLS from `std.crypto.tls`; the binary links nothing but libc. libpq appears only in the opt-in `-Dpg-oracle` differential tests. **SQLite** is the official amalgamation in `vendor/sqlite3`, compiled into the binary. Keep `EXPLAIN` and the introspection pragmas enabled, because an explorer needs them.
 - **Web UI:** Solid 1.x, Vite and TypeScript in `web/`, built with bun into one `index.html` that the binary embeds.
   - There's no router. View state lives in the URL search params.
   - CSS is plain and icons are hand-drawn SVG.
@@ -18,7 +18,7 @@ The design lives in `docs/DESIGN.md`. It is local reference and not tracked. Not
 - **Orchestration.** `src/main.zig` parses argv, resolves settings, dispatches to a command in `src/commands/` and maps the result to an exit code. Logic goes in the layer that owns it, never in `main.zig`.
 - **Layering.**
   - Imports go one way: `commands → server → db`, and `commands → cli`.
-  - `db` never imports HTTP code. `server` never names libpq, sqlite3 or a concrete adapter. `cli` knows nothing about databases.
+  - `db` never imports HTTP code. `server` never names sqlite3 or a concrete adapter. `cli` knows nothing about databases.
   - Each module directory has a `root.zig` that re-exports its public API and pulls in its tests.
 - **Adapters.**
   - Each database is a folder in `src/db/<name>/` that implements the `Adapter` vtable in `src/db/Adapter.zig`.
@@ -36,7 +36,7 @@ The design lives in `docs/DESIGN.md`. It is local reference and not tracked. Not
   - No `catch {}`. Every error is propagated, logged with its value through a scoped logger, or has a comment saying why it can't happen.
   - The HTTP API answers errors as `{ "error": "<code>", "message": "<text>" }`.
 - **Memory.**
-  - Every request and every command gets an arena. Adapters copy rows into the caller's allocator, so nothing owned by libpq or sqlite3 outlives a call.
+  - Every request and every command gets an arena. Adapters copy rows into the caller's allocator, so nothing owned by a connection or by sqlite3 outlives a call.
   - Argument parsing never touches the heap.
 - **Security.**
   - `serve` binds to `127.0.0.1` by default and refuses a non-loopback host without `--token`.
@@ -75,7 +75,13 @@ zig build check   # zig fmt --check + full build
 zig build test
 ```
 
-Once `web/` exists, `bun run check` in `web/` also has to pass. A change in behaviour comes with a test in the module that owns it. When a test is deleted, port it rather than dropping it.
+`bun run check` in `web/` also has to pass. A change to the Postgres driver also runs, against a real server:
+
+```bash
+ZETTA_TEST_PG_URL=postgres://... zig build test test-oracle -Dpg-oracle=true   # conformance plus libpq differential
+dev/pg-matrix.sh                                                                # auth methods x TLS x sslmode, in Docker
+```
+ A change in behaviour comes with a test in the module that owns it. When a test is deleted, port it rather than dropping it.
 
 ## Docs
 
