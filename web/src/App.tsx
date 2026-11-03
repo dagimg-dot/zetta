@@ -193,6 +193,7 @@ export function App() {
 						active={view().tab === "sql"}
 						database={meta.data()?.database}
 						readOnly={meta.data()?.readOnly ?? false}
+						onSchemaChange={catalog.refetch}
 						editorRef={(el) => {
 							editor = el;
 						}}

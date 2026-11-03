@@ -651,6 +651,15 @@ textarea.editor:focus-visible {
 	color: var(--text);
 }
 
+.error .where {
+	margin: var(--space-1) 0 0;
+	overflow-x: auto;
+	white-space: pre;
+	font: inherit;
+	font-family: var(--font-mono);
+	color: var(--text-secondary);
+}
+
 .error .code {
 	font-size: var(--text-xs);
 	font-weight: var(--weight-semibold);

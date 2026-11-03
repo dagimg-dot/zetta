@@ -3,7 +3,7 @@ import { announce } from "../announce";
 import { runQuery } from "../api";
 import { formatMs, plural } from "../format";
 import { createRequest } from "../request";
-import { errorRange, isWrite } from "../value";
+import { changesSchema, errorRange, isWrite } from "../value";
 import { Button } from "./Button";
 import { ErrorBox } from "./ErrorBox";
 import { createHidden, createSelection, Grid, HiddenButton, SelectionNote } from "./Grid";
@@ -34,12 +34,15 @@ export function SqlPane(props: {
 	active: boolean;
 	database: string | undefined;
 	readOnly: boolean;
+	/** A run created, dropped or altered something, so the table list may be out of date. */
+	onSchemaChange?: () => void;
 	editorRef?: (el: HTMLTextAreaElement) => void;
 }) {
 	let editor: HTMLTextAreaElement | undefined;
 	const storageKey = () => `zetta.sql.${props.database ?? ""}`;
 	const [sql, setSql] = createSignal("");
-	const [ran, setRan] = createSignal("");
+	/** What the last run sent, and where in the editor it started. */
+	const [ran, setRan] = createSignal({ text: "", at: 0 });
 	const hidden = createHidden();
 	const selection = createSelection();
 	const query = createRequest(runQuery);
@@ -67,13 +70,17 @@ export function SqlPane(props: {
 
 	const writes = createMemo(() => !props.readOnly && isWrite(sql()));
 
-	/** Runs the selection when there is one, so a single statement can be run out of a longer script. */
+	/**
+	 * Runs the selection when there is one, so a single statement can be run out of a longer script.
+	 * A run while another is waiting replaces it.
+	 */
 	const run = () => {
-		if (!editor || query.loading()) return;
+		if (!editor) return;
 		const { selectionStart: a, selectionEnd: b, value } = editor;
-		const text = (a !== b ? value.slice(a, b) : value).trim();
+		const raw = a !== b ? value.slice(a, b) : value;
+		const text = raw.trim();
 		if (!text) return;
-		setRan(text);
+		setRan({ text, at: (a !== b ? a : 0) + raw.indexOf(text) });
 		announce("Running");
 		query.run(text);
 	};
@@ -101,10 +108,11 @@ export function SqlPane(props: {
 	const errorAt = () => {
 		const err = query.error();
 		if (!err) return null;
-		const range = errorRange(ran(), err.message);
-		if (!range) return null;
-		const start = sql().indexOf(ran());
-		return start >= 0 ? ([start + range[0], start + range[1]] as const) : null;
+		const { text, at } = ran();
+		const range = errorRange(text, err.message);
+		// The editor may have changed since the run; then the spot is gone.
+		if (!range || sql().slice(at, at + text.length) !== text) return null;
+		return [at + range[0], at + range[1]] as const;
 	};
 
 	const showError = (range: readonly [number, number]) => {
@@ -122,7 +130,9 @@ export function SqlPane(props: {
 
 	createEffect(
 		on(query.data, (r) => {
-			if (r) announce(info());
+			if (!r) return;
+			announce(info());
+			if (changesSchema(query.dataKey() ?? "")) props.onSchemaChange?.();
 		}),
 	);
 
@@ -159,6 +169,18 @@ export function SqlPane(props: {
 				>
 					{query.loading() ? "Running" : writes() ? "Run write" : "Run"}
 				</Button>
+				<Show when={query.loading()}>
+					<Button
+						icon="close"
+						tip="Stop waiting for the result. A statement the database already started may still finish."
+						onClick={() => {
+							query.cancel();
+							announce("Stopped");
+						}}
+					>
+						Stop
+					</Button>
+				</Show>
 				<Show
 					when={writes()}
 					fallback={<span class="hint">Select text to run only that statement</span>}

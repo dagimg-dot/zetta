@@ -17,6 +17,8 @@ export interface Request<K, T> {
 	loading: Accessor<boolean>;
 	run: (key: K) => void;
 	refetch: () => void;
+	/** Stops waiting for the request in flight and keeps the last result. */
+	cancel: () => void;
 	reset: () => void;
 }
 
@@ -97,6 +99,11 @@ export function createRequest<K, T>(
 		run,
 		refetch: () => {
 			if (lastKey) run(lastKey.key);
+		},
+		cancel: () => {
+			seq++;
+			abort();
+			setLoading(false);
 		},
 		reset: () => {
 			seq++;

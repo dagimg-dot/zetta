@@ -133,11 +133,63 @@ export function errorRange(sql: string, message: string): [number, number] | nul
 	return null;
 }
 
-const writeVerbs =
-	/^\s*(insert|update|delete|drop|alter|create|truncate|replace|grant|revoke|vacuum|reindex)\b/i;
+/** True when a statement in `sql` creates, drops, alters or renames something. */
+export function changesSchema(sql: string): boolean {
+	return statements(sql).some((s) => /^\s*(create|drop|alter)\b/i.test(s));
+}
 
-/** True when any statement in `sql` changes data or schema. Comments are ignored. */
+/**
+ * The statements in `sql`, without comments, with each string literal and quoted name emptied, so
+ * a keyword or semicolon inside one does not count. Handles '', "" and Postgres $tag$ quoting.
+ */
+export function statements(sql: string): string[] {
+	const out: string[] = [];
+	let cur = "";
+	let i = 0;
+	while (i < sql.length) {
+		const ch = sql[i] ?? "";
+		const rest = sql.slice(i);
+		if (rest.startsWith("--")) {
+			const end = sql.indexOf("\n", i);
+			i = end < 0 ? sql.length : end;
+		} else if (rest.startsWith("/*")) {
+			const end = sql.indexOf("*/", i + 2);
+			i = end < 0 ? sql.length : end + 2;
+			cur += " ";
+		} else if (ch === "'" || ch === '"') {
+			let j = i + 1;
+			while (j < sql.length && !(sql[j] === ch && sql[j + 1] !== ch)) j += sql[j] === ch ? 2 : 1;
+			i = j + 1;
+			cur += `${ch}${ch}`;
+		} else if (ch === "$" && /^\$[A-Za-z_]*\$/.test(rest)) {
+			const tag = /^\$[A-Za-z_]*\$/.exec(rest)?.[0] ?? "$$";
+			const end = sql.indexOf(tag, i + tag.length);
+			i = end < 0 ? sql.length : end + tag.length;
+			cur += "''";
+		} else if (ch === ";") {
+			out.push(cur);
+			cur = "";
+			i++;
+		} else {
+			cur += ch;
+			i++;
+		}
+	}
+	out.push(cur);
+	return out.filter((s) => s.trim());
+}
+
+const writeVerbs =
+	/^\s*(insert|update|delete|drop|alter|create|truncate|replace|grant|revoke|vacuum|reindex|attach|detach|merge|copy)\b/i;
+
+/** True when any statement in `sql` changes data or schema. */
 export function isWrite(sql: string): boolean {
-	const clean = sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-	return clean.split(";").some((s) => writeVerbs.test(s));
+	return statements(sql).some(
+		(s) =>
+			writeVerbs.test(s) ||
+			// A pragma that assigns changes the database; one that reads does not.
+			/^\s*pragma\b[^=]*=/i.test(s) ||
+			// A CTE can end in a write.
+			(/^\s*with\b/i.test(s) && /\b(insert|update|delete|merge)\b/i.test(s)),
+	);
 }

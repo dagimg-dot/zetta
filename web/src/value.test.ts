@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { closest, errorRange, hexDump, isWrite, kindOf, unknownColumn } from "./value";
+import {
+	changesSchema,
+	closest,
+	errorRange,
+	hexDump,
+	isWrite,
+	kindOf,
+	statements,
+	unknownColumn,
+} from "./value";
 
 describe("kindOf", () => {
 	test("tells blobs, JSON and multi-line text apart", () => {
@@ -48,6 +57,33 @@ describe("isWrite", () => {
 		expect(isWrite("select 1; update t set x = 1")).toBe(true);
 		expect(isWrite("-- delete everything\nselect 1")).toBe(false);
 	});
+
+	test("a keyword or semicolon inside a string is not a statement", () => {
+		expect(isWrite("select 'a; delete everything'")).toBe(false);
+		expect(isWrite('select 1 as "x; drop table t"')).toBe(false);
+		expect(isWrite("select $q$; delete from t$q$")).toBe(false);
+		expect(isWrite("select 'it''s'; delete from t")).toBe(true);
+	});
+
+	test("assigning pragmas, attach and writing CTEs count as writes", () => {
+		expect(isWrite("pragma user_version = 5")).toBe(true);
+		expect(isWrite("pragma table_info(t)")).toBe(false);
+		expect(isWrite("attach database 'x.db' as x")).toBe(true);
+		expect(isWrite("with d as (delete from t returning *) select * from d")).toBe(true);
+		expect(isWrite("with c as (select 1) select * from c")).toBe(false);
+	});
+});
+
+test("statements split on semicolons outside comments and quotes", () => {
+	const parts = statements("select 1; /* ; */ select ';'; -- ;\n").map((s) => s.trim());
+	expect(parts).toEqual(["select 1", "select ''"]);
+});
+
+test("only create, drop and alter change the table list", () => {
+	expect(changesSchema("create table t (x int)")).toBe(true);
+	expect(changesSchema("select 1;\n  DROP VIEW v")).toBe(true);
+	expect(changesSchema("insert into t values (1)")).toBe(false);
+	expect(changesSchema("select 'create table'")).toBe(false);
 });
 
 test("hexDump groups bytes with offsets", () => {
