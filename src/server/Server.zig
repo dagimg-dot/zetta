@@ -73,7 +73,14 @@ fn serveConnection(self: *Server, stream: Io.net.Stream) void {
     defer arena_state.deinit();
     while (true) {
         _ = arena_state.reset(.{ .retain_with_limit = keep_between_requests });
-        var req = http.receiveHead() catch return;
+        var req = http.receiveHead() catch |err| switch (err) {
+            error.HttpConnectionClosing => return,
+            error.HttpHeadersOversize => return refuseOversizedHead(&reader.interface, &writer.interface),
+            else => {
+                log.debug("closing connection: {t}", .{err});
+                return;
+            },
+        };
         const method = req.head.method;
         var path_buf: [128]u8 = undefined;
         const path = copyPath(&path_buf, req.head.target);
@@ -86,6 +93,36 @@ fn serveConnection(self: *Server, stream: Io.net.Stream) void {
         const ms = @divTrunc(started.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_ms);
         log.info("{t} {s} {d} {d}ms", .{ method, path, @intFromEnum(status), ms });
     }
+}
+
+/// Heads past this are not read to the end; the connection just closes.
+const max_skipped_head = 1024 * 1024;
+
+const oversized_body = "{\"error\":\"too_large\",\"message\":\"the request URL is over 16 KiB\"}";
+const oversized_response = "HTTP/1.1 431 Request Header Fields Too Large\r\n" ++
+    "content-type: application/json\r\n" ++
+    std.fmt.comptimePrint("content-length: {d}\r\n", .{oversized_body.len}) ++
+    "connection: close\r\n\r\n" ++ oversized_body;
+
+/// Answers a request whose head does not fit the read buffer, such as a filter on a very long
+/// value, so the browser gets a reason rather than a dropped connection. The rest of the head is
+/// read first: closing with it unread would reset the connection and lose the answer.
+fn refuseOversizedHead(in: *Io.Reader, out: *Io.Writer) void {
+    var skipped: usize = 0;
+    while (skipped < max_skipped_head) {
+        const n = in.discardDelimiterInclusive('\n') catch |err| {
+            log.debug("oversized request head ended early: {t}", .{err});
+            return;
+        };
+        skipped += n;
+        if (n <= 2) break;
+    }
+    log.info("refused a request head over {d} bytes", .{in.buffer.len});
+    out.writeAll(oversized_response) catch |err| {
+        log.debug("could not refuse an oversized head: {t}", .{err});
+        return;
+    };
+    out.flush() catch |err| log.debug("could not refuse an oversized head: {t}", .{err});
 }
 
 /// What an idle keep-alive connection holds on to. A browser keeps several open, so keeping
@@ -110,6 +147,16 @@ fn copyPath(buf: []u8, target: []const u8) []const u8 {
     const n = @min(path.len, buf.len);
     @memcpy(buf[0..n], path[0..n]);
     return buf[0..n];
+}
+
+test "a request head too long for the buffer gets a 431 with a JSON reason" {
+    const head = "GET /api/browse?q=" ++ "x" ** 300 ++ " HTTP/1.1\r\nhost: localhost\r\n\r\n";
+    var in: Io.Reader = .fixed(head ++ "GET /next");
+    var out_buf: [512]u8 = undefined;
+    var out: Io.Writer = .fixed(&out_buf);
+    refuseOversizedHead(&in, &out);
+    try std.testing.expectEqualStrings(oversized_response, out.buffered());
+    try std.testing.expectEqualStrings("GET /next", in.buffered());
 }
 
 test "logged paths never include the query string" {
