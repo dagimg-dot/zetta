@@ -1,12 +1,14 @@
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { inspectorWidth } from "../layout";
-import { whitespace } from "../marks";
+import type { PeekTarget } from "../peek";
 import { matchRefs } from "../refs";
 import { blobBytes, edges, formatBytes, hexDump, kindOf, parseJson } from "../value";
 import { Button } from "./Button";
 import { CopyButton } from "./CopyButton";
 import { Icon, type IconName } from "./icons";
 import { Kbd } from "./Kbd";
+import { withBreaks, withMarks } from "./Marked";
+import { Peek } from "./Peek";
 import { Segmented } from "./Segmented";
 import { Splitter } from "./Splitter";
 import { tip } from "./Tip";
@@ -27,42 +29,14 @@ export interface InspectedCell {
 	actions?: InspectorAction[];
 	/** Columns in other tables that point at this value. */
 	incoming?: InspectorAction[];
+	/** The row this foreign key value points to, and that row's table as the grid names it. */
+	peek?: { target: PeekTarget; label: string };
 }
 
 /** Past this many references the list gets a filter. */
 const FILTER_REFS_AT = 8;
 
 type Mode = "pretty" | "raw";
-
-/** Draws line breaks as a visible ↵ while keeping the text selectable and copyable. */
-function withBreaks(text: string) {
-	const parts = text.split("\n");
-	return parts.map((line, i) => (
-		<>
-			{line}
-			{i < parts.length - 1 && (
-				<>
-					<span class="nl" aria-hidden="true">
-						↵
-					</span>
-					{"\n"}
-				</>
-			)}
-		</>
-	));
-}
-
-/** Line breaks as ↵, and the spaces and tabs a value starts or ends with as · and →. */
-function withMarks(text: string) {
-	const { lead, body, trail } = edges(text);
-	return (
-		<>
-			{lead && whitespace(lead)}
-			{withBreaks(body)}
-			{trail && whitespace(trail)}
-		</>
-	);
-}
 
 function action(a: InspectorAction) {
 	return (
@@ -204,6 +178,7 @@ export function Inspector(props: {
 						? withBreaks(shown())
 						: shown()}
 			</pre>
+			<Show when={props.cell.peek}>{(p) => <Peek target={p().target} label={p().label} />}</Show>
 			<Show when={props.cell.actions?.length || refs().length}>
 				<nav class="actions" aria-label="Go to related rows">
 					<For each={props.cell.actions}>{action}</For>

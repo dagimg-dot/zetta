@@ -450,6 +450,7 @@ export function Grid(props: {
 			row: (props.offset ?? 0) + cur.row + 1,
 			actions: actionsFor(col.name, value),
 			incoming: incomingFor(col.name, value),
+			peek: peekFor(col.name, value),
 		};
 	});
 
@@ -478,6 +479,14 @@ export function Grid(props: {
 				run: () => links.follow(target, value),
 			});
 		return out;
+	};
+
+	/** The row a foreign key value points to, for the inspector to show in place. */
+	const peekFor = (column: string, value: string | null) => {
+		const links = props.links;
+		const target = links?.outgoing(column);
+		if (!links || !target || value === null || !filterable(column, value)) return undefined;
+		return { target: { ...target, value }, label: refName(target, links.schema) };
 	};
 
 	/** One action per column elsewhere that points at this one, named by its table. */
