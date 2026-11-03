@@ -151,6 +151,9 @@ fn addSqlite(
             .optimize = optimize,
             .unwind_tables = unwind,
             .link_libc = true,
+            // ReleaseSafe would trap on undefined behaviour inside SQLite, which costs 40 to 60%
+            // on scans. SQLite is fuzzed far beyond what that catches; zetta's own code keeps its checks.
+            .sanitize_c = if (optimize == .Debug) null else .off,
         }),
     });
     lib.root_module.addIncludePath(b.path("vendor/sqlite3"));

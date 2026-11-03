@@ -29,10 +29,10 @@ SQLite is compiled in.
 
 ```sh
 cd web && bun install && cd ..
-zig build -Doptimize=ReleaseSmall
+zig build -Doptimize=ReleaseSafe
 ```
 
-The binary is written to `zig-out/bin/zetta`, about 1.3 MB, and links nothing but libc. `zig build` runs `bun run build` in `web/` first. Pass `-Dui=prebuilt` to use an existing `web/dist/index.html.gz` instead.
+The binary is written to `zig-out/bin/zetta`, about 2.2 MB, and links nothing but libc. ReleaseSafe is the release mode: zetta keeps its bounds and overflow checks, while SQLite is built without them and runs as fast as in ReleaseFast. ReleaseSmall saves about 0.8 MB but runs queries 1.5 to 2 times slower. `zig build` runs `bun run build` in `web/` first. Pass `-Dui=prebuilt` to use an existing `web/dist/index.html.gz` instead.
 
 | Option | Description |
 |---|---|

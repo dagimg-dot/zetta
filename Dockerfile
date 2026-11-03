@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/root/.cache/zig \
       arm64) target=aarch64-linux-musl ;; \
       *) echo "unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    /opt/zig/zig build -Doptimize=ReleaseSmall -Dui=prebuilt -Dtarget="$target" -Dcpu=baseline \
+    /opt/zig/zig build -Doptimize=ReleaseSafe -Dui=prebuilt -Dtarget="$target" -Dcpu=baseline \
       -Dcommit="${ZETTA_COMMIT}"
 # scratch has no user database; the Postgres driver reads ~/.pgpass via HOME.
 RUN printf 'zetta:x:65532:65532:zetta:/:/zetta\n' > /tmp/passwd \
