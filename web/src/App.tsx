@@ -194,6 +194,7 @@ export function App() {
 					<SqlPane
 						active={view().tab === "sql"}
 						database={meta.data()?.database}
+						dialect={meta.data()?.adapter ?? "postgres"}
 						readOnly={meta.data()?.readOnly ?? false}
 						starter={starterSql(catalog.data(), meta.data()?.adapter, view())}
 						onSchemaChange={catalog.refetch}

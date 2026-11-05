@@ -9,7 +9,7 @@ import { ErrorBox } from "../../components/ui/ErrorBox";
 import { Loader } from "../../components/ui/icons";
 import { Kbd } from "../../components/ui/Kbd";
 import { Loading } from "../../components/ui/Loading";
-import { runQuery } from "../../lib/api";
+import { type Adapter, runQuery } from "../../lib/api";
 import { formatMs, plural, rowTotal } from "../../lib/format";
 import { isMac } from "../../lib/keys";
 import { createRequest } from "../../lib/request";
@@ -35,13 +35,14 @@ function pickRun(
 	a: number,
 	b: number,
 	all: boolean,
+	dialect: Adapter,
 ): { text: string; at: number } | null {
 	if (all || a !== b) {
 		const raw = all ? value : value.slice(a, b);
 		const text = raw.trim();
 		return text ? { text, at: (all ? 0 : a) + raw.indexOf(text) } : null;
 	}
-	const r = statementAt(value, a);
+	const r = statementAt(value, a, dialect);
 	return r ? { text: value.slice(r[0], r[1]), at: r[0] } : null;
 }
 
@@ -65,6 +66,8 @@ function save(key: string, value: string): void {
 export function SqlPane(props: {
 	active: boolean;
 	database: string | undefined;
+	/** Whose rules split the editor into statements. */
+	dialect: Adapter;
 	readOnly: boolean;
 	/** A first query to offer while the editor is empty, on a table that exists. */
 	starter?: string | null;
@@ -109,10 +112,10 @@ export function SqlPane(props: {
 		),
 	);
 
-	const ranges = createMemo(() => statementRanges(sql()));
-	const next = createMemo(() => pickRun(sql(), caret()[0], caret()[1], false));
-	const writes = createMemo(() => !props.readOnly && isWrite(next()?.text ?? ""));
-	const writesAll = createMemo(() => !props.readOnly && isWrite(sql()));
+	const ranges = createMemo(() => statementRanges(sql(), props.dialect));
+	const next = createMemo(() => pickRun(sql(), caret()[0], caret()[1], false, props.dialect));
+	const writes = createMemo(() => !props.readOnly && isWrite(next()?.text ?? "", props.dialect));
+	const writesAll = createMemo(() => !props.readOnly && isWrite(sql(), props.dialect));
 
 	/** Which statement Run would send, for the hint beside it. */
 	const nextNote = () => {
@@ -126,7 +129,7 @@ export function SqlPane(props: {
 
 	/** How many statements the shown result's run held, when more than one: only the last one's result shows. */
 	const ranMany = createMemo(() => {
-		const n = statements(query.dataKey()?.text ?? "").length;
+		const n = statements(query.dataKey()?.text ?? "", props.dialect).length;
 		return n > 1 ? n : 0;
 	});
 
@@ -136,7 +139,13 @@ export function SqlPane(props: {
 	 */
 	const run = (all = false) => {
 		if (!editor) return;
-		const picked = pickRun(editor.value, editor.selectionStart, editor.selectionEnd, all);
+		const picked = pickRun(
+			editor.value,
+			editor.selectionStart,
+			editor.selectionEnd,
+			all,
+			props.dialect,
+		);
 		if (!picked) return;
 		setRan(picked);
 		announce("Running");
@@ -147,7 +156,7 @@ export function SqlPane(props: {
 	const countable = () => {
 		const r = query.data();
 		const text = query.dataKey()?.text ?? "";
-		return !!r && !r.rowCountExact && !isWrite(text);
+		return !!r && !r.rowCountExact && !isWrite(text, props.dialect);
 	};
 	const countAll = () => {
 		const k = query.dataKey();
@@ -212,7 +221,7 @@ export function SqlPane(props: {
 		on(query.data, (r) => {
 			if (!r) return;
 			announce(info());
-			if (changesSchema(query.dataKey()?.text ?? "")) props.onSchemaChange?.();
+			if (changesSchema(query.dataKey()?.text ?? "", props.dialect)) props.onSchemaChange?.();
 		}),
 	);
 

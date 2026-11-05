@@ -1,3 +1,6 @@
+import type { Adapter } from "./api";
+import { lex, type Token } from "./sql-lex";
+
 /** Edit distance, for "did you mean" on unknown column names. */
 export function distance(a: string, b: string): number {
 	const prev = Array.from({ length: b.length + 1 }, (_, j) => j);
@@ -63,8 +66,8 @@ export function errorRange(sql: string, message: string): [number, number] | nul
 }
 
 /** True when a statement in `sql` creates, drops, alters or renames something. */
-export function changesSchema(sql: string): boolean {
-	return statements(sql).some((s) => /^\s*(create|drop|alter)\b/i.test(s));
+export function changesSchema(sql: string, dialect: Adapter): boolean {
+	return statements(sql, dialect).some((s) => /^\s*(create|drop|alter)\b/i.test(s));
 }
 
 interface Segment {
@@ -76,60 +79,140 @@ interface Segment {
 	clean: string;
 }
 
-const tagAt = /\$[A-Za-z_]*\$/y;
-
-/** The Postgres `$tag$` that starts at `i`, if one does. */
-function dollarTag(sql: string, i: number): string | null {
-	tagAt.lastIndex = i;
-	return tagAt.exec(sql)?.[0] ?? null;
+/** What a token adds to a segment's clean text. */
+function cleanText(sql: string, t: Token): string {
+	switch (t.kind) {
+		case "comment":
+			return sql.startsWith("--", t.start) ? "" : " ";
+		case "string":
+			return "''";
+		case "name":
+			return '""';
+		default:
+			return sql.slice(t.start, t.end);
+	}
 }
 
-/** Cuts `sql` at each semicolon that is not inside a comment, string, quoted name or $tag$ body. */
-function segments(sql: string): Segment[] {
+/** Reads a statement's tokens in order and says which semicolon ends it. */
+interface Splitter {
+	/** True when `t`, whose text is `text`, is a semicolon that ends the statement. */
+	ends(t: Token, text: string): boolean;
+}
+
+/**
+ * psql's rule (psqlscan.l): a semicolon ends a statement outside parentheses, and outside the
+ * BEGIN ... END body of a CREATE [OR REPLACE] FUNCTION or PROCEDURE, where CASE also opens a block.
+ * Words inside parentheses count for neither.
+ */
+function psqlSplitter(): Splitter {
+	let depth = 0;
+	let body = 0;
+	let lead: string[] = [];
+	return {
+		ends(t, text) {
+			if (t.kind === "punct") {
+				if (text === "(") depth++;
+				else if (text === ")") depth = Math.max(0, depth - 1);
+				else if (text === ";" && depth === 0 && body === 0) {
+					lead = [];
+					return true;
+				}
+			} else if (t.kind === "word" && depth === 0) {
+				const word = text.toLowerCase();
+				if (lead.length < 4) lead.push(word);
+				if (isRoutine(lead)) {
+					if (word === "begin") body++;
+					else if (word === "case" && body > 0) body++;
+					else if (word === "end" && body > 0) body--;
+				}
+			}
+			return false;
+		},
+	};
+}
+
+/** CREATE [OR REPLACE] FUNCTION or PROCEDURE. */
+function isRoutine(lead: string[]): boolean {
+	const [a, b, c, d] = lead;
+	const kind = b === "or" && c === "replace" ? d : b;
+	return a === "create" && (kind === "function" || kind === "procedure");
+}
+
+/** complete.c's token classes, in the column order of `sqliteStates`. */
+const Lite = {
+	Semi: 0,
+	Space: 1,
+	Other: 2,
+	Explain: 3,
+	Create: 4,
+	Temp: 5,
+	Trigger: 6,
+	End: 7,
+} as const;
+
+/**
+ * sqlite3_complete's state machine (complete.c), by state then token class. States: 0 nothing,
+ * 1 start, 2 normal, 3 explain, 4 create, 5 trigger, 6 semicolon in a trigger, 7 END after it. A
+ * semicolon ends a statement when it moves to state 1, so inside CREATE [TEMP] TRIGGER only
+ * `; END ;` does. Parentheses do not count.
+ */
+const sqliteStates = [
+	[1, 0, 2, 3, 4, 2, 2, 2],
+	[1, 1, 2, 3, 4, 2, 2, 2],
+	[1, 2, 2, 2, 2, 2, 2, 2],
+	[1, 3, 3, 2, 4, 2, 2, 2],
+	[1, 4, 2, 2, 2, 4, 5, 2],
+	[6, 5, 5, 5, 5, 5, 5, 5],
+	[6, 6, 5, 5, 5, 5, 5, 7],
+	[1, 7, 5, 5, 5, 5, 5, 5],
+];
+
+const sqliteWords: Record<string, number> = {
+	explain: Lite.Explain,
+	create: Lite.Create,
+	temp: Lite.Temp,
+	temporary: Lite.Temp,
+	trigger: Lite.Trigger,
+	end: Lite.End,
+};
+
+function sqliteSplitter(): Splitter {
+	let state = 0;
+	return {
+		ends(t, text) {
+			let kind: number = Lite.Other;
+			if (t.kind === "space" || t.kind === "comment") kind = Lite.Space;
+			else if (t.kind === "punct" && text === ";") kind = Lite.Semi;
+			else if (t.kind === "word") kind = sqliteWords[text.toLowerCase()] ?? Lite.Other;
+			state = sqliteStates[state]?.[kind] ?? 2;
+			return kind === Lite.Semi && state === 1;
+		},
+	};
+}
+
+/** Cuts `sql` at each semicolon that ends a statement, by the rules of psql or the sqlite3 shell. */
+function segments(sql: string, dialect: Adapter): Segment[] {
 	const out: Segment[] = [];
+	const splitter = dialect === "postgres" ? psqlSplitter() : sqliteSplitter();
 	let start = 0;
-	let cur = "";
-	let i = 0;
-	while (i < sql.length) {
-		const ch = sql[i] ?? "";
-		const rest = sql.slice(i, i + 2);
-		if (rest === "--") {
-			const end = sql.indexOf("\n", i);
-			i = end < 0 ? sql.length : end;
-		} else if (rest === "/*") {
-			const end = sql.indexOf("*/", i + 2);
-			i = end < 0 ? sql.length : end + 2;
-			cur += " ";
-		} else if (ch === "'" || ch === '"') {
-			let j = i + 1;
-			while (j < sql.length && !(sql[j] === ch && sql[j + 1] !== ch)) j += sql[j] === ch ? 2 : 1;
-			i = j + 1;
-			cur += `${ch}${ch}`;
-		} else if (ch === "$" && dollarTag(sql, i)) {
-			const tag = dollarTag(sql, i) ?? "$$";
-			const end = sql.indexOf(tag, i + tag.length);
-			i = end < 0 ? sql.length : end + tag.length;
-			cur += "''";
-		} else if (ch === ";") {
-			out.push({ start, end: i, clean: cur });
-			cur = "";
-			i++;
-			start = i;
-		} else {
-			cur += ch;
-			i++;
-		}
+	let clean = "";
+	for (const t of lex(sql, dialect)) {
+		if (splitter.ends(t, sql.slice(t.start, t.end))) {
+			out.push({ start, end: t.start, clean });
+			start = t.end;
+			clean = "";
+		} else clean += cleanText(sql, t);
 	}
-	out.push({ start, end: Math.min(i, sql.length), clean: cur });
+	out.push({ start, end: sql.length, clean });
 	return out;
 }
 
 /**
  * The statements in `sql`, without comments, with each string literal and quoted name emptied, so
- * a keyword or semicolon inside one does not count. Handles '', "" and Postgres $tag$ quoting.
+ * a keyword or semicolon inside one does not count.
  */
-export function statements(sql: string): string[] {
-	return segments(sql)
+export function statements(sql: string, dialect: Adapter): string[] {
+	return segments(sql, dialect)
 		.map((s) => s.clean)
 		.filter((s) => s.trim());
 }
@@ -138,9 +221,9 @@ export function statements(sql: string): string[] {
  * Where each statement is in `sql`, as [start, end) without the surrounding whitespace or the
  * semicolon. Comments before a statement belong to it; a stretch of only comments is not one.
  */
-export function statementRanges(sql: string): [number, number][] {
+export function statementRanges(sql: string, dialect: Adapter): [number, number][] {
 	const out: [number, number][] = [];
-	for (const s of segments(sql)) {
+	for (const s of segments(sql, dialect)) {
 		if (!s.clean.trim()) continue;
 		let a = s.start;
 		let b = s.end;
@@ -155,8 +238,8 @@ export function statementRanges(sql: string): [number, number][] {
  * The statement a caret at `at` means: the one it is in or right after, so a caret on a blank line
  * between two statements means the one above. Before the first statement, it means the first.
  */
-export function statementAt(sql: string, at: number): [number, number] | null {
-	const ranges = statementRanges(sql);
+export function statementAt(sql: string, at: number, dialect: Adapter): [number, number] | null {
+	const ranges = statementRanges(sql, dialect);
 	let pick = ranges[0] ?? null;
 	for (const r of ranges) if (r[0] <= at) pick = r;
 	return pick;
@@ -166,8 +249,8 @@ const writeVerbs =
 	/^\s*(insert|update|delete|drop|alter|create|truncate|replace|grant|revoke|vacuum|reindex|attach|detach|merge|copy)\b/i;
 
 /** True when any statement in `sql` changes data or schema. */
-export function isWrite(sql: string): boolean {
-	return statements(sql).some(
+export function isWrite(sql: string, dialect: Adapter): boolean {
+	return statements(sql, dialect).some(
 		(s) =>
 			writeVerbs.test(s) ||
 			// A pragma that assigns changes the database; one that reads does not.
