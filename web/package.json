@@ -7,7 +7,8 @@
 		"build": "vite build && bun scripts/gzip.ts",
 		"check": "tsc --noEmit && biome check . && bun test",
 		"fmt": "biome format --write .",
-		"test": "bun test"
+		"test": "bun test",
+		"oracle": "bun scripts/split-oracle.ts"
 	},
 	"dependencies": {
 		"@ark-ui/solid": "5.40.0",

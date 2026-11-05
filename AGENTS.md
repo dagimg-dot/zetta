@@ -85,6 +85,8 @@ zig build test
 ZETTA_TEST_PG_URL=postgres://... zig build test test-oracle -Dpg-oracle=true   # conformance plus libpq differential
 dev/pg-matrix.sh                                                                # auth methods x TLS x sslmode, in Docker
 ```
+
+A change to the SQL lexer or statement splitter in `web/src/lib` also runs `ZETTA_TEST_PG_URL=postgres://... bun run oracle` in `web/`, which holds them against psql and `sqlite3_complete` and needs `psql` and `python3`.
  A change in behaviour comes with a test in the module that owns it. When a test is deleted, port it rather than dropping it.
 
 ## Docs
