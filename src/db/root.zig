@@ -49,5 +49,6 @@ test {
     _ = @import("postgres/auth.zig");
     _ = @import("postgres/wire.zig");
     _ = @import("postgres/Postgres.zig");
+    _ = @import("postgres/Conn.zig");
     _ = @import("conformance.zig");
 }

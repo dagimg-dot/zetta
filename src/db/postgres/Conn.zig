@@ -491,6 +491,7 @@ pub const Param = ?[]const u8;
 /// result wins) or, with `params`, as one statement with the extended protocol.
 pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param, max_rows: usize, diag: *Diagnostic) Error!types.ResultSet {
     const st = self.state;
+    defer trimBig(&st.big, st.gpa);
     if (mem.indexOfScalar(u8, text, 0) != null) {
         diag.set("the query contains a NUL byte");
         return error.QueryFailed;
@@ -565,6 +566,14 @@ pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Par
     return last;
 }
 
+/// Most messages fit the read buffer; one that did not can be any size, so its memory is
+/// kept for the next request only while it is small.
+fn trimBig(big: *std.ArrayList(u8), gpa: Allocator) void {
+    if (big.capacity > keep_big) big.clearAndFree(gpa);
+}
+
+const keep_big = 1024 * 1024;
+
 const Finished = struct { set: types.ResultSet, oids: []const u32 };
 
 /// Built-in type names are filled in here; the rest wait for `typeName` once the server is idle.
@@ -622,4 +631,15 @@ fn typeName(self: *Conn, arena: Allocator, oid: u32, diag: *Diagnostic) Error![]
         return error.OutOfMemory;
     };
     return arena.dupe(u8, owned);
+}
+
+test "a large message's buffer is freed after the request, a small one's is kept" {
+    var big: std.ArrayList(u8) = .empty;
+    defer big.deinit(std.testing.allocator);
+    try big.ensureTotalCapacity(std.testing.allocator, 64 * 1024);
+    trimBig(&big, std.testing.allocator);
+    try std.testing.expect(big.capacity >= 64 * 1024);
+    try big.ensureTotalCapacity(std.testing.allocator, 2 * keep_big);
+    trimBig(&big, std.testing.allocator);
+    try std.testing.expectEqual(0, big.capacity);
 }
