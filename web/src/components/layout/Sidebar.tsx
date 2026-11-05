@@ -127,7 +127,22 @@ export function Sidebar(props: {
 								{m().database}
 							</span>
 							<span class="badge">{m().adapter}</span>
-							<Show when={m().readOnly}>
+							<Show
+								when={m().readOnly}
+								fallback={
+									<span
+										class="badge rw"
+										{...tip(
+											"Writes are allowed. Start zetta with --read-only to refuse them",
+											undefined,
+											"bottom",
+										)}
+									>
+										<Icon name="pencil" size={10} />
+										read-write
+									</span>
+								}
+							>
 								<span
 									class="badge ro"
 									{...tip("Writes are refused by the server", undefined, "bottom")}

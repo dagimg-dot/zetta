@@ -69,6 +69,12 @@ aside header {
 	background: var(--surface-warning);
 }
 
+.badge.rw {
+	color: var(--text-danger);
+	border-color: currentColor;
+	background: var(--surface-danger);
+}
+
 .find {
 	padding: 0 var(--space-2) var(--space-2);
 	position: relative;
