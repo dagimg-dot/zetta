@@ -125,16 +125,28 @@ fn run(self: *Postgres, arena: Allocator, text: []const u8, params: ?[]const Con
     return conn.run(arena, text, params, max_rows, diag);
 }
 
-/// `run` for browse and query: applies their budget, and after caller SQL stops trusting the
+/// How `runBudgeted` sends the text.
+const How = union(enum) {
+    /// As `Conn.runLimited`.
+    params: ?[]const Conn.Param,
+    /// As `Conn.query`.
+    query,
+};
+
+/// Browse and query: applies their budget and limits, and after caller SQL stops trusting the
 /// statement_timeout zetta set, since that SQL can hold any statement.
-fn runBudgeted(self: *Postgres, arena: Allocator, text: []const u8, params: ?[]const Conn.Param, max_rows: usize, budget_ms: ?u32, caller_sql: bool, diag: *Diagnostic) types.Error!types.ResultSet {
+fn runBudgeted(self: *Postgres, arena: Allocator, text: []const u8, how: How, limits: types.Limits, budget_ms: ?u32, caller_sql: bool, diag: *Diagnostic) types.Error!types.ResultSet {
     const lease = try self.pool.acquire(diag);
     defer lease.release();
     const conn = &lease.conn.conn;
     defer endTransaction(conn, arena);
     try conn.statementTimeout(arena, budget_ms, diag);
     defer if (caller_sql) conn.callerSqlRan();
-    return conn.run(arena, text, params, max_rows, diag) catch |err| {
+    const res = switch (how) {
+        .params => |p| conn.runLimited(arena, text, p, limits, diag),
+        .query => conn.query(arena, text, limits, diag),
+    };
+    return res catch |err| {
         if (err == error.Timeout) if (budget_ms) |ms| diag.print("the statement ran past its {d} ms budget", .{ms});
         return err;
     };
@@ -540,10 +552,11 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     builder.writeWhere(w, req.filter, compiled.where) catch return error.OutOfMemory;
     builder.writeOrder(w, req.order, compiled.order) catch return error.OutOfMemory;
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
+    const caller_sql = nonEmpty(req.filter) or nonEmpty(req.order);
     // With a builder the statement goes through the extended protocol, which binds the values.
     const params = if (req.builder != null) try bindParams(arena, compiled.params) else null;
-    const caller_sql = nonEmpty(req.filter) or nonEmpty(req.order);
-    return self.runBudgeted(arena, text.written(), params, req.limit, req.budget_ms, caller_sql, diag);
+    const limits: types.Limits = .{ .max_rows = req.limit, .max_bytes = req.max_bytes };
+    return self.runBudgeted(arena, text.written(), .{ .params = params }, limits, req.budget_ms, caller_sql, diag);
 }
 
 fn nonEmpty(s: ?[]const u8) bool {
@@ -559,7 +572,7 @@ fn bindParams(arena: Allocator, values: []const []const u8) Allocator.Error![]co
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {
     const self = from(ptr);
-    return self.runBudgeted(arena, text, null, options.max_rows, options.budget_ms, true, diag);
+    return self.runBudgeted(arena, text, .query, options.limits(), options.budget_ms, true, diag);
 }
 
 fn isTrue(v: ?[]const u8) bool {

@@ -46,8 +46,12 @@ export interface ResultColumn {
 export interface ResultSet {
 	columns: ResultColumn[];
 	rows: (string | null)[][];
+	/** A lower bound when `rowCountExact` is false: reading stopped one row past the limit. */
 	rowCount: number;
+	rowCountExact: boolean;
 	truncated: boolean;
+	/** What stopped `rows` short of `rowCount`, when `truncated` is set. */
+	truncatedBy: "rows" | "bytes";
 	command: string;
 	elapsedMs: number;
 }
@@ -164,8 +168,9 @@ export function compileBuilder(q: string, signal?: AbortSignal): Promise<Compile
 	return request<CompiledBuilder>(`/api/compile?${query({ q })}`, { signal });
 }
 
-export function runQuery(sql: string, signal?: AbortSignal): Promise<ResultSet> {
-	return request<ResultSet>("/api/query", {
+/** Runs caller SQL. With `exact` every row is read to count it, however long that takes. */
+export function runQuery(sql: string, exact: boolean, signal?: AbortSignal): Promise<ResultSet> {
+	return request<ResultSet>(exact ? "/api/query?count=exact" : "/api/query", {
 		method: "POST",
 		headers: { "content-type": "text/plain" },
 		body: sql,

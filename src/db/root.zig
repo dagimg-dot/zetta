@@ -34,6 +34,7 @@ pub const Row = types.Row;
 pub const BrowseRequest = types.BrowseRequest;
 pub const CountRequest = types.CountRequest;
 pub const QueryOptions = types.QueryOptions;
+pub const Limits = types.Limits;
 pub const Capabilities = types.Capabilities;
 
 test {

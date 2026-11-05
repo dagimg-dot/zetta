@@ -452,10 +452,10 @@ fn protocolError(st: *State, diag: *Diagnostic, tag: u8) Error {
     return error.ConnectFailed;
 }
 
-fn serverError(diag: *Diagnostic, body: []const u8, query: ?[]const u8, fallback: Error) Error {
+fn serverError(diag: *Diagnostic, body: []const u8, query_text: ?[]const u8, fallback: Error) Error {
     const notice = wire.Notice.parse(body);
     var w: std.Io.Writer = .fixed(&diag.buf);
-    notice.format(query, &w) catch {};
+    notice.format(query_text, &w) catch {};
     diag.len = std.mem.trimEnd(u8, w.buffered(), "\n").len;
     if (mem.eql(u8, notice.code, "25006")) return error.ReadOnly;
     // query_canceled: zetta never cancels, so this is statement_timeout firing.
@@ -490,6 +490,25 @@ pub const Param = ?[]const u8;
 /// Runs `text` with the simple protocol (several statements allowed, the last
 /// result wins) or, with `params`, as one statement with the extended protocol.
 pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param, max_rows: usize, diag: *Diagnostic) Error!types.ResultSet {
+    return self.exec(arena, text, params, .{ .max_rows = max_rows }, .as_given, diag);
+}
+
+/// As `run`, keeping only what `limits` allow.
+pub fn runLimited(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param, limits: types.Limits, diag: *Diagnostic) Error!types.ResultSet {
+    return self.exec(arena, text, params, limits, .as_given, diag);
+}
+
+/// Caller SQL. One statement goes through the extended protocol, so without `exact_count` it
+/// can stop one row past `max_rows`. Text that holds several runs as a script.
+pub fn query(self: *Conn, arena: Allocator, text: []const u8, limits: types.Limits, diag: *Diagnostic) Error!types.ResultSet {
+    if (limits.exact_count) return self.exec(arena, text, null, limits, .as_given, diag);
+    return self.exec(arena, text, &.{}, limits, .fall_back, diag);
+}
+
+/// What to do when Postgres will not prepare the text as one statement.
+const Script = enum { as_given, fall_back };
+
+fn exec(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param, limits: types.Limits, script: Script, diag: *Diagnostic) Error!types.ResultSet {
     const st = self.state;
     defer trimBig(&st.big, st.gpa);
     if (mem.indexOfScalar(u8, text, 0) != null) {
@@ -497,7 +516,8 @@ pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Par
         return error.QueryFailed;
     }
     if (params) |p| {
-        st.out.extendedQuery(st.gpa, text, p) catch return error.OutOfMemory;
+        const stop_at: u32 = if (!limits.exact_count and limits.max_rows < std.math.maxInt(u32)) @intCast(limits.max_rows + 1) else 0;
+        st.out.extendedQuery(st.gpa, text, p, stop_at) catch return error.OutOfMemory;
     } else {
         st.out.query(st.gpa, text) catch return error.OutOfMemory;
     }
@@ -508,7 +528,11 @@ pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Par
     var fields: ?[]wire.Field = null;
     var rows: std.ArrayList(types.Row) = .empty;
     var total: u64 = 0;
+    // Counted across every result of the request, since earlier ones stay in the arena too.
+    var bytes: usize = 0;
+    var cut_by_bytes = false;
     var failure: ?Error = null;
+    var as_script = false;
 
     while (true) {
         const msg = st.read() catch return lost(st, diag);
@@ -517,40 +541,57 @@ pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Par
                 fields = wire.rowDescription(arena, msg.body) catch return protocolError(st, diag, 'T');
                 rows = .empty;
                 total = 0;
+                cut_by_bytes = false;
             },
             'D' => {
                 const f = fields orelse return protocolError(st, diag, 'D');
                 total += 1;
-                if (rows.items.len < max_rows) {
-                    const cells = wire.dataRow(arena, msg.body, f.len) catch |err| switch (err) {
-                        error.OutOfMemory => return error.OutOfMemory,
-                        else => return protocolError(st, diag, 'D'),
-                    };
-                    try rows.append(arena, cells);
+                if (rows.items.len >= limits.max_rows) continue;
+                if (bytes >= limits.max_bytes) {
+                    cut_by_bytes = true;
+                    continue;
                 }
+                const cells = wire.dataRow(arena, msg.body, f.len) catch |err| switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    else => return protocolError(st, diag, 'D'),
+                };
+                try rows.append(arena, cells);
+                bytes +|= msg.body.len;
             },
-            'C' => {
-                var c: wire.Cursor = .{ .body = msg.body };
-                const tag = c.cstr() catch return protocolError(st, diag, 'C');
-                const done = try finishResult(arena, fields, rows.items, total, tag);
+            'C', 's' => {
+                // PortalSuspended: Execute stopped at its row limit, so the count is a lower bound.
+                const suspended = msg.tag == 's';
+                const tag = if (suspended) "" else blk: {
+                    var c: wire.Cursor = .{ .body = msg.body };
+                    break :blk c.cstr() catch return protocolError(st, diag, 'C');
+                };
+                const done = try finishResult(arena, fields, rows.items, total, tag, cut_by_bytes, !suspended);
                 last = done.set;
                 last_oids = done.oids;
                 fields = null;
                 rows = .empty;
                 total = 0;
+                cut_by_bytes = false;
             },
             'I' => {
                 last = .empty;
                 last_oids = &.{};
             },
-            'E' => failure = serverError(diag, msg.body, text, error.QueryFailed),
+            'E' => {
+                const multiple = wire.Notice.parse(msg.body).multipleCommands();
+                if (multiple and script == .fall_back) {
+                    as_script = true;
+                } else {
+                    failure = serverError(diag, msg.body, text, error.QueryFailed);
+                }
+            },
             'G' => {
                 st.out.copyFail(st.gpa, "COPY FROM STDIN is not supported by zetta") catch return error.OutOfMemory;
                 st.send() catch return lost(st, diag);
             },
             'H', 'd', 'c' => {},
             'W' => return protocolError(st, diag, 'W'),
-            'S', 'N', 'A', 'K', '1', '2', '3', 'n', 't', 's' => {},
+            'S', 'N', 'A', 'K', '1', '2', '3', 'n', 't' => {},
             'Z' => {
                 st.txn_status = if (msg.body.len > 0) msg.body[0] else 'I';
                 break;
@@ -559,6 +600,8 @@ pub fn run(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Par
         }
     }
     if (failure) |err| return err;
+    // Parse refused the text before anything ran, so sending it again as a script is safe.
+    if (as_script) return self.exec(arena, text, null, limits, .as_given, diag);
 
     for (@constCast(last.columns), last_oids) |*col, oid| {
         if (col.type_name.len == 0) col.type_name = try self.typeName(arena, oid, diag);
@@ -577,7 +620,7 @@ const keep_big = 1024 * 1024;
 const Finished = struct { set: types.ResultSet, oids: []const u32 };
 
 /// Built-in type names are filled in here; the rest wait for `typeName` once the server is idle.
-fn finishResult(arena: Allocator, fields: ?[]wire.Field, rows: []const types.Row, total: u64, tag: []const u8) Allocator.Error!Finished {
+fn finishResult(arena: Allocator, fields: ?[]wire.Field, rows: []const types.Row, total: u64, tag: []const u8, cut_by_bytes: bool, exact: bool) Allocator.Error!Finished {
     const command = try arena.dupe(u8, tag);
     const f = fields orelse return .{ .set = .{
         .columns = &.{},
@@ -597,6 +640,8 @@ fn finishResult(arena: Allocator, fields: ?[]wire.Field, rows: []const types.Row
         .rows = rows,
         .row_count = total,
         .truncated = total > rows.len,
+        .truncated_by = if (cut_by_bytes) .bytes else .rows,
+        .row_count_exact = exact,
         .command = command,
     }, .oids = oids };
 }

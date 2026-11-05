@@ -10,7 +10,7 @@ import { Loader } from "../../components/ui/icons";
 import { Kbd } from "../../components/ui/Kbd";
 import { Loading } from "../../components/ui/Loading";
 import { runQuery } from "../../lib/api";
-import { formatMs, plural } from "../../lib/format";
+import { formatMs, plural, rowTotal } from "../../lib/format";
 import { isMac } from "../../lib/keys";
 import { createRequest } from "../../lib/request";
 import {
@@ -83,7 +83,9 @@ export function SqlPane(props: {
 	const [ran, setRan] = createSignal({ text: "", at: 0 });
 	const hidden = createHidden();
 	const selection = createSelection();
-	const query = createRequest(runQuery);
+	const query = createRequest((r: { text: string; exact: boolean }, signal: AbortSignal) =>
+		runQuery(r.text, r.exact, signal),
+	);
 
 	createEffect(
 		on(
@@ -124,7 +126,7 @@ export function SqlPane(props: {
 
 	/** How many statements the shown result's run held, when more than one: only the last one's result shows. */
 	const ranMany = createMemo(() => {
-		const n = statements(query.dataKey() ?? "").length;
+		const n = statements(query.dataKey()?.text ?? "").length;
 		return n > 1 ? n : 0;
 	});
 
@@ -138,7 +140,20 @@ export function SqlPane(props: {
 		if (!picked) return;
 		setRan(picked);
 		announce("Running");
-		query.run(picked.text);
+		query.run({ text: picked.text, exact: false });
+	};
+
+	/** The shown result stopped counting at the limit. A write is never run twice to count it. */
+	const countable = () => {
+		const r = query.data();
+		const text = query.dataKey()?.text ?? "";
+		return !!r && !r.rowCountExact && !isWrite(text);
+	};
+	const countAll = () => {
+		const k = query.dataKey();
+		if (!k) return;
+		announce("Counting every row");
+		query.run({ text: k.text, exact: true });
 	};
 
 	const start = (text: string) => {
@@ -189,14 +204,15 @@ export function SqlPane(props: {
 		const r = query.data();
 		if (!r) return "";
 		if (!r.columns.length) return [r.command, formatMs(r.elapsedMs)].filter(Boolean).join(" · ");
-		return [plural(r.rowCount, "row"), formatMs(r.elapsedMs)].join(" · ");
+		const rows = `${rowTotal(r.rowCount, r.rowCountExact)} row${r.rowCount === 1 ? "" : "s"}`;
+		return [rows, formatMs(r.elapsedMs)].join(" · ");
 	};
 
 	createEffect(
 		on(query.data, (r) => {
 			if (!r) return;
 			announce(info());
-			if (changesSchema(query.dataKey() ?? "")) props.onSchemaChange?.();
+			if (changesSchema(query.dataKey()?.text ?? "")) props.onSchemaChange?.();
 		}),
 	);
 
@@ -337,7 +353,7 @@ export function SqlPane(props: {
 								fallback={<span class="st-word st-strong">Done</span>}
 							>
 								<Show when={r().rowCount} fallback={<span class="st-word">No rows</span>}>
-									<span class="st-num">{r().rowCount.toLocaleString()}</span>
+									<span class="st-num">{rowTotal(r().rowCount, r().rowCountExact)}</span>
 									<span class="st-word">{r().rowCount === 1 ? "row" : "rows"}</span>
 								</Show>
 							</Show>
@@ -358,7 +374,20 @@ export function SqlPane(props: {
 								<span class="st-note">the last of {plural(ranMany(), "statement")}</span>
 							</Show>
 							<Show when={!query.loading() && !query.error() && r().truncated}>
-								<span class="st-warn">showing the first {r().rows.length.toLocaleString()}</span>
+								<span class="st-warn">
+									showing the first {r().rows.length.toLocaleString()}
+									{r().truncatedBy === "bytes" ? ", the rest are over the size limit" : ""}
+								</span>
+							</Show>
+							<Show when={!query.loading() && !query.error() && countable()}>
+								<Button
+									variant="quiet"
+									size="sm"
+									tip="Runs the query again and reads every row to count it"
+									onClick={countAll}
+								>
+									Count all
+								</Button>
 							</Show>
 						</p>
 					)}

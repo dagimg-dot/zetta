@@ -100,7 +100,9 @@ pub const Out = struct {
     }
 
     /// Parse, Bind (text parameters, text results), Describe portal, Execute, Sync.
-    pub fn extendedQuery(o: *Out, gpa: Allocator, sql: []const u8, params: []const ?[]const u8) Allocator.Error!void {
+    /// Parse, Bind, Describe, Execute and Sync for the unnamed statement. A nonzero `max_rows`
+    /// makes Postgres stop there and send PortalSuspended instead of CommandComplete.
+    pub fn extendedQuery(o: *Out, gpa: Allocator, sql: []const u8, params: []const ?[]const u8, max_rows: u32) Allocator.Error!void {
         var at = try o.begin(gpa, 'P');
         try o.cstr(gpa, "");
         try o.cstr(gpa, sql);
@@ -130,7 +132,7 @@ pub const Out = struct {
 
         at = try o.begin(gpa, 'E');
         try o.cstr(gpa, "");
-        try o.int32(gpa, 0);
+        try o.int32(gpa, @bitCast(max_rows));
         o.finish(at);
 
         at = try o.begin(gpa, 'S');
@@ -236,6 +238,8 @@ pub const Notice = struct {
     /// 1-based character position in the query text.
     position: ?usize = null,
     context: ?[]const u8 = null,
+    /// The server function that raised it, which names an error in any lc_messages.
+    routine: []const u8 = "",
 
     pub fn parse(body: []const u8) Notice {
         var n: Notice = .{};
@@ -254,10 +258,16 @@ pub const Notice = struct {
                 'H' => n.hint = value,
                 'P' => n.position = std.fmt.parseInt(usize, value, 10) catch null,
                 'W' => n.context = value,
+                'R' => n.routine = value,
                 else => {},
             }
         } else |_| {}
         return n;
+    }
+
+    /// "cannot insert multiple commands into a prepared statement": the text holds more than one.
+    pub fn multipleCommands(n: Notice) bool {
+        return mem.eql(u8, n.code, "42601") and mem.eql(u8, n.routine, "exec_parse_message");
     }
 
     /// The message as libpq's default verbosity renders it, including the
@@ -332,10 +342,12 @@ test "ssl request is the magic code" {
 test "extended query sends parse, bind, describe, execute and sync" {
     var out: Out = .{};
     defer out.deinit(testing.allocator);
-    try out.extendedQuery(testing.allocator, "select $1", &.{ "x", null });
+    try out.extendedQuery(testing.allocator, "select $1", &.{ "x", null }, 5001);
     const b = out.bytes();
     try testing.expectEqual('P', b[0]);
     try testing.expectEqualSlices(u8, &.{ 'S', 0, 0, 0, 4 }, b[b.len - 5 ..]);
+    // Execute names the unnamed portal and carries the row limit.
+    try testing.expectEqualSlices(u8, &.{ 'E', 0, 0, 0, 9, 0, 0, 0, 0x13, 0x89 }, b[b.len - 15 .. b.len - 5]);
     // Bind carries one 1-byte value and one NULL (-1).
     try testing.expect(mem.indexOf(u8, b, &.{ 0, 2, 0, 0, 0, 1, 'x', 0xff, 0xff, 0xff, 0xff }) != null);
 }
@@ -368,6 +380,13 @@ test "errors render like libpq, with the caret on the right line" {
         \\        ^
         \\
     , w.buffered());
+}
+
+test "the multiple-commands error is told apart from other syntax errors" {
+    const multi = Notice.parse("SERROR\x00C42601\x00Mcannot insert multiple commands into a prepared statement\x00Rexec_parse_message\x00\x00");
+    try testing.expect(multi.multipleCommands());
+    const typo = Notice.parse("SERROR\x00C42601\x00Msyntax error at or near \"selec\"\x00Rscanner_yyerror\x00\x00");
+    try testing.expect(!typo.multipleCommands());
 }
 
 test "command tags give the affected row count" {

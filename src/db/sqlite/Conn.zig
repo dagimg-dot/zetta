@@ -84,9 +84,11 @@ pub fn quoteIfNeeded(arena: Allocator, name: []const u8) Allocator.Error![]const
 }
 
 /// Runs every statement in `text` and returns the result of the last one.
-pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, max_rows: usize, diag: *Diagnostic) Error!types.ResultSet {
+pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, limits: types.Limits, diag: *Diagnostic) Error!types.ResultSet {
     var rest = text;
     var last: types.ResultSet = .empty;
+    // Counted across every statement, since earlier results stay in the arena too.
+    var bytes: usize = 0;
     while (rest.len > 0) {
         var stmt: ?*c.sqlite3_stmt = null;
         var tail: [*c]const u8 = null;
@@ -104,7 +106,7 @@ pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, max_rows: usize, 
             continue;
         };
         defer _ = c.sqlite3_finalize(s);
-        last = try self.collect(arena, s, max_rows, diag);
+        last = try self.collect(arena, s, limits, &bytes, diag);
     }
     return last;
 }
@@ -112,6 +114,11 @@ pub fn runAll(self: *Conn, arena: Allocator, text: []const u8, max_rows: usize, 
 /// Runs one statement with text parameters bound to ?1, ?2, ... Text after the
 /// first statement is refused rather than ignored.
 pub fn runBound(self: *Conn, arena: Allocator, text: [:0]const u8, params: []const []const u8, diag: *Diagnostic) Error!types.ResultSet {
+    return self.runBoundLimited(arena, text, params, .{}, diag);
+}
+
+/// As `runBound`, keeping only what `limits` allow.
+pub fn runBoundLimited(self: *Conn, arena: Allocator, text: [:0]const u8, params: []const []const u8, limits: types.Limits, diag: *Diagnostic) Error!types.ResultSet {
     var stmt: ?*c.sqlite3_stmt = null;
     var tail: [*c]const u8 = null;
     const rc = c.sqlite3_prepare_v2(self.raw, text.ptr, @intCast(text.len + 1), &stmt, &tail);
@@ -130,7 +137,8 @@ pub fn runBound(self: *Conn, arena: Allocator, text: [:0]const u8, params: []con
         const brc = c.sqlite3_bind_text(s, @intCast(i), p.ptr, @intCast(p.len), c.SQLITE_STATIC);
         if (brc != c.SQLITE_OK) return self.fail(brc, diag);
     }
-    return self.collect(arena, s, std.math.maxInt(usize), diag);
+    var bytes: usize = 0;
+    return self.collect(arena, s, limits, &bytes, diag);
 }
 
 /// Turns off SQLite's legacy reading of `"name"` as a string when no column has that
@@ -189,7 +197,7 @@ fn onProgress(ctx: ?*anyopaque) callconv(.c) c_int {
     return @intFromBool(deadline.passed());
 }
 
-fn collect(self: *Conn, arena: Allocator, stmt: *c.sqlite3_stmt, max_rows: usize, diag: *Diagnostic) Error!types.ResultSet {
+fn collect(self: *Conn, arena: Allocator, stmt: *c.sqlite3_stmt, limits: types.Limits, bytes: *usize, diag: *Diagnostic) Error!types.ResultSet {
     const ncols: usize = @intCast(c.sqlite3_column_count(stmt));
     const cols = try arena.alloc(types.ResultColumn, ncols);
     for (cols, 0..) |*col, k| {
@@ -202,21 +210,31 @@ fn collect(self: *Conn, arena: Allocator, stmt: *c.sqlite3_stmt, max_rows: usize
 
     var rows: std.ArrayList(types.Row) = .empty;
     var total: u64 = 0;
-    while (true) {
+    var cut_by_bytes = false;
+    // A RETURNING statement makes all its changes on the first step, so stopping early is safe.
+    const stopped = while (true) {
         const rc = c.sqlite3_step(stmt);
-        if (rc == c.SQLITE_DONE) break;
+        if (rc == c.SQLITE_DONE) break false;
         if (rc != c.SQLITE_ROW) return self.fail(rc, diag);
         total += 1;
-        if (rows.items.len >= max_rows) continue;
+        if (rows.items.len >= limits.max_rows) {
+            if (!limits.exact_count) break true;
+            continue;
+        }
+        if (bytes.* >= limits.max_bytes) {
+            cut_by_bytes = true;
+            continue;
+        }
 
         const cells = try arena.alloc(?[]const u8, ncols);
         for (cells, cols, 0..) |*cell, *col, k| {
             const kind = c.sqlite3_column_type(stmt, @intCast(k));
             if (col.type_name.len == 0 and kind != c.SQLITE_NULL) col.type_name = storageClass(kind);
             cell.* = try cellValue(arena, stmt, @intCast(k), kind);
+            if (cell.*) |v| bytes.* +|= v.len;
         }
         try rows.append(arena, cells);
-    }
+    };
 
     if (ncols > 0) {
         return .{
@@ -224,7 +242,9 @@ fn collect(self: *Conn, arena: Allocator, stmt: *c.sqlite3_stmt, max_rows: usize
             .rows = rows.items,
             .row_count = total,
             .truncated = total > rows.items.len,
-            .command = try std.fmt.allocPrint(arena, "SELECT {d}", .{total}),
+            .truncated_by = if (cut_by_bytes) .bytes else .rows,
+            .row_count_exact = !stopped,
+            .command = if (stopped) "" else try std.fmt.allocPrint(arena, "SELECT {d}", .{total}),
         };
     }
     const verb = try std.ascii.allocUpperString(arena, leadingKeyword(std.mem.span(c.sqlite3_sql(stmt))));

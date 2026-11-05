@@ -1,6 +1,7 @@
 //! Values every adapter produces. All slices are owned by the allocator the
 //! caller passed in, which is expected to be an arena.
 
+const std = @import("std");
 const Builder = @import("builder.zig").Builder;
 
 pub const Error = error{
@@ -203,13 +204,31 @@ pub const ResultSet = struct {
     columns: []const ResultColumn,
     rows: []const Row,
     /// Rows the statement produced, or rows it changed. Can exceed `rows.len`
-    /// when `truncated` is set.
+    /// when `truncated` is set, and is only a lower bound when `row_count_exact` is not.
     row_count: u64,
     truncated: bool,
+    /// What stopped `rows` short of `row_count`, when `truncated` is set.
+    truncated_by: Limit = .rows,
+    /// False when reading stopped one row past the row limit, so more rows may exist.
+    row_count_exact: bool = true,
     command: []const u8,
+
+    pub const Limit = enum { rows, bytes };
 
     pub const empty: ResultSet = .{ .columns = &.{}, .rows = &.{}, .row_count = 0, .truncated = false, .command = "" };
 };
+
+/// How much of a result an adapter keeps. Every row past them is still read, but not stored.
+pub const Limits = struct {
+    max_rows: usize = std.math.maxInt(usize),
+    /// Cell bytes stored across the request's results. The row that crosses it is kept, so
+    /// at least one row always comes back.
+    max_bytes: usize = std.math.maxInt(usize),
+    /// Reads every row to count them all. When false, reading may stop one row past `max_rows`.
+    exact_count: bool = true,
+};
+
+pub const default_max_bytes = 64 * 1024 * 1024;
 
 pub const BrowseRequest = struct {
     table: TableRef,
@@ -221,6 +240,8 @@ pub const BrowseRequest = struct {
     builder: ?Builder = null,
     limit: u32 = 100,
     offset: u64 = 0,
+    /// As in `Limits`.
+    max_bytes: usize = default_max_bytes,
     /// Stops the statement with error.Timeout once it runs this long. Null means no limit.
     budget_ms: ?u32 = null,
 };
@@ -236,16 +257,23 @@ pub const CountRequest = struct {
 
 pub const QueryOptions = struct {
     max_rows: usize = 5000,
-    /// As in `BrowseRequest`. Rows past `max_rows` are still read to count them, so this is
+    max_bytes: usize = default_max_bytes,
+    /// Off, a single statement stops one row past `max_rows` and its count is a lower bound.
+    exact_count: bool = false,
+    /// As in `BrowseRequest`. With `exact_count` every row is read to count it, so this is
     /// what bounds a large result.
     budget_ms: ?u32 = null,
+
+    pub fn limits(o: QueryOptions) Limits {
+        return .{ .max_rows = o.max_rows, .max_bytes = o.max_bytes, .exact_count = o.exact_count };
+    }
 };
 
 pub const OpenOptions = struct {
     read_only: bool = false,
     pool_size: usize = 4,
     /// For PG* variables and the password file. Null means the environment is ignored.
-    env: ?*const @import("std").process.Environ.Map = null,
+    env: ?*const std.process.Environ.Map = null,
 };
 
 pub const Capabilities = struct {

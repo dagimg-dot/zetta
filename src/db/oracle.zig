@@ -44,7 +44,9 @@ const cases = [_]Case{
     .{ .name = "insert returning", .sql = "create temp table r (id serial, v text); insert into r (v) values ('a'), ('b') returning id, v" },
     .{ .name = "utility commands", .sql = "set work_mem = '8MB'; show work_mem" },
     .{ .name = "a transaction left open", .sql = "begin; select 1 as inside" },
-    .{ .name = "the next request is not inside it", .sql = "select now() = statement_timestamp() as fresh" },
+    // Two statements keep this on the simple protocol, where statement_timestamp() is the time of
+    // the whole message; the extended protocol stamps each of its messages anew.
+    .{ .name = "the next request is not inside it", .sql = "select 1; select now() = statement_timestamp() as fresh" },
     .{ .name = "a big result is truncated but counted", .sql = "select g, md5(g::text) from generate_series(1, 20000) g", .max_rows = 5000 },
     .{ .name = "an empty result keeps its columns", .sql = "select 1 as a where false" },
     .{ .name = "the catalog query", .sql = @import("postgres/sql.zig").catalog },
@@ -74,14 +76,14 @@ const Outcome = union(enum) {
     err: struct { kind: types.Error, message: []const u8 },
 };
 
-fn runOne(a: Adapter, arena: std.mem.Allocator, case: Case, rollback_after: bool) !Outcome {
+fn runOne(a: Adapter, arena: std.mem.Allocator, case: Case, exact_count: bool, rollback_after: bool) !Outcome {
     var diag: Diagnostic = .{};
     // The native adapter ends any transaction a request leaves open; give libpq the same rule.
     defer if (rollback_after) {
         var scratch: Diagnostic = .{};
         _ = a.query(arena, "rollback", .{}, &scratch) catch {};
     };
-    const res = a.query(arena, case.sql, .{ .max_rows = case.max_rows }, &diag) catch |err| {
+    const res = a.query(arena, case.sql, .{ .max_rows = case.max_rows, .exact_count = exact_count }, &diag) catch |err| {
         return .{ .err = .{ .kind = err, .message = try arena.dupe(u8, diag.message()) } };
     };
     return .{ .ok = res };
@@ -99,9 +101,15 @@ fn same(native: Outcome, libpq: Outcome, w: *std.Io.Writer) !bool {
         .ok => |want| {
             if (native != .ok) return differ(w, "native failed: {s}", .{native.err.message});
             const got = native.ok;
-            if (!std.mem.eql(u8, got.command, want.command)) return differ(w, "command: libpq {s}, native {s}", .{ want.command, got.command });
-            if (got.row_count != want.row_count) return differ(w, "row count: libpq {d}, native {d}", .{ want.row_count, got.row_count });
-            if (got.truncated != want.truncated) return differ(w, "truncated differs", .{});
+            if (got.row_count_exact) {
+                if (!std.mem.eql(u8, got.command, want.command)) return differ(w, "command: libpq {s}, native {s}", .{ want.command, got.command });
+                if (got.row_count != want.row_count) return differ(w, "row count: libpq {d}, native {d}", .{ want.row_count, got.row_count });
+                if (got.truncated != want.truncated) return differ(w, "truncated differs", .{});
+            } else {
+                // Stopped past the row limit: libpq read on, so it can only have counted more.
+                if (!got.truncated or !want.truncated or got.row_count > want.row_count)
+                    return differ(w, "stopped early with {d} rows, but libpq counted {d}", .{ got.row_count, want.row_count });
+            }
             if (got.columns.len != want.columns.len) return differ(w, "column count: libpq {d}, native {d}", .{ want.columns.len, got.columns.len });
             for (want.columns, got.columns, 0..) |wc, gc, i| {
                 if (!std.mem.eql(u8, wc.name, gc.name) or !std.mem.eql(u8, wc.type_name, gc.type_name))
@@ -144,13 +152,17 @@ test "the native adapter and libpq return identical results" {
     for (cases) |case| {
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
-        const a = try runOne(native, arena, case, false);
-        const b = try runOne(libpq, arena, case, true);
-        var buf: [4096]u8 = undefined;
-        var w: std.Io.Writer = .fixed(&buf);
-        if (!try same(a, b, &w)) {
-            std.debug.print("\n[{s}] {s}\n", .{ case.name, w.buffered() });
-            failures += 1;
+        // Exact counts send caller SQL as given; otherwise one statement goes through the
+        // extended protocol, so both paths are held against libpq.
+        for ([_]bool{ true, false }) |exact| {
+            const a = try runOne(native, arena, case, exact, false);
+            const b = try runOne(libpq, arena, case, true, true);
+            var buf: [4096]u8 = undefined;
+            var w: std.Io.Writer = .fixed(&buf);
+            if (!try same(a, b, &w)) {
+                std.debug.print("\n[{s}, {s}] {s}\n", .{ case.name, if (exact) "exact" else "stops early", w.buffered() });
+                failures += 1;
+            }
         }
     }
     _ = native.query(arena_state.allocator(), "drop schema zetta_oracle cascade", .{}, &diag) catch {};

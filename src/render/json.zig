@@ -199,7 +199,9 @@ pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ns: ?u64) Writer.Error!vo
     for (rs.rows) |row| try s.write(row);
     try s.endArray();
     try field(&s, "rowCount", rs.row_count);
+    try field(&s, "rowCountExact", rs.row_count_exact);
     try field(&s, "truncated", rs.truncated);
+    try field(&s, "truncatedBy", @tagName(rs.truncated_by));
     try field(&s, "command", rs.command);
     if (elapsed_ns) |ns| try elapsed(&s, ns);
     try s.endObject();
@@ -255,7 +257,25 @@ test "a result set matches the API shape" {
         .command = "SELECT 1",
     }, 3_140_000);
     try testing.expectEqualStrings(
-        \\{"columns":[{"name":"id","type":"integer"},{"name":"note","type":"text"}],"rows":[["1",null]],"rowCount":1,"truncated":false,"command":"SELECT 1","elapsedMs":3.1}
+        \\{"columns":[{"name":"id","type":"integer"},{"name":"note","type":"text"}],"rows":[["1",null]],"rowCount":1,"rowCountExact":true,"truncated":false,"truncatedBy":"rows","command":"SELECT 1","elapsedMs":3.1}
+    , w.buffered());
+}
+
+test "a result cut by size with an uncounted tail says so" {
+    var buf: [512]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    const rows = [_]db.Row{&.{"1"}};
+    try resultSet(&w, .{
+        .columns = &.{.{ .name = "id", .type_name = "integer" }},
+        .rows = &rows,
+        .row_count = 5001,
+        .row_count_exact = false,
+        .truncated = true,
+        .truncated_by = .bytes,
+        .command = "",
+    }, null);
+    try testing.expectEqualStrings(
+        \\{"columns":[{"name":"id","type":"integer"}],"rows":[["1"]],"rowCount":5001,"rowCountExact":false,"truncated":true,"truncatedBy":"bytes","command":""}
     , w.buffered());
 }
 

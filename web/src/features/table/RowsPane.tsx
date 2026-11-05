@@ -244,7 +244,9 @@ export function RowsPane(props: {
 	const shortPage = () => {
 		const r = result();
 		const k = rows.dataKey();
-		return r && k && k.offset === 0 && r.rows.length < k.limit ? r.rows.length : null;
+		return r && k && k.offset === 0 && !r.truncated && r.rows.length < k.limit
+			? r.rows.length
+			: null;
 	};
 
 	const counter = createRequest(countRows, () => {
@@ -526,6 +528,9 @@ export function RowsPane(props: {
 								</Show>
 								<Show when={rows.error()}>
 									<span class="st-warn">last good result</span>
+								</Show>
+								<Show when={!rows.loading() && !rows.error() && r().truncated}>
+									<span class="st-warn">the rest of this page is over the size limit</span>
 								</Show>
 							</p>
 						);

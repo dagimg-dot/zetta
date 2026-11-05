@@ -8,6 +8,14 @@ export function plural(n: number, word: string): string {
 	return `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 }
 
+/**
+ * A result's row count. An inexact one is one row past the limit, so the limit is what it is
+ * known to exceed: 5,001 reads as "5,000+".
+ */
+export function rowTotal(rowCount: number, exact: boolean): string {
+	return exact ? rowCount.toLocaleString() : `${(rowCount - 1).toLocaleString()}+`;
+}
+
 const nouns: Record<TableKind, string> = {
 	table: "table",
 	view: "view",

@@ -62,7 +62,7 @@ pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.St
         .count => count(ctx, arena, req, target.query),
         .compile => compile(ctx, arena, req, target.query),
         .browse => browse(ctx, arena, req, target.query),
-        .query => query(ctx, arena, req),
+        .query => query(ctx, arena, req, target.query),
         .not_found => fail(req, .not_found, "not_found", "no such route"),
     };
 }
@@ -234,7 +234,10 @@ fn compile(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) 
     return .ok;
 }
 
-fn query(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
+fn query(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !std.http.Status {
+    // Read before the body, which can reuse the buffer the head was parsed from.
+    const count_param = try http.queryParam(arena, q, "count");
+    const exact = if (count_param) |v| std.mem.eql(u8, v, "exact") else false;
     if (req.head.content_length) |len| {
         if (len > http.max_body) return fail(req, .payload_too_large, "too_large", "the SQL is over 1 MiB");
     }
@@ -248,7 +251,8 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status 
 
     const started = std.Io.Timestamp.now(ctx.io, .awake);
     var diag: db.Diagnostic = .{};
-    const rs = ctx.adapter.query(arena, sql, .{ .budget_ms = ctx.statement_timeout_ms }, &diag) catch |err| return dbFail(req, err, &diag);
+    const options: db.QueryOptions = .{ .exact_count = exact, .budget_ms = ctx.statement_timeout_ms };
+    const rs = ctx.adapter.query(arena, sql, options, &diag) catch |err| return dbFail(req, err, &diag);
     return respondResult(ctx, req, rs, started);
 }
 
@@ -303,8 +307,14 @@ const Response = struct { status: std.http.Status, body: []const u8 };
 
 /// Runs one GET through `handle` over in-memory streams, signed in.
 fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response {
+    return testRequest(ctx, arena, "GET", target, "");
+}
+
+fn testRequest(ctx: *const Context, arena: Allocator, method: []const u8, target: []const u8, body: []const u8) !Response {
     var name_buf: [auth.cookie_name_max]u8 = undefined;
-    const raw = try std.fmt.allocPrint(arena, "GET {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\n\r\n", .{ target, auth.cookieName(&name_buf, ctx.port), ctx.token });
+    const raw = try std.fmt.allocPrint(arena, "{s} {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\ncontent-length: {d}\r\n\r\n{s}", .{
+        method, target, auth.cookieName(&name_buf, ctx.port), ctx.token, body.len, body,
+    });
     var in: std.Io.Reader = .fixed(raw);
     var out: std.Io.Writer.Allocating = .init(arena);
     var server: std.http.Server = .init(&in, &out.writer);
@@ -314,9 +324,9 @@ fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response 
     const written = out.written();
     const split = std.mem.indexOf(u8, written, "\r\n\r\n") orelse return error.TestNoBody;
     const head = written[0..split];
-    const body = written[split + 4 ..];
+    const payload = written[split + 4 ..];
     const chunked = std.ascii.indexOfIgnoreCase(head, "transfer-encoding: chunked") != null;
-    return .{ .status = status, .body = if (chunked) try dechunk(arena, body) else body };
+    return .{ .status = status, .body = if (chunked) try dechunk(arena, payload) else payload };
 }
 
 fn dechunk(arena: Allocator, body: []const u8) ![]const u8 {
@@ -368,7 +378,32 @@ const TestApp = struct {
         }) else path;
         return testGet(&app.ctx, arena, target);
     }
+
+    fn post(app: *TestApp, target: []const u8, body: []const u8) !Response {
+        return testRequest(&app.ctx, app.arena_state.allocator(), "POST", target, body);
+    }
 };
+
+test "a query stops past the row limit unless asked for an exact count" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const many = "with recursive r(n) as (select 1 union all select n + 1 from r where n < 6000) select n from r";
+    const Shape = struct { rows: []const [1][]const u8, rowCount: u64, rowCountExact: bool, truncated: bool };
+
+    const quick = try app.post("/api/query", many);
+    try testing.expectEqual(std.http.Status.ok, quick.status);
+    const a = try std.json.parseFromSliceLeaky(Shape, app.arena_state.allocator(), quick.body, .{ .ignore_unknown_fields = true });
+    try testing.expectEqual(5000, a.rows.len);
+    try testing.expectEqual(5001, a.rowCount);
+    try testing.expect(!a.rowCountExact and a.truncated);
+
+    const exact = try app.post("/api/query?count=exact", many);
+    const b = try std.json.parseFromSliceLeaky(Shape, app.arena_state.allocator(), exact.body, .{ .ignore_unknown_fields = true });
+    try testing.expectEqual(5000, b.rows.len);
+    try testing.expectEqual(6000, b.rowCount);
+    try testing.expect(b.rowCountExact and b.truncated);
+}
 
 test "compile shows the builder as SQL with literals and touches no table" {
     var app: TestApp = undefined;

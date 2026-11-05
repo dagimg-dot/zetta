@@ -49,7 +49,11 @@ pub fn table(w: *Writer, rs: db.ResultSet, options: TableOptions) Writer.Error!v
     }
     const shown = rs.rows.len;
     if (rs.truncated) {
-        try w.print("({d} of {d} rows)\n", .{ shown, rs.row_count });
+        // An inexact count is one row past the limit, so the limit is what is known to be exceeded.
+        const more: []const u8 = if (rs.row_count_exact) "" else "more than ";
+        const total = if (rs.row_count_exact) rs.row_count else rs.row_count - 1;
+        const why: []const u8 = if (rs.truncated_by == .bytes) ", cut at the size limit" else "";
+        try w.print("({d} of {s}{d} rows{s})\n", .{ shown, more, total, why });
     } else {
         try w.print("({d} row{s})\n", .{ shown, if (shown == 1) "" else "s" });
     }
@@ -163,6 +167,22 @@ test "tables align numbers right and show NULL" {
         \\(2 rows)
         \\
     , w.buffered());
+}
+
+test "a cut result says how many rows it shows and why" {
+    var buf: [256]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    const rows = [_]db.Row{&.{"1"}};
+    try table(&w, .{
+        .columns = &.{.{ .name = "n", .type_name = "integer" }},
+        .rows = &rows,
+        .row_count = 5001,
+        .row_count_exact = false,
+        .truncated = true,
+        .truncated_by = .bytes,
+        .command = "",
+    }, .{});
+    try testing.expect(std.mem.endsWith(u8, w.buffered(), "(1 of more than 5000 rows, cut at the size limit)\n"));
 }
 
 test "csv quotes only when it has to" {

@@ -107,7 +107,7 @@ fn catalog(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error!typ
     const lease = try self.pool.acquire(diag);
     defer lease.release();
 
-    const names = try lease.conn.runAll(arena, schemas_sql, std.math.maxInt(usize), diag);
+    const names = try lease.conn.runAll(arena, schemas_sql, .{}, diag);
     const schemas = try arena.alloc(types.Schema, names.rows.len);
     for (schemas, names.rows) |*schema, row| {
         const name = row[0].?;
@@ -116,7 +116,7 @@ fn catalog(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error!typ
             \\where type in ('table', 'view') and name not like 'sqlite\_%' escape '\'
             \\order by name
         , .{try Conn.quoteIdent(arena, name)});
-        const res = try lease.conn.runAll(arena, text, std.math.maxInt(usize), diag);
+        const res = try lease.conn.runAll(arena, text, .{}, diag);
         const tables = try arena.alloc(types.Table, res.rows.len);
         for (tables, res.rows) |*table, t| {
             table.* = .{
@@ -494,13 +494,14 @@ fn browseRows(conn: *Conn, arena: Allocator, req: types.BrowseRequest, diag: *Di
     builder.writeOrder(w, req.order, compiled.order) catch return error.OutOfMemory;
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
     // Bound values need one prepared statement; a raw filter keeps running every statement as before.
-    if (req.builder == null) return conn.runAll(arena, text.written(), req.limit, diag);
+    const limits: types.Limits = .{ .max_rows = req.limit, .max_bytes = req.max_bytes };
+    if (req.builder == null) return conn.runAll(arena, text.written(), limits, diag);
     // The builder quotes every column, and a misspelt one must fail rather than compare as a string.
     const dqs = conn.strictIdentifiers();
     defer conn.restoreDoubleQuotedStrings(dqs);
     w.writeByte(0) catch return error.OutOfMemory;
     const z = text.written();
-    return conn.runBound(arena, z[0 .. z.len - 1 :0], compiled.params, diag);
+    return conn.runBoundLimited(arena, z[0 .. z.len - 1 :0], compiled.params, limits, diag);
 }
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {
@@ -513,7 +514,7 @@ fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.Que
         lease.conn.setDeadline(&deadline);
     }
     defer lease.conn.clearDeadline();
-    return lease.conn.runAll(arena, text, options.max_rows, diag) catch |err| budgetError(err, options.budget_ms, diag);
+    return lease.conn.runAll(arena, text, options.limits(), diag) catch |err| budgetError(err, options.budget_ms, diag);
 }
 
 /// SQLite only says "interrupted", so a timeout gets the budget it ran past.

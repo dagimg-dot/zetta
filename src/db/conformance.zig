@@ -156,13 +156,53 @@ fn run(f: Fixture) !void {
         try testing.expectEqualStrings("SELECT 3", res.command);
     }
 
-    // query truncates past max_rows but still counts every row
+    // query stops one row past max_rows, so its count is only a lower bound
     {
         var buf: [256]u8 = undefined;
-        const res = try a.query(arena, try std.fmt.bufPrint(&buf, "select * from {s}.items", .{f.schema}), .{ .max_rows = 2 }, &diag);
-        try testing.expectEqual(2, res.rows.len);
+        const res = try a.query(arena, try std.fmt.bufPrint(&buf, "select * from {s}.items", .{f.schema}), .{ .max_rows = 1 }, &diag);
+        try testing.expectEqual(1, res.rows.len);
+        try testing.expectEqual(2, res.row_count);
+        try testing.expect(res.truncated and !res.row_count_exact);
+        try testing.expectEqual(.rows, res.truncated_by);
+    }
+
+    // with exact_count, query truncates past max_rows but still counts every row
+    {
+        var buf: [256]u8 = undefined;
+        const res = try a.query(arena, try std.fmt.bufPrint(&buf, "select * from {s}.items", .{f.schema}), .{ .max_rows = 1, .exact_count = true }, &diag);
+        try testing.expectEqual(1, res.rows.len);
         try testing.expectEqual(3, res.row_count);
+        try testing.expect(res.truncated and res.row_count_exact);
+    }
+
+    // several statements still run, and a result that fits is counted exactly
+    {
+        var buf: [256]u8 = undefined;
+        const res = try a.query(arena, try std.fmt.bufPrint(&buf, "select 1; select * from {s}.items", .{f.schema}), .{ .max_rows = 5 }, &diag);
+        try testing.expectEqual(3, res.rows.len);
+        try testing.expectEqual(3, res.row_count);
+        try testing.expect(!res.truncated and res.row_count_exact);
+    }
+
+    // stored cells stop at max_bytes, keeping the row that crossed it, and the rest are still counted
+    {
+        const wide = switch (a.info().name) {
+            .postgres => "select repeat('x', 1000) from generate_series(1, 4)",
+            .sqlite => "select hex(zeroblob(500)) from (select 1 union all select 2 union all select 3 union all select 4)",
+        };
+        const res = try a.query(arena, wide, .{ .max_bytes = 1500, .exact_count = true }, &diag);
+        try testing.expectEqual(2, res.rows.len);
+        try testing.expectEqual(4, res.row_count);
+        try testing.expect(res.truncated and res.row_count_exact);
+        try testing.expectEqual(.bytes, res.truncated_by);
+    }
+
+    // browse keeps to max_bytes too
+    {
+        const res = try a.browse(arena, .{ .table = .{ .schema = f.schema, .table = "items" }, .max_bytes = 1 }, &diag);
+        try testing.expectEqual(1, res.rows.len);
         try testing.expect(res.truncated);
+        try testing.expectEqual(.bytes, res.truncated_by);
     }
 
     // a write reports the rows it changed
@@ -338,11 +378,11 @@ fn run(f: Fixture) !void {
         try testing.expectEqual(3, try a.count(arena, .{ .table = parts }, &diag));
     }
 
-    // query and browse past their budget are Timeout, even while reading rows past max_rows,
+    // query and browse past their budget are Timeout, even while counting rows past max_rows,
     // and a later statement without a budget is not cut short by the earlier one
     {
         const many = "with recursive r(i) as (select 1 union all select i + 1 from r where i < 100000000) select i from r";
-        try testing.expectError(error.Timeout, a.query(arena, many, .{ .max_rows = 10, .budget_ms = 20 }, &diag));
+        try testing.expectError(error.Timeout, a.query(arena, many, .{ .max_rows = 10, .exact_count = true, .budget_ms = 20 }, &diag));
         try testing.expect(contains(diag.message(), "20 ms"));
         const slow = switch (a.info().name) {
             .postgres => "(select true from pg_sleep(2))",
