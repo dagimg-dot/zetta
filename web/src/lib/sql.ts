@@ -190,8 +190,15 @@ function sqliteSplitter(): Splitter {
 	};
 }
 
-/** Cuts `sql` at each semicolon that ends a statement, by the rules of psql or the sqlite3 shell. */
+let lastSplit: { sql: string; dialect: Adapter; segments: Segment[] } | null = null;
+
+/**
+ * Cuts `sql` at each semicolon that ends a statement, by the rules of psql or the sqlite3 shell.
+ * The last result is kept, since several callers split the same text on each keystroke.
+ */
 function segments(sql: string, dialect: Adapter): Segment[] {
+	if (lastSplit && lastSplit.sql === sql && lastSplit.dialect === dialect)
+		return lastSplit.segments;
 	const out: Segment[] = [];
 	const splitter = dialect === "postgres" ? psqlSplitter() : sqliteSplitter();
 	let start = 0;
@@ -204,6 +211,7 @@ function segments(sql: string, dialect: Adapter): Segment[] {
 		} else clean += cleanText(sql, t);
 	}
 	out.push({ start, end: sql.length, clean });
+	lastSplit = { sql, dialect, segments: out };
 	return out;
 }
 

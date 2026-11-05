@@ -32,22 +32,29 @@ export interface LexOptions {
 	standardStrings?: boolean;
 }
 
+let last: { text: string; dialect: Adapter; standard: boolean; tokens: Token[] } | null = null;
+
 /**
  * Splits `text` into tokens that cover it end to end, by the lexical rules of `dialect`. A comment,
  * string or quoted name that spans lines is one token, so the lexer holds no state between tokens
- * and can start again at any token's start.
+ * and can start again at any token's start. The last result is kept, since the editor, the
+ * splitter and the highlighter all ask for the same text on each keystroke: do not change it.
  */
-export function lex(text: string, dialect: Adapter, options: LexOptions = {}): Token[] {
-	const scan = dialect === "postgres" ? postgresToken : sqliteToken;
+export function lex(text: string, dialect: Adapter, options: LexOptions = {}): readonly Token[] {
 	const standard = options.standardStrings ?? true;
-	const out: Token[] = [];
+	if (last && last.text === text && last.dialect === dialect && last.standard === standard) {
+		return last.tokens;
+	}
+	const scan = dialect === "postgres" ? postgresToken : sqliteToken;
+	const tokens: Token[] = [];
 	let i = 0;
 	while (i < text.length) {
 		const t = scan(text, i, standard);
-		out.push(t);
+		tokens.push(t);
 		i = t.end;
 	}
-	return out;
+	last = { text, dialect, standard, tokens };
+	return tokens;
 }
 
 const code = (text: string, i: number) => text.charCodeAt(i);

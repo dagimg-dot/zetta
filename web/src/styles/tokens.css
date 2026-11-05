@@ -154,6 +154,7 @@
 	--syntax-keyword: var(--text-accent);
 	--syntax-string: var(--text-success);
 	--syntax-number: var(--text-warning);
+	--syntax-param: var(--text-warning);
 	--syntax-name: var(--text);
 	--syntax-comment: var(--text-tertiary);
 

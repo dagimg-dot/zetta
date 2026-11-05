@@ -22,6 +22,8 @@ import {
 	statements,
 } from "../../lib/sql";
 import { announce } from "../../stores/announce";
+import { dialect } from "../../stores/dialect";
+import { SqlEditor } from "./SqlEditor";
 import "./sql.css";
 
 const INDENT = "  ";
@@ -66,8 +68,6 @@ function save(key: string, value: string): void {
 export function SqlPane(props: {
 	active: boolean;
 	database: string | undefined;
-	/** Whose rules split the editor into statements. */
-	dialect: Adapter;
 	readOnly: boolean;
 	/** A first query to offer while the editor is empty, on a table that exists. */
 	starter?: string | null;
@@ -112,10 +112,15 @@ export function SqlPane(props: {
 		),
 	);
 
-	const ranges = createMemo(() => statementRanges(sql(), props.dialect));
-	const next = createMemo(() => pickRun(sql(), caret()[0], caret()[1], false, props.dialect));
-	const writes = createMemo(() => !props.readOnly && isWrite(next()?.text ?? "", props.dialect));
-	const writesAll = createMemo(() => !props.readOnly && isWrite(sql(), props.dialect));
+	const ranges = createMemo(() => statementRanges(sql(), dialect()));
+	/** The statement a caret means, shaded when the editor holds more than one. */
+	const shaded = createMemo(() => {
+		const [a, b] = caret();
+		return a === b && ranges().length > 1 ? statementAt(sql(), a, dialect()) : null;
+	});
+	const next = createMemo(() => pickRun(sql(), caret()[0], caret()[1], false, dialect()));
+	const writes = createMemo(() => !props.readOnly && isWrite(next()?.text ?? "", dialect()));
+	const writesAll = createMemo(() => !props.readOnly && isWrite(sql(), dialect()));
 
 	/** Which statement Run would send, for the hint beside it. */
 	const nextNote = () => {
@@ -129,7 +134,7 @@ export function SqlPane(props: {
 
 	/** How many statements the shown result's run held, when more than one: only the last one's result shows. */
 	const ranMany = createMemo(() => {
-		const n = statements(query.dataKey()?.text ?? "", props.dialect).length;
+		const n = statements(query.dataKey()?.text ?? "", dialect()).length;
 		return n > 1 ? n : 0;
 	});
 
@@ -144,7 +149,7 @@ export function SqlPane(props: {
 			editor.selectionStart,
 			editor.selectionEnd,
 			all,
-			props.dialect,
+			dialect(),
 		);
 		if (!picked) return;
 		setRan(picked);
@@ -156,7 +161,7 @@ export function SqlPane(props: {
 	const countable = () => {
 		const r = query.data();
 		const text = query.dataKey()?.text ?? "";
-		return !!r && !r.rowCountExact && !isWrite(text, props.dialect);
+		return !!r && !r.rowCountExact && !isWrite(text, dialect());
 	};
 	const countAll = () => {
 		const k = query.dataKey();
@@ -221,7 +226,7 @@ export function SqlPane(props: {
 		on(query.data, (r) => {
 			if (!r) return;
 			announce(info());
-			if (changesSchema(query.dataKey()?.text ?? "", props.dialect)) props.onSchemaChange?.();
+			if (changesSchema(query.dataKey()?.text ?? "", dialect())) props.onSchemaChange?.();
 		}),
 	);
 
@@ -233,12 +238,13 @@ export function SqlPane(props: {
 			role="tabpanel"
 			aria-labelledby="tab-sql"
 		>
-			<textarea
+			<SqlEditor
 				ref={(el) => {
 					editor = el;
 					props.editorRef?.(el);
 				}}
-				class="editor mono"
+				current={shaded()}
+				error={errorAt()}
 				aria-label="SQL"
 				spellcheck={false}
 				autocomplete="off"

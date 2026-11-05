@@ -19,3 +19,19 @@
 	color: var(--syntax-comment);
 	font-style: italic;
 }
+
+.tk-p {
+	color: var(--syntax-param);
+	font-style: italic;
+}
+
+.tk-err {
+	text-decoration: wavy underline var(--text-danger);
+	text-decoration-skip-ink: none;
+	text-underline-offset: 3px;
+}
+
+/* An empty line keeps its height, so the lines below stay level with the text they mirror. */
+.sql-line {
+	min-height: 1lh;
+}

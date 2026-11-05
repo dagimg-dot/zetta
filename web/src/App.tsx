@@ -10,6 +10,7 @@ import { TablePane } from "./features/table/TablePane";
 import { getCatalog, getMeta, onUnauthorized } from "./lib/api";
 import { createRequest } from "./lib/request";
 import { announce, announcement } from "./stores/announce";
+import { setDialect } from "./stores/dialect";
 import { cycleTheme } from "./stores/theme";
 import { setView, type Tab, view } from "./stores/view";
 import "./components/layout/shell.css";
@@ -38,6 +39,10 @@ export function App() {
 	const catalog = createRequest(getCatalog);
 	meta.run(undefined);
 	catalog.run(undefined);
+	createEffect(() => {
+		const adapter = meta.data()?.adapter;
+		if (adapter) setDialect(adapter);
+	});
 
 	const approxRows = (schema: string, table: string): number | null => {
 		const s = catalog.data()?.schemas.find((x) => x.name === schema);
@@ -194,7 +199,6 @@ export function App() {
 					<SqlPane
 						active={view().tab === "sql"}
 						database={meta.data()?.database}
-						dialect={meta.data()?.adapter ?? "postgres"}
 						readOnly={meta.data()?.readOnly ?? false}
 						starter={starterSql(catalog.data(), meta.data()?.adapter, view())}
 						onSchemaChange={catalog.refetch}

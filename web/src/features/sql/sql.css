@@ -18,30 +18,6 @@
 	min-width: 140px;
 }
 
-textarea.editor::placeholder {
-	font-family: var(--font-sans);
-	color: var(--text-tertiary);
-}
-
-textarea.editor {
-	width: 100%;
-	min-height: 120px;
-	height: 180px;
-	resize: vertical;
-	padding: var(--space-3);
-	border: 0;
-	border-bottom: 1px solid var(--border);
-	background: var(--surface);
-	outline: none;
-	tab-size: 2;
-	line-height: var(--leading-relaxed);
-}
-
-textarea.editor:focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: -2px;
-}
-
 .write-note {
 	color: var(--text-warning);
 	font-size: var(--text-xs);

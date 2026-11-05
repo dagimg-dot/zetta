@@ -1,0 +1,68 @@
+.sql-editor {
+	position: relative;
+	background: var(--surface);
+	border-bottom: 1px solid var(--border);
+}
+
+/* The textarea and the layer share one box and one way of laying out text, or the caret drifts from the letters under it. */
+.sql-input,
+.sql-layer {
+	margin: 0;
+	padding: var(--space-3);
+	border: 0;
+	tab-size: 2;
+	line-height: var(--leading-relaxed);
+	letter-spacing: normal;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-break: normal;
+	font-variant-ligatures: none;
+	scrollbar-gutter: stable;
+}
+
+.sql-layer {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--text);
+	pointer-events: none;
+}
+
+/* Weight changes width in some fallback fonts, so the layer keeps one weight. */
+.sql-layer .tk-k {
+	font-weight: inherit;
+}
+
+.sql-layer .sql-line.current {
+	margin-inline: calc(-1 * var(--space-3));
+	padding-inline: var(--space-3);
+	background: var(--surface-hover);
+}
+
+.sql-input {
+	position: relative;
+	display: block;
+	width: 100%;
+	min-height: 120px;
+	height: 180px;
+	resize: vertical;
+	background: transparent;
+	color: transparent;
+	caret-color: var(--text);
+	outline: none;
+}
+
+.sql-input::selection {
+	color: transparent;
+	background: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+
+.sql-input::placeholder {
+	font-family: var(--font-sans);
+	color: var(--text-tertiary);
+}
+
+.sql-input:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
