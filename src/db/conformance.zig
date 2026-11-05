@@ -530,6 +530,54 @@ test "sqlite refuses to create a missing file" {
     try testing.expectEqualStrings("unable to open database file", diag.message());
 }
 
+test "postgres read-only mode cannot be switched off from SQL" {
+    const url = testing.environ.getPosix("ZETTA_TEST_PG_URL") orelse return error.SkipZigTest;
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: Diagnostic = .{};
+    const target = try dsn.parse(arena, url);
+    const rw = try open(testing.allocator, testing.io, target, .{}, &diag);
+    defer rw.deinit();
+    // One connection, so every request below reuses whatever the one before it left behind.
+    const ro = try open(testing.allocator, testing.io, target, .{ .read_only = true, .pool_size = 1 }, &diag);
+    defer ro.deinit();
+
+    var rand: [4]u8 = undefined;
+    testing.io.random(&rand);
+    const t = try std.fmt.allocPrint(arena, "zetta_ro_{x}", .{std.mem.readInt(u32, &rand, .little)});
+    try exec(rw, try std.fmt.allocPrint(arena, "create table {s} (x integer)", .{t}));
+    defer exec(rw, std.fmt.allocPrint(arena, "drop table {s}", .{t}) catch unreachable) catch {};
+    const insert = try std.fmt.allocPrint(arena, "insert into {s} values (1)", .{t});
+
+    const attempts = [_][]const u8{
+        try std.fmt.allocPrint(arena, "begin read write; {s}; commit", .{insert}),
+        try std.fmt.allocPrint(arena, "set default_transaction_read_only = off; {s}", .{insert}),
+        try std.fmt.allocPrint(arena, "do $$ begin perform set_config('default_transaction_read_only', 'off', false); commit; {s}; end $$", .{insert}),
+        try std.fmt.allocPrint(arena, "/* hidden */ ; call nothing_{s}()", .{t}),
+    };
+    for (attempts) |sql| {
+        if (ro.query(arena, sql, .{}, &diag)) |_| {
+            std.debug.print("ran in read-only mode: {s}\n", .{sql});
+            return error.TestUnexpectedResult;
+        } else |_| {}
+    }
+
+    // A setting changed by one request is gone by the next, even through set_config().
+    _ = try ro.query(arena, "set default_transaction_read_only = off", .{}, &diag);
+    try testing.expectError(error.ReadOnly, ro.query(arena, insert, .{}, &diag));
+    _ = try ro.query(arena, "select set_config('default_transaction_read_only', 'off', false)", .{}, &diag);
+    try testing.expectError(error.ReadOnly, ro.query(arena, insert, .{}, &diag));
+    _ = try ro.query(arena, "set session characteristics as transaction read write", .{}, &diag);
+    try testing.expectError(error.ReadOnly, ro.query(arena, insert, .{}, &diag));
+    const via_filter = "set_config('default_transaction_read_only', 'off', false) is not null";
+    _ = try ro.count(arena, .{ .table = .{ .schema = "public", .table = t }, .filter = via_filter }, &diag);
+    try testing.expectError(error.ReadOnly, ro.query(arena, insert, .{}, &diag));
+
+    const res = try rw.query(arena, try std.fmt.allocPrint(arena, "select count(*) from {s}", .{t}), .{}, &diag);
+    try testing.expectEqualStrings("0", res.rows[0][0].?);
+}
+
 test "postgres passes the adapter suite" {
     const url = testing.environ.getPosix("ZETTA_TEST_PG_URL") orelse return error.SkipZigTest;
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);

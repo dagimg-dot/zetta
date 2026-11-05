@@ -21,7 +21,9 @@ pub const read_only: cli.Option = .{
     .help =
     \\Refuse writes
     \\
-    \\SQLite opens the file read-only. Postgres sets default_transaction_read_only,
-    \\which a statement can still turn off; use a read-only role for a hard guarantee.
+    \\SQLite opens the file read-only. Postgres runs caller SQL one statement at a time in
+    \\read-only transactions, refuses DO and CALL, and resets the session after each request.
+    \\Extensions such as dblink can still reach the server another way; use a read-only role
+    \\for a hard guarantee.
     ,
 };

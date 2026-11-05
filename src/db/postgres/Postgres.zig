@@ -130,26 +130,33 @@ const How = union(enum) {
     /// As `Conn.runLimited`.
     params: ?[]const Conn.Param,
     /// As `Conn.query`.
-    query,
+    query: struct { one_statement: bool },
 };
 
-/// Browse and query: applies their budget and limits, and after caller SQL stops trusting the
-/// statement_timeout zetta set, since that SQL can hold any statement.
+/// Browse and query: applies their budget and limits, then ends the request as `endRequest` does.
 fn runBudgeted(self: *Postgres, arena: Allocator, text: []const u8, how: How, limits: types.Limits, budget_ms: ?u32, caller_sql: bool, diag: *Diagnostic) types.Error!types.ResultSet {
     const lease = try self.pool.acquire(diag);
     defer lease.release();
     const conn = &lease.conn.conn;
-    defer endTransaction(conn, arena);
+    defer self.endRequest(conn, arena, caller_sql);
     try conn.statementTimeout(arena, budget_ms, diag);
-    defer if (caller_sql) conn.callerSqlRan();
     const res = switch (how) {
         .params => |p| conn.runLimited(arena, text, p, limits, diag),
-        .query => conn.query(arena, text, limits, diag),
+        .query => |q| conn.query(arena, text, limits, q.one_statement, diag),
     };
     return res catch |err| {
         if (err == error.Timeout) if (budget_ms) |ms| diag.print("the statement ran past its {d} ms budget", .{ms});
         return err;
     };
+}
+
+/// Caller SQL can hold any statement. After it zetta stops trusting the statement_timeout it
+/// set, and in read-only mode resets the session, since a SET or set_config() would otherwise
+/// leave default_transaction_read_only off for whoever uses the connection next.
+fn endRequest(self: *Postgres, conn: *Conn, arena: Allocator, caller_sql: bool) void {
+    endTransaction(conn, arena);
+    if (!caller_sql) return;
+    if (self.read_only) conn.resetSession(arena) else conn.callerSqlRan();
 }
 
 /// Each request stands alone: a BEGIN without COMMIT would otherwise hold its
@@ -166,7 +173,7 @@ fn count(ptr: *anyopaque, arena: Allocator, req: types.CountRequest, diag: *Diag
     const lease = try self.pool.acquire(diag);
     defer lease.release();
     const conn = &lease.conn.conn;
-    defer endTransaction(conn, arena);
+    defer self.endRequest(conn, arena, nonEmpty(req.filter));
 
     // statement_timeout = 0 would mean no limit at all.
     const budget = @max(req.budget_ms, 1);
@@ -554,7 +561,10 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     w.print(" limit {d} offset {d}", .{ req.limit, req.offset }) catch return error.OutOfMemory;
     const caller_sql = nonEmpty(req.filter) or nonEmpty(req.order);
     // With a builder the statement goes through the extended protocol, which binds the values.
-    const params = if (req.builder != null) try bindParams(arena, compiled.params) else null;
+    // In read-only mode a raw filter goes that way too, so it cannot hold a second statement.
+    const params: ?[]const Conn.Param = if (req.builder != null)
+        try bindParams(arena, compiled.params)
+    else if (self.read_only and caller_sql) &.{} else null;
     const limits: types.Limits = .{ .max_rows = req.limit, .max_bytes = req.max_bytes };
     return self.runBudgeted(arena, text.written(), .{ .params = params }, limits, req.budget_ms, caller_sql, diag);
 }
@@ -572,7 +582,46 @@ fn bindParams(arena: Allocator, values: []const []const u8) Allocator.Error![]co
 
 fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.QueryOptions, diag: *Diagnostic) types.Error!types.ResultSet {
     const self = from(ptr);
-    return self.runBudgeted(arena, text, .query, options.limits(), options.budget_ms, true, diag);
+    if (self.read_only and controlsTransactions(text)) {
+        diag.set("read-only mode refuses DO and CALL, which can commit and go on writing");
+        return error.ReadOnly;
+    }
+    const how: How = .{ .query = .{ .one_statement = self.read_only } };
+    return self.runBudgeted(arena, text, how, options.limits(), options.budget_ms, true, diag);
+}
+
+/// DO and CALL can COMMIT and carry on in a new transaction, which reads
+/// default_transaction_read_only again after the statement may have turned it off.
+fn controlsTransactions(text: []const u8) bool {
+    const word = leadingWord(text);
+    return std.ascii.eqlIgnoreCase(word, "do") or std.ascii.eqlIgnoreCase(word, "call");
+}
+
+/// The first word, past whitespace, empty statements and comments, which nest in Postgres.
+fn leadingWord(text: []const u8) []const u8 {
+    var i: usize = 0;
+    while (i < text.len) {
+        if (std.ascii.isWhitespace(text[i]) or text[i] == ';') {
+            i += 1;
+        } else if (std.mem.startsWith(u8, text[i..], "--")) {
+            i = std.mem.indexOfScalarPos(u8, text, i, '\n') orelse text.len;
+        } else if (std.mem.startsWith(u8, text[i..], "/*")) {
+            var depth: usize = 0;
+            while (i < text.len) {
+                if (std.mem.startsWith(u8, text[i..], "/*")) {
+                    depth += 1;
+                    i += 2;
+                } else if (std.mem.startsWith(u8, text[i..], "*/")) {
+                    depth -= 1;
+                    i += 2;
+                    if (depth == 0) break;
+                } else i += 1;
+            }
+        } else break;
+    }
+    var end = i;
+    while (end < text.len and (std.ascii.isAlphanumeric(text[end]) or text[end] == '_' or text[end] == '$')) end += 1;
+    return text[i..end];
 }
 
 fn isTrue(v: ?[]const u8) bool {
@@ -598,4 +647,13 @@ test "identifiers are quoted with embedded quotes doubled" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     try std.testing.expectEqualStrings("\"we\"\"ird\"", try quoteIdent(arena_state.allocator(), "we\"ird"));
+}
+
+test "DO and CALL are found past comments and empty statements" {
+    try std.testing.expect(controlsTransactions("do $$ begin commit; end $$"));
+    try std.testing.expect(controlsTransactions("  ;\n-- note\n/* a /* nested */ comment */ CALL p()"));
+    try std.testing.expect(!controlsTransactions("select 'do'"));
+    try std.testing.expect(!controlsTransactions("do_things()"));
+    try std.testing.expect(!controlsTransactions("-- do"));
+    try std.testing.expect(!controlsTransactions(""));
 }

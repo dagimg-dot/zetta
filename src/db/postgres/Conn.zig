@@ -499,14 +499,16 @@ pub fn runLimited(self: *Conn, arena: Allocator, text: []const u8, params: ?[]co
 }
 
 /// Caller SQL. One statement goes through the extended protocol, so without `exact_count` it
-/// can stop one row past `max_rows`. Text that holds several runs as a script.
-pub fn query(self: *Conn, arena: Allocator, text: []const u8, limits: types.Limits, diag: *Diagnostic) Error!types.ResultSet {
+/// can stop one row past `max_rows`. Text that holds several runs as a script, or with
+/// `one_statement` is refused.
+pub fn query(self: *Conn, arena: Allocator, text: []const u8, limits: types.Limits, one_statement: bool, diag: *Diagnostic) Error!types.ResultSet {
+    if (one_statement) return self.exec(arena, text, &.{}, limits, .refuse, diag);
     if (limits.exact_count) return self.exec(arena, text, null, limits, .as_given, diag);
     return self.exec(arena, text, &.{}, limits, .fall_back, diag);
 }
 
 /// What to do when Postgres will not prepare the text as one statement.
-const Script = enum { as_given, fall_back };
+const Script = enum { as_given, fall_back, refuse };
 
 fn exec(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param, limits: types.Limits, script: Script, diag: *Diagnostic) Error!types.ResultSet {
     const st = self.state;
@@ -581,6 +583,9 @@ fn exec(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param,
                 const multiple = wire.Notice.parse(msg.body).multipleCommands();
                 if (multiple and script == .fall_back) {
                     as_script = true;
+                } else if (multiple and script == .refuse) {
+                    diag.set("read-only mode runs one statement at a time");
+                    failure = error.QueryFailed;
                 } else {
                     failure = serverError(diag, msg.body, text, error.QueryFailed);
                 }
@@ -654,6 +659,19 @@ pub fn statementTimeout(self: *Conn, arena: Allocator, ms: ?u32, diag: *Diagnost
     const text = if (ms) |v| try std.fmt.allocPrint(arena, "set statement_timeout = {d}", .{v}) else "reset statement_timeout";
     _ = try self.run(arena, text, null, 0, diag);
     st.statement_timeout = want;
+}
+
+/// Puts every setting back to its value at connect. A failure breaks the connection, so the
+/// pool replaces it rather than lend it out with settings the caller changed.
+pub fn resetSession(self: *Conn, arena: Allocator) void {
+    if (!self.healthy()) return;
+    var diag: Diagnostic = .{};
+    _ = self.run(arena, "reset all", null, 0, &diag) catch |err| {
+        log.warn("could not reset the session, closing the connection: {t}: {s}", .{ err, diag.message() });
+        self.state.broken = true;
+        return;
+    };
+    self.state.statement_timeout = .default;
 }
 
 /// Records that caller SQL ran, which may have changed statement_timeout behind zetta's back.
