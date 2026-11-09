@@ -1,0 +1,45 @@
+/* index.html hides its shell until a stylesheet is in, so it never shows unstyled. */
+.app.boot {
+	visibility: visible;
+}
+
+.sk-bar {
+	display: block;
+	height: 10px;
+	border-radius: var(--radius-sm);
+	background: var(--border);
+	animation: sk-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sk-pulse {
+	50% {
+		opacity: 0.45;
+	}
+}
+
+.sk-tree {
+	padding: var(--space-2) var(--space-1-5);
+}
+
+.sk-row {
+	display: flex;
+	align-items: center;
+	height: 26px;
+	padding: 0 var(--space-1-5);
+}
+
+.sk-lines {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+	flex: 1;
+	max-width: 70ch;
+	padding: var(--space-4);
+	animation: sk-in var(--duration) var(--ease-out) 120ms both;
+}
+
+@keyframes sk-in {
+	from {
+		opacity: 0;
+	}
+}

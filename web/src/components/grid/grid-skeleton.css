@@ -1,0 +1,44 @@
+.grid-skeleton {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	animation: sk-in var(--duration) var(--ease-out) 120ms both;
+}
+
+.gs-line {
+	display: flex;
+	align-items: center;
+	height: 29px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.gs-head {
+	height: 34px;
+	background: var(--surface-chrome);
+	border-bottom-color: var(--border);
+	color: var(--text-secondary);
+}
+
+.gs-rn {
+	flex: none;
+	width: calc(3ch + 24px);
+}
+
+.gs-cell {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 1ch;
+	padding: 0 12px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.gs-name {
+	color: var(--text);
+}
+
+.gs-type {
+	color: var(--text-tertiary);
+	font-size: var(--text-xs);
+}

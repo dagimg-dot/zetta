@@ -2,11 +2,11 @@ import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch } fro
 import { ErrorBox } from "../../components/ui/ErrorBox";
 import { Icon } from "../../components/ui/icons";
 import { Kbd } from "../../components/ui/Kbd";
-import { Loading } from "../../components/ui/Loading";
+import { SkeletonLines } from "../../components/ui/Skeleton";
 import { getTable, type TableDetail } from "../../lib/api";
 import { formatBytes } from "../../lib/format";
 import { relationshipCount } from "../../lib/refs";
-import { createRequest } from "../../lib/request";
+import { createRequest, createResponseCache } from "../../lib/request";
 import { type Pane, setView, view } from "../../stores/view";
 import { DdlPane } from "./Ddl";
 import { IndexesPane } from "./Indexes";
@@ -36,6 +36,9 @@ const tabs: { pane: Pane; label: string; count?: (d: TableDetail) => number }[] 
 	{ pane: "ddl", label: "DDL" },
 ];
 
+/** Going back to a table draws its head and tabs at once; they refresh behind that. */
+const seenDetail = createResponseCache<TableDetail>(32);
+
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -59,6 +62,7 @@ export function TablePane(props: {
 	const detail = createRequest(
 		(t: { schema: string; table: string }, signal) => getTable(t.schema, t.table, signal),
 		() => (props.active ? target() : null),
+		seenDetail,
 	);
 
 	/** Only the detail for the open table counts; a slower answer for the previous one is ignored. */
@@ -241,7 +245,10 @@ export function TablePane(props: {
 									<Show
 										when={current()}
 										fallback={
-											<Show when={detail.error()} fallback={<Loading label="Loading table" />}>
+											<Show
+												when={detail.error()}
+												fallback={<SkeletonLines label="Loading table" />}
+											>
 												{(err) => <ErrorBox error={err()} />}
 											</Show>
 										}

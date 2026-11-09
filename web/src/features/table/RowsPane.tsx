@@ -1,14 +1,21 @@
 import { createEffect, createMemo, createSignal, on, Show, untrack } from "solid-js";
 import { ColumnList } from "../../components/grid/ColumnList";
 import { Grid, type Links } from "../../components/grid/Grid";
+import { GridSkeleton } from "../../components/grid/GridSkeleton";
 import type { Hidden } from "../../components/grid/hidden";
 import { SelectionNote } from "../../components/grid/SelectionNote";
 import { createSelection } from "../../components/grid/selection";
 import { Button } from "../../components/ui/Button";
 import { ErrorBox } from "../../components/ui/ErrorBox";
 import { Loader } from "../../components/ui/icons";
-import { Loading } from "../../components/ui/Loading";
-import { browse, compileBuilder, countRows, type TableDetail } from "../../lib/api";
+import {
+	browse,
+	compileBuilder,
+	countRows,
+	type ResultSet,
+	type RowCount,
+	type TableDetail,
+} from "../../lib/api";
 import { formatMs } from "../../lib/format";
 import {
 	type Builder,
@@ -21,13 +28,18 @@ import {
 	quoteIdent,
 	toggleSort,
 } from "../../lib/query";
-import { createRequest } from "../../lib/request";
+import { createRequest, createResponseCache } from "../../lib/request";
+import { sameResult, smallResult } from "../../lib/result";
 import { closest, unknownColumn } from "../../lib/sql";
 import { announce } from "../../stores/announce";
 import { openRowsWhere, openTable, setView, view } from "../../stores/view";
 import type { ColumnChoice } from "./ColumnPicker";
 import { Pager } from "./Pager";
 import { QueryBar } from "./QueryBar";
+
+/** The pages seen lately. Going back shows one at once, and it refreshes behind that. */
+const seenRows = createResponseCache<ResultSet>(24, { same: sameResult, keep: smallResult });
+const seenCounts = createResponseCache<RowCount>(64, { same: (a, b) => a.count === b.count });
 
 export function RowsPane(props: {
 	schema: string;
@@ -81,16 +93,20 @@ export function RowsPane(props: {
 		return { filter: view().filter, order: view().order };
 	});
 
-	const rows = createRequest(browse, () => {
-		if (!props.active) return null;
-		return {
-			schema: props.schema,
-			table: props.table,
-			...query(),
-			limit: view().limit,
-			offset: view().offset,
-		};
-	});
+	const rows = createRequest(
+		browse,
+		() => {
+			if (!props.active) return null;
+			return {
+				schema: props.schema,
+				table: props.table,
+				...query(),
+				limit: view().limit,
+				offset: view().offset,
+			};
+		},
+		seenRows,
+	);
 
 	const result = () => {
 		const k = rows.dataKey();
@@ -249,11 +265,15 @@ export function RowsPane(props: {
 			: null;
 	};
 
-	const counter = createRequest(countRows, () => {
-		const k = rows.dataKey();
-		if (!props.active || !k || shortPage() !== null) return null;
-		return { schema: k.schema, table: k.table, q: k.q, filter: k.filter };
-	});
+	const counter = createRequest(
+		countRows,
+		() => {
+			const k = rows.dataKey();
+			if (!props.active || !k || shortPage() !== null) return null;
+			return { schema: k.schema, table: k.table, q: k.q, filter: k.filter };
+		},
+		seenCounts,
+	);
 
 	/** The best total we have: exact when counted, the planner's estimate while counting an unfiltered table. */
 	const total = (): { n: number; exact: boolean } | null => {
@@ -440,14 +460,15 @@ export function RowsPane(props: {
 				when={result()}
 				fallback={
 					<Show when={rows.loading()}>
-						<Loading label="Loading rows" />
+						<GridSkeleton label="Loading rows" columns={props.detail?.columns} />
 					</Show>
 				}
 			>
 				{(r) => (
-					<div class="pane" classList={{ busy: rows.loading() }}>
+					<div class="pane rows-in" classList={{ busy: rows.waiting() }}>
 						<Grid
 							result={r()}
+							source={JSON.stringify(rows.dataKey())}
 							hidden={hidden}
 							selection={selection}
 							label={`${props.schema}.${props.table}`}
@@ -549,11 +570,11 @@ export function RowsPane(props: {
 				<Show when={result()}>
 					{(r) => (
 						<Pager
-							offset={rows.dataKey()?.offset ?? 0}
+							offset={view().offset}
 							limit={view().limit}
 							shown={r().rows.length}
 							total={total()?.exact ? (total()?.n ?? null) : null}
-							busy={rows.loading()}
+							busy={rows.waiting()}
 							onOffset={(offset) => setView({ offset })}
 							onLimit={(limit) =>
 								setView({ limit, offset: Math.floor(view().offset / limit) * limit })

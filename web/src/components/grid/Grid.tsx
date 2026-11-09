@@ -78,6 +78,8 @@ interface Cursor {
 
 export function Grid(props: {
 	result: ResultSet;
+	/** What produced `result`. A new result of the same shape from the same source is a refresh: cursor, scroll and selection stay. */
+	source?: string;
 	hidden: Hidden;
 	selection: Selection;
 	label: string;
@@ -224,10 +226,19 @@ export function Grid(props: {
 		onCleanup(() => ro.disconnect());
 	});
 
+	let seenSource = props.source;
+
 	createEffect(
 		on(
 			() => props.result,
-			() => {
+			(next, prev) => {
+				const refreshed =
+					props.source !== undefined &&
+					props.source === seenSource &&
+					next.rows.length === prev?.rows.length &&
+					next.columns.length === prev?.columns.length;
+				seenSource = props.source;
+				if (refreshed) return;
 				if (host) host.scrollTop = 0;
 				setScrollTop(0);
 				props.selection.clear();

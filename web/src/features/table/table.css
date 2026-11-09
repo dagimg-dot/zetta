@@ -148,3 +148,14 @@
 		margin: var(--space-3);
 	}
 }
+
+/* First rows after a skeleton settle in rather than snapping. */
+.rows-in {
+	animation: rows-in var(--duration-fast) var(--ease-out);
+}
+
+@keyframes rows-in {
+	from {
+		opacity: 0.4;
+	}
+}
