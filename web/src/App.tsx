@@ -9,6 +9,7 @@ import { SqlPane } from "./features/sql/SqlPane";
 import { starterSql } from "./features/sql/starter";
 import { TablePane } from "./features/table/TablePane";
 import { getCatalog, getMeta, onUnauthorized } from "./lib/api";
+import { loadBoot, sameDatabase, saveBoot } from "./lib/boot";
 import { createRequest } from "./lib/request";
 import { announce, announcement } from "./stores/announce";
 import { setDialect } from "./stores/dialect";
@@ -40,13 +41,29 @@ export function App() {
 	const catalog = createRequest(getCatalog);
 	meta.run(undefined);
 	catalog.run(undefined);
+
+	/** Last visit's answers, drawn at once and replaced as the server's arrive. */
+	const boot = loadBoot();
+	const shownMeta = () => meta.data() ?? boot?.meta;
+	const shownCatalog = () => {
+		const fresh = catalog.data();
+		if (fresh || !boot) return fresh;
+		const m = meta.data();
+		return !m || sameDatabase(boot.meta, m) ? boot.catalog : undefined;
+	};
 	createEffect(() => {
-		const adapter = meta.data()?.adapter;
+		const m = meta.data();
+		const c = catalog.data();
+		if (m && c) saveBoot({ meta: m, catalog: c });
+	});
+
+	createEffect(() => {
+		const adapter = shownMeta()?.adapter;
 		if (adapter) setDialect(adapter);
 	});
 
 	const approxRows = (schema: string, table: string): number | null => {
-		const s = catalog.data()?.schemas.find((x) => x.name === schema);
+		const s = shownCatalog()?.schemas.find((x) => x.name === schema);
 		return s?.tables.find((t) => t.name === table)?.approxRows ?? null;
 	};
 
@@ -155,8 +172,8 @@ export function App() {
 		<Show when={!unauthorized()} fallback={<Unauthorized />}>
 			<div class="app" classList={{ "nav-open": navOpen() }}>
 				<Sidebar
-					meta={meta.data()}
-					catalog={catalog.data()}
+					meta={shownMeta()}
+					catalog={shownCatalog()}
 					error={catalog.error()}
 					loading={catalog.loading()}
 					onRefresh={catalog.refetch}
@@ -210,7 +227,7 @@ export function App() {
 						active={view().tab === "sql"}
 						database={meta.data()?.database}
 						readOnly={meta.data()?.readOnly ?? false}
-						starter={starterSql(catalog.data(), meta.data()?.adapter, view())}
+						starter={starterSql(shownCatalog(), shownMeta()?.adapter, view())}
 						onSchemaChange={catalog.refetch}
 						editorRef={(el) => {
 							editor = el;

@@ -15,7 +15,7 @@ import { Button } from "../ui/Button";
 import { ErrorBox } from "../ui/ErrorBox";
 import { Icon, Mark } from "../ui/icons";
 import { Kbd } from "../ui/Kbd";
-import { Loading } from "../ui/Loading";
+import { SkeletonTree } from "../ui/Skeleton";
 import { Splitter } from "../ui/Splitter";
 import { tip } from "../ui/Tip";
 import { ThemeSwitch } from "./ThemeSwitch";
@@ -231,7 +231,14 @@ export function Sidebar(props: {
 						onClick={() => props.onRefresh()}
 					/>
 				</div>
-				<Show when={props.meta}>
+				<Show
+					when={props.meta}
+					fallback={
+						<div class="meta">
+							<span class="sk-bar" style={{ width: "60%" }} />
+						</div>
+					}
+				>
 					{(m) => (
 						<div class="meta">
 							<Icon name="database" />
@@ -290,10 +297,10 @@ export function Sidebar(props: {
 				/>
 				<Kbd keys="/" />
 			</div>
-			<div class="tree" classList={{ flat: flat() }}>
+			<div class="tree" classList={{ flat: flat(), ready: !!props.catalog }}>
 				<Show when={props.error}>{(err) => <ErrorBox error={err()} />}</Show>
 				<Show when={!props.catalog && props.loading}>
-					<Loading label="Loading tables" size={24} />
+					<SkeletonTree label="Loading tables" />
 				</Show>
 				<Show when={props.catalog && !shown().length}>
 					<div class="empty">{query().trim() ? "Nothing matches" : "No schemas"}</div>

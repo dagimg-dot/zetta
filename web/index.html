@@ -14,9 +14,70 @@
 				if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
 			} catch {}
 		</script>
+		<!-- Holds the shell back until the stylesheet shows it, which matters in dev, where styles arrive by script. -->
+		<style>
+			.app.boot {
+				visibility: hidden;
+			}
+		</style>
 	</head>
 	<body>
-		<div id="root"></div>
+		<!-- The frame of the app, drawn before any script runs. main.tsx replaces it. -->
+		<div id="root">
+			<div class="app boot" aria-hidden="true">
+				<aside>
+					<header>
+						<div class="brand">
+							<svg class="icon" width="18" height="18" viewBox="0 0 32 32" aria-hidden="true">
+								<rect width="32" height="32" rx="7" fill="#ea580c" />
+								<g fill="#fff">
+									<rect x="5" y="5" width="4" height="4" rx="1" />
+									<rect x="11" y="5" width="4" height="4" rx="1" />
+									<rect x="17" y="5" width="4" height="4" rx="1" />
+									<rect x="23" y="5" width="4" height="4" rx="1" />
+									<rect x="17" y="11" width="4" height="4" rx="1" />
+									<rect x="11" y="17" width="4" height="4" rx="1" />
+									<rect x="5" y="23" width="4" height="4" rx="1" />
+									<rect x="11" y="23" width="4" height="4" rx="1" />
+									<rect x="17" y="23" width="4" height="4" rx="1" />
+									<rect x="23" y="23" width="4" height="4" rx="1" />
+								</g>
+							</svg>
+							<b>zetta</b>
+							<span class="spacer"></span>
+							<!-- Holds the row at the height the reload button gives it, so nothing moves on the swap. -->
+							<button type="button" class="btn icon-only" tabindex="-1" style="visibility: hidden" aria-hidden="true">
+								<svg class="icon" width="14" height="14" aria-hidden="true"></svg>
+							</button>
+						</div>
+						<div class="meta"><span class="sk-bar" style="width: 60%"></span></div>
+					</header>
+					<div class="find"><input type="search" placeholder="Search tables" disabled /></div>
+					<div class="tree">
+						<div class="sk-tree">
+							<div class="sk-row"><span class="sk-bar" style="width: 68%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 92%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 54%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 84%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 40%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 76%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 60%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 88%"></span></div>
+							<div class="sk-row"><span class="sk-bar" style="width: 48%"></span></div>
+						</div>
+					</div>
+					<footer class="sidebar-foot"><span class="label">Theme</span></footer>
+				</aside>
+				<main>
+					<div class="tabs">
+						<div class="view-tabs">
+							<button type="button" class="tab" tabindex="-1">Data</button>
+							<button type="button" class="tab" tabindex="-1">SQL</button>
+						</div>
+					</div>
+				</main>
+			</div>
+		</div>
 		<script type="module" src="/src/main.tsx"></script>
 	</body>
 </html>
