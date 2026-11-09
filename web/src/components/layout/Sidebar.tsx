@@ -9,6 +9,7 @@ import type {
 	TableInfo,
 	TableKind,
 } from "../../lib/api";
+import { splitViews, viewsStartOpen } from "../../lib/relations";
 import { sidebarWidth } from "../../stores/layout";
 import { openFunction, openTable, view } from "../../stores/view";
 import { Button } from "../ui/Button";
@@ -23,7 +24,7 @@ import "./sidebar.css";
 
 const kindLabel: Record<TableKind, string | null> = {
 	table: null,
-	view: "view",
+	view: null,
 	materialized_view: "mat view",
 	foreign_table: "foreign",
 };
@@ -97,24 +98,26 @@ export function Sidebar(props: {
 
 	const openFirst = () => {
 		const s = shown()[0];
-		const t = s?.tables[0];
-		const f = s?.functions[0];
-		if (s && t) open(s.name, t.name);
-		else if (s && f) {
+		if (!s) return;
+		const { tables, views } = splitViews(s.tables);
+		const t = tables[0] ?? views[0];
+		const f = s.functions[0];
+		if (t) open(s.name, t.name);
+		else if (f) {
 			openFunction(s.name, f.name, f.arguments);
 			props.onOpen();
 		} else return;
 		setQuery("");
 	};
 
-	const TableRow = (p: { schema: string; t: TableInfo }) => {
+	const TableRow = (p: { schema: string; t: TableInfo; nested?: boolean }) => {
 		const active = () => view().schema === p.schema && view().table === p.t.name;
 		const kind = kindLabel[p.t.kind];
 		return (
 			<button
 				type="button"
 				class="tbl"
-				classList={{ active: active() }}
+				classList={{ active: active(), nested: p.nested }}
 				aria-current={active() ? "page" : undefined}
 				onClick={() => open(p.schema, p.t.name)}
 			>
@@ -190,6 +193,8 @@ export function Sidebar(props: {
 	};
 
 	const SchemaItems = (p: { schema: SchemaInfo }) => {
+		const relations = createMemo(() => splitViews(p.schema.tables));
+		const openTableName = () => (view().schema === p.schema.name ? view().table : null);
 		const functionOpen = () => view().fn !== null && view().schema === p.schema.name;
 		return (
 			<>
@@ -197,7 +202,19 @@ export function Sidebar(props: {
 					when={p.schema.tables.length || p.schema.functions.length}
 					fallback={<div class="note">No tables</div>}
 				>
-					<For each={p.schema.tables}>{(t) => <TableRow schema={p.schema.name} t={t} />}</For>
+					<For each={relations().tables}>{(t) => <TableRow schema={p.schema.name} t={t} />}</For>
+				</Show>
+				<Show when={relations().views.length}>
+					<Group
+						label="Views"
+						schema={p.schema.name}
+						count={relations().views.length}
+						startOpen={viewsStartOpen(relations(), openTableName())}
+					>
+						<For each={relations().views}>
+							{(t) => <TableRow schema={p.schema.name} t={t} nested />}
+						</For>
+					</Group>
 				</Show>
 				<Show when={p.schema.functions.length}>
 					<Group
@@ -311,7 +328,7 @@ export function Sidebar(props: {
 				>
 					<For each={shown()}>
 						{(s) => {
-							const count = s.tables.length;
+							const count = splitViews(s.tables).tables.length;
 							return (
 								<div class="schema">
 									<button

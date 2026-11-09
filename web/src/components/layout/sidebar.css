@@ -246,6 +246,15 @@ aside header {
 	padding-left: var(--space-8);
 }
 
+.tree.flat .sub-group,
+.tree.flat .note {
+	padding-left: var(--space-1-5);
+}
+
+.tree.flat .tbl.nested {
+	padding-left: var(--space-5);
+}
+
 .tbl .rows {
 	margin-left: auto;
 	flex: none;
