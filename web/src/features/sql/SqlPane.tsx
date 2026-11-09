@@ -23,6 +23,7 @@ import {
 } from "../../lib/sql";
 import { announce } from "../../stores/announce";
 import { dialect } from "../../stores/dialect";
+import { clearSqlDraft, sqlDraft } from "../../stores/sql-draft";
 import { SqlEditor } from "./SqlEditor";
 import "./sql.css";
 
@@ -177,6 +178,17 @@ export function SqlPane(props: {
 		editor.setSelectionRange(text.length, text.length);
 		setCaret([text.length, text.length]);
 	};
+
+	/** A statement handed over from another tab goes after what is here, never over it. */
+	createEffect(
+		on(sqlDraft, (text) => {
+			if (text === null) return;
+			clearSqlDraft();
+			const kept = sql().trimEnd();
+			// In a microtask so the textarea holds the new text before the caret moves to its end.
+			queueMicrotask(() => start(kept ? `${kept}\n\n${text}` : text));
+		}),
+	);
 
 	const onKey = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
 		if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {

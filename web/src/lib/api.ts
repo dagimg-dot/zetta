@@ -17,9 +17,21 @@ export interface TableInfo {
 	approxRows: number | null;
 }
 
+export type FunctionKind = "function" | "procedure" | "aggregate" | "window";
+
+export interface FunctionInfo {
+	name: string;
+	kind: FunctionKind;
+	/** The arguments that tell overloads apart, as text. Empty for none. */
+	arguments: string;
+	/** Null for a procedure. */
+	returns: string | null;
+}
+
 export interface SchemaInfo {
 	name: string;
 	tables: TableInfo[];
+	functions: FunctionInfo[];
 }
 
 export interface Catalog {
@@ -248,6 +260,31 @@ export interface TableDetail {
 	referencedBy: Reference[];
 	triggers: Trigger[];
 	ddl: string;
+}
+
+export interface FunctionDetail extends FunctionInfo {
+	schema: string;
+	/** The full argument list, with modes and defaults. */
+	signature: string;
+	language: string;
+	volatility: "immutable" | "stable" | "volatile";
+	strict: boolean;
+	securityDefiner: boolean;
+	owner: string;
+	comment: string | null;
+	/** Null for an aggregate, which no single statement creates. */
+	definition: string | null;
+	/** A statement that calls it, or null when only the database can, as with a trigger function. */
+	call: string | null;
+}
+
+export function getFunction(
+	schema: string,
+	name: string,
+	args: string,
+	signal?: AbortSignal,
+): Promise<FunctionDetail> {
+	return request<FunctionDetail>(`/api/function?${query({ schema, name, args })}`, { signal });
 }
 
 export function getTable(

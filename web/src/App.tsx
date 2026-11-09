@@ -4,6 +4,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { Unauthorized } from "./components/layout/Unauthorized";
 import { Button } from "./components/ui/Button";
 import { TipLayer, tip } from "./components/ui/Tip";
+import { FunctionPane } from "./features/function/FunctionPane";
 import { SqlPane } from "./features/sql/SqlPane";
 import { starterSql } from "./features/sql/starter";
 import { TablePane } from "./features/table/TablePane";
@@ -52,7 +53,7 @@ export function App() {
 	createEffect(() => {
 		const v = view();
 		const db = meta.data()?.database;
-		const head = v.tab === "sql" ? "SQL" : v.table;
+		const head = v.tab === "sql" ? "SQL" : (v.fn ?? v.table);
 		document.title = [head, db, "zetta"].filter(Boolean).join(" · ");
 	});
 
@@ -189,13 +190,22 @@ export function App() {
 							onClick={() => shortcuts?.showModal()}
 						/>
 					</div>
-					<TablePane
-						active={view().tab === "data"}
-						approxRows={approxRows}
-						filterRef={(el) => {
-							filter = el;
-						}}
-					/>
+					<Show
+						when={view().fn === null}
+						fallback={
+							<Show when={view().tab === "data"}>
+								<FunctionPane />
+							</Show>
+						}
+					>
+						<TablePane
+							active={view().tab === "data"}
+							approxRows={approxRows}
+							filterRef={(el) => {
+								filter = el;
+							}}
+						/>
+					</Show>
 					<SqlPane
 						active={view().tab === "sql"}
 						database={meta.data()?.database}

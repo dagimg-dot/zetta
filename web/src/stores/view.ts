@@ -12,6 +12,10 @@ export const defaultPageSize = 100;
 export interface View {
 	schema: string | null;
 	table: string | null;
+	/** A function to show instead of a table, in `schema`. */
+	fn: string | null;
+	/** The arguments that pick one overload of `fn`. */
+	args: string;
 	tab: Tab;
 	pane: Pane;
 	/** The filter and sort builder, as JSON (see query.ts). Wins over filter/order. */
@@ -32,6 +36,8 @@ export function parse(search: string): View {
 	return {
 		schema: p.get("schema"),
 		table: p.get("table"),
+		fn: p.get("fn"),
+		args: p.get("args") ?? "",
 		tab: p.get("tab") === "sql" ? "sql" : "data",
 		pane: panes.find((x) => x === p.get("view")) ?? "rows",
 		q: p.get("q") ?? "",
@@ -47,6 +53,8 @@ export function serialize(v: View): string {
 	const p = new URLSearchParams();
 	if (v.schema !== null) p.set("schema", v.schema);
 	if (v.table !== null) p.set("table", v.table);
+	if (v.fn !== null) p.set("fn", v.fn);
+	if (v.args) p.set("args", v.args);
 	if (v.tab !== "data") p.set("tab", v.tab);
 	if (v.pane !== "rows") p.set("view", v.pane);
 	if (v.q) p.set("q", v.q);
@@ -84,7 +92,18 @@ export function openTable(schema: string, table: string): void {
 	setView(
 		same
 			? { tab: "data" }
-			: { schema, table, tab: "data", q: "", filter: "", order: "", offset: 0, hide: [] },
+			: {
+					schema,
+					table,
+					fn: null,
+					args: "",
+					tab: "data",
+					q: "",
+					filter: "",
+					order: "",
+					offset: 0,
+					hide: [],
+				},
 		same ? "replace" : "push",
 	);
 }
@@ -102,7 +121,39 @@ export function openRowsWhere(
 		sorts: [],
 	});
 	setView(
-		{ schema, table, tab: "data", pane: "rows", q, filter: "", order: "", offset: 0, hide: [] },
+		{
+			schema,
+			table,
+			fn: null,
+			args: "",
+			tab: "data",
+			pane: "rows",
+			q,
+			filter: "",
+			order: "",
+			offset: 0,
+			hide: [],
+		},
+		"push",
+	);
+}
+
+export function openFunction(schema: string, fn: string, args: string): void {
+	const cur = view();
+	if (cur.schema === schema && cur.fn === fn && cur.args === args && cur.tab === "data") return;
+	setView(
+		{
+			schema,
+			table: null,
+			fn,
+			args,
+			tab: "data",
+			q: "",
+			filter: "",
+			order: "",
+			offset: 0,
+			hide: [],
+		},
 		"push",
 	);
 }

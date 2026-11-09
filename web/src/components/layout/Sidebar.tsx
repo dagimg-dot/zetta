@@ -1,7 +1,16 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
-import type { ApiError, Catalog, Meta, SchemaInfo, TableInfo, TableKind } from "../../lib/api";
+import { createMemo, createSignal, For, type JSX, Show } from "solid-js";
+import type {
+	ApiError,
+	Catalog,
+	FunctionInfo,
+	FunctionKind,
+	Meta,
+	SchemaInfo,
+	TableInfo,
+	TableKind,
+} from "../../lib/api";
 import { sidebarWidth } from "../../stores/layout";
-import { openTable, view } from "../../stores/view";
+import { openFunction, openTable, view } from "../../stores/view";
 import { Button } from "../ui/Button";
 import { ErrorBox } from "../ui/ErrorBox";
 import { Icon, Mark } from "../ui/icons";
@@ -19,14 +28,21 @@ const kindLabel: Record<TableKind, string | null> = {
 	foreign_table: "foreign",
 };
 
+const functionBadge: Record<FunctionKind, string | null> = {
+	function: null,
+	procedure: "proc",
+	aggregate: "agg",
+	window: "window",
+};
+
 const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
 function approx(n: number): string {
 	return `~${n < 10000 ? n.toLocaleString() : compact.format(n)}`;
 }
 
-function matches(q: string, schema: string, t: TableInfo): boolean {
-	return t.name.toLowerCase().includes(q) || schema.toLowerCase().includes(q);
+function matches(q: string, schema: string, item: { name: string }): boolean {
+	return item.name.toLowerCase().includes(q) || schema.toLowerCase().includes(q);
 }
 
 export function Sidebar(props: {
@@ -52,7 +68,8 @@ export function Sidebar(props: {
 		const out: SchemaInfo[] = [];
 		for (const s of all) {
 			const tables = s.tables.filter((t) => matches(q, s.name, t));
-			if (tables.length) out.push({ name: s.name, tables });
+			const functions = s.functions.filter((f) => matches(q, s.name, f));
+			if (tables.length || functions.length) out.push({ name: s.name, tables, functions });
 		}
 		return out;
 	});
@@ -66,6 +83,13 @@ export function Sidebar(props: {
 
 	const toggle = (name: string) => setToggled({ ...toggled(), [name]: !isOpen(name) });
 
+	const hasFunctions = () => schemas().some((s) => s.functions.length > 0);
+	const searchLabel = () => (hasFunctions() ? "Search tables and functions" : "Search tables");
+
+	/** A search unfolds every group, without changing what the reader folded by hand. */
+	const groupOpen = (key: string, startOpen: boolean) =>
+		query().trim() ? true : (toggled()[key] ?? startOpen);
+
 	const open = (schema: string, table: string) => {
 		openTable(schema, table);
 		props.onOpen();
@@ -74,10 +98,13 @@ export function Sidebar(props: {
 	const openFirst = () => {
 		const s = shown()[0];
 		const t = s?.tables[0];
-		if (s && t) {
-			open(s.name, t.name);
-			setQuery("");
-		}
+		const f = s?.functions[0];
+		if (s && t) open(s.name, t.name);
+		else if (s && f) {
+			openFunction(s.name, f.name, f.arguments);
+			props.onOpen();
+		} else return;
+		setQuery("");
 	};
 
 	const TableRow = (p: { schema: string; t: TableInfo }) => {
@@ -100,6 +127,91 @@ export function Sidebar(props: {
 					<span class="rows">{approx(p.t.approxRows ?? 0)}</span>
 				</Show>
 			</button>
+		);
+	};
+
+	const FunctionRow = (p: { schema: string; f: FunctionInfo }) => {
+		const active = () =>
+			view().schema === p.schema && view().fn === p.f.name && view().args === p.f.arguments;
+		const badge = p.f.returns === "trigger" ? "trigger" : functionBadge[p.f.kind];
+		return (
+			<button
+				type="button"
+				class="tbl nested"
+				classList={{ active: active() }}
+				aria-current={active() ? "page" : undefined}
+				{...tip(
+					`${p.f.name}(${p.f.arguments})${p.f.returns ? ` returns ${p.f.returns}` : ""}`,
+					undefined,
+					"right",
+				)}
+				onClick={() => {
+					openFunction(p.schema, p.f.name, p.f.arguments);
+					props.onOpen();
+				}}
+			>
+				<Icon name="function" />
+				<span class="name">{p.f.name}</span>
+				<span class="args">({p.f.arguments})</span>
+				<Show when={badge}>
+					<span class="badge">{badge}</span>
+				</Show>
+			</button>
+		);
+	};
+
+	const Group = (p: {
+		label: string;
+		schema: string;
+		count: number;
+		startOpen: boolean;
+		children: JSX.Element;
+	}) => {
+		const key = () => `${p.label}\u0000${p.schema}`;
+		const isGroupOpen = () => groupOpen(key(), p.startOpen);
+		return (
+			<>
+				<button
+					type="button"
+					class="sub-group"
+					aria-expanded={isGroupOpen()}
+					aria-label={`${p.label} in ${p.schema}, ${p.count}`}
+					onClick={() => setToggled({ ...toggled(), [key()]: !isGroupOpen() })}
+				>
+					<Icon name="chevron" class="chev" size={11} />
+					<span>{p.label}</span>
+					<span class="count" aria-hidden="true">
+						{p.count}
+					</span>
+				</button>
+				<Show when={isGroupOpen()}>{p.children}</Show>
+			</>
+		);
+	};
+
+	const SchemaItems = (p: { schema: SchemaInfo }) => {
+		const functionOpen = () => view().fn !== null && view().schema === p.schema.name;
+		return (
+			<>
+				<Show
+					when={p.schema.tables.length || p.schema.functions.length}
+					fallback={<div class="note">No tables</div>}
+				>
+					<For each={p.schema.tables}>{(t) => <TableRow schema={p.schema.name} t={t} />}</For>
+				</Show>
+				<Show when={p.schema.functions.length}>
+					<Group
+						label="Functions"
+						schema={p.schema.name}
+						count={p.schema.functions.length}
+						startOpen={functionOpen()}
+					>
+						<For each={p.schema.functions}>
+							{(f) => <FunctionRow schema={p.schema.name} f={f} />}
+						</For>
+					</Group>
+				</Show>
+			</>
 		);
 	};
 
@@ -160,8 +272,8 @@ export function Sidebar(props: {
 				<input
 					ref={props.searchRef}
 					type="search"
-					aria-label="Search tables"
-					placeholder="Search tables"
+					aria-label={searchLabel()}
+					placeholder={searchLabel()}
 					autocomplete="off"
 					spellcheck={false}
 					value={query()}
@@ -184,39 +296,38 @@ export function Sidebar(props: {
 					<Loading label="Loading tables" size={24} />
 				</Show>
 				<Show when={props.catalog && !shown().length}>
-					<div class="empty">{query().trim() ? "No matching tables" : "No schemas"}</div>
+					<div class="empty">{query().trim() ? "Nothing matches" : "No schemas"}</div>
 				</Show>
 				<Show
 					when={!flat()}
-					fallback={
-						<For each={shown()[0]?.tables ?? []}>
-							{(t) => <TableRow schema={shown()[0]?.name ?? ""} t={t} />}
-						</For>
-					}
+					fallback={<Show when={shown()[0]}>{(s) => <SchemaItems schema={s()} />}</Show>}
 				>
 					<For each={shown()}>
-						{(s) => (
-							<div class="schema">
-								<button
-									type="button"
-									class="schema-head"
-									aria-expanded={isOpen(s.name)}
-									aria-label={`Schema ${s.name}, ${s.tables.length} ${s.tables.length === 1 ? "table" : "tables"}`}
-									onClick={() => toggle(s.name)}
-								>
-									<Icon name="chevron" class="chev" size={11} />
-									<span>{s.name}</span>
-									<span class="count" aria-hidden="true">
-										{s.tables.length}
-									</span>
-								</button>
-								<Show when={isOpen(s.name)}>
-									<Show when={s.tables.length} fallback={<div class="note">No tables</div>}>
-										<For each={s.tables}>{(t) => <TableRow schema={s.name} t={t} />}</For>
+						{(s) => {
+							const count = s.tables.length;
+							return (
+								<div class="schema">
+									<button
+										type="button"
+										class="schema-head"
+										aria-expanded={isOpen(s.name)}
+										aria-label={`Schema ${s.name}, ${count} ${count === 1 ? "table" : "tables"}`}
+										onClick={() => toggle(s.name)}
+									>
+										<Icon name="chevron" class="chev" size={11} />
+										<span>{s.name}</span>
+										<Show when={count}>
+											<span class="count" aria-hidden="true">
+												{count}
+											</span>
+										</Show>
+									</button>
+									<Show when={isOpen(s.name)}>
+										<SchemaItems schema={s} />
 									</Show>
-								</Show>
-							</div>
-						)}
+								</div>
+							);
+						}}
 					</For>
 				</Show>
 			</div>

@@ -186,6 +186,55 @@ aside header {
 	min-width: 0;
 }
 
+.tbl .args {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-tertiary);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	font-weight: var(--weight-regular);
+}
+
+.sub-group {
+	display: flex;
+	align-items: center;
+	gap: var(--space-1);
+	width: 100%;
+	padding: var(--space-1) var(--space-1-5) var(--space-1) var(--space-5);
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--text-secondary);
+	font-size: var(--text-sm);
+	text-align: left;
+	cursor: pointer;
+}
+
+.sub-group:hover {
+	background: var(--surface-hover);
+}
+
+.sub-group .chev {
+	transition: transform var(--duration) var(--ease-out);
+}
+
+.sub-group[aria-expanded="true"] .chev {
+	transform: rotate(90deg);
+}
+
+.sub-group .count {
+	margin-left: auto;
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+.tbl.nested {
+	padding-left: var(--space-8);
+}
+
 .tbl .rows {
 	margin-left: auto;
 	flex: none;

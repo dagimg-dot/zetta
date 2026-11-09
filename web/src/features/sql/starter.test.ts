@@ -6,6 +6,7 @@ const catalog = (schemas: Record<string, [string, TableKind][]>): Catalog => ({
 	schemas: Object.entries(schemas).map(([name, tables]) => ({
 		name,
 		tables: tables.map(([t, kind]) => ({ name: t, kind, approxRows: null })),
+		functions: [],
 	})),
 });
 

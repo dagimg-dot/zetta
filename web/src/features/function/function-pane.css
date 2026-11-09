@@ -1,0 +1,77 @@
+.fn-head {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	padding: var(--space-2-5) var(--space-3);
+	border-bottom: 1px solid var(--border);
+	background: var(--surface-chrome);
+}
+
+.fn-title {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	min-width: 0;
+}
+
+.fn-title > .icon {
+	color: var(--text-secondary);
+}
+
+.fn-title h1 {
+	margin: 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-lg);
+	font-weight: var(--weight-semibold);
+}
+
+.fn-schema,
+.fn-args {
+	color: var(--text-secondary);
+	font-weight: var(--weight-regular);
+}
+
+.fn-args {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	margin-left: var(--space-0-5);
+}
+
+.fn-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-0-5) var(--space-3);
+	margin: 0;
+	padding: 0;
+	min-height: 1.4em;
+	list-style: none;
+	color: var(--text-secondary);
+	font-size: var(--text-sm);
+	animation: sk-in var(--duration) var(--ease-out);
+}
+
+.fn-comment {
+	margin: 0;
+	color: var(--text);
+}
+
+.fn-def {
+	flex: 1;
+	min-height: 0;
+	margin: 0;
+	padding: var(--space-4);
+	overflow: auto;
+	background: var(--surface);
+	font-size: var(--text-sm);
+	line-height: 1.6;
+	animation: sk-in var(--duration) var(--ease-out);
+}
+
+.fn-none {
+	margin: 0;
+	padding: var(--space-4);
+	color: var(--text-secondary);
+}
