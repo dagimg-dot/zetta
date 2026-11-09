@@ -189,9 +189,20 @@ export function compileBuilder(q: string, signal?: AbortSignal): Promise<Compile
 	return request<CompiledBuilder>(`/api/compile?${query({ q })}`, { signal });
 }
 
-/** Runs caller SQL. With `exact` every row is read to count it, however long that takes. */
-export function runQuery(sql: string, exact: boolean, signal?: AbortSignal): Promise<ResultSet> {
-	return request<ResultSet>(exact ? "/api/query?count=exact" : "/api/query", {
+/**
+ * Runs caller SQL. With `exact` every row is read to count it, however long that takes. With
+ * `extended` the server allows it a longer limit than usual.
+ */
+export function runQuery(
+	sql: string,
+	how: { exact: boolean; extended?: boolean },
+	signal?: AbortSignal,
+): Promise<ResultSet> {
+	const params = new URLSearchParams();
+	if (how.exact) params.set("count", "exact");
+	if (how.extended) params.set("budget", "extended");
+	const search = params.toString();
+	return request<ResultSet>(search ? `/api/query?${search}` : "/api/query", {
 		method: "POST",
 		headers: { "content-type": "text/plain" },
 		body: sql,

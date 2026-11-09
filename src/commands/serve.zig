@@ -59,6 +59,8 @@ pub const Args = struct {
         \\
         \\A query reads every row to count them, even past the 5,000 it returns, so this
         \\is what bounds a large one. 0 means no limit. Counting rows has its own 3 s budget.
+        \\A query that times out can be run again from the SQL tab with up to ten times this,
+        \\at most ten minutes.
         },
         .{ .field = "open", .negatable = true, .help = "Open the UI in a browser (default: when stdout is a terminal)" },
     };

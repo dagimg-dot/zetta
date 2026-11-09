@@ -19,6 +19,7 @@ import {
 	destructive,
 	errorRange,
 	isWrite,
+	safeToRetry,
 	statementAt,
 	statementRanges,
 	statements,
@@ -32,6 +33,12 @@ import "./sql.css";
 
 const INDENT = "  ";
 
+/** What a run sends and where it starts in the editor. */
+interface Picked {
+	text: string;
+	at: number;
+}
+
 /**
  * What a run sends and where it starts in the editor: the selection when there is one, otherwise
  * the statement at the caret, or with `all` everything.
@@ -42,7 +49,7 @@ function pickRun(
 	b: number,
 	all: boolean,
 	dialect: Adapter,
-): { text: string; at: number } | null {
+): Picked | null {
 	if (all || a !== b) {
 		const raw = all ? value : value.slice(a, b);
 		const text = raw.trim();
@@ -87,11 +94,12 @@ export function SqlPane(props: {
 	const track = (e: { currentTarget: HTMLTextAreaElement }) =>
 		setCaret([e.currentTarget.selectionStart, e.currentTarget.selectionEnd]);
 	/** What the last run sent, and where in the editor it started. */
-	const [ran, setRan] = createSignal({ text: "", at: 0 });
+	const [ran, setRan] = createSignal({ text: "", at: 0, extended: false });
 	const hidden = createHidden();
 	const selection = createSelection();
-	const query = createRequest((r: { text: string; exact: boolean }, signal: AbortSignal) =>
-		runQuery(r.text, r.exact, signal),
+	const query = createRequest(
+		(r: { text: string; exact: boolean; extended?: boolean }, signal: AbortSignal) =>
+			runQuery(r.text, { exact: r.exact, extended: r.extended }, signal),
 	);
 
 	createEffect(
@@ -144,14 +152,22 @@ export function SqlPane(props: {
 
 	/** A run held back until someone confirms what it would destroy. */
 	const [confirming, setConfirming] = createSignal<{
-		picked: { text: string; at: number };
+		picked: Picked;
 		actions: Destructive[];
+		extended: boolean;
 	} | null>(null);
 
-	const send = (picked: { text: string; at: number }) => {
-		setRan(picked);
+	const send = (picked: Picked, extended: boolean) => {
+		setRan({ ...picked, extended });
 		announce("Running");
-		query.run({ text: picked.text, exact: false });
+		query.run({ text: picked.text, exact: false, extended });
+	};
+
+	/** Sends `picked`, asking first if that would destroy data. A read-only connection refuses those itself. */
+	const launch = (picked: Picked, extended = false) => {
+		const actions = props.readOnly ? [] : destructive(picked.text, dialect());
+		if (actions.length) setConfirming({ picked, actions, extended });
+		else send(picked, extended);
 	};
 
 	/**
@@ -167,11 +183,7 @@ export function SqlPane(props: {
 			all,
 			dialect(),
 		);
-		if (!picked) return;
-		// A read-only connection refuses these itself.
-		const actions = props.readOnly ? [] : destructive(picked.text, dialect());
-		if (actions.length) setConfirming({ picked, actions });
-		else send(picked);
+		if (picked) launch(picked);
 	};
 
 	/** The shown result stopped counting at the limit. A write is never run twice to count it. */
@@ -225,6 +237,10 @@ export function SqlPane(props: {
 			e.currentTarget.blur();
 		}
 	};
+
+	/** The last run timed out at the usual limit, and running it again cannot apply anything twice. */
+	const canExtend = () =>
+		query.error()?.code === "timeout" && !ran().extended && safeToRetry(ran().text, dialect());
 
 	const errorAt = () => {
 		const err = query.error();
@@ -337,6 +353,15 @@ export function SqlPane(props: {
 								</Button>
 							)}
 						</Show>
+						<Show when={canExtend()}>
+							<Button
+								size="sm"
+								tip="Allows up to ten times the limit, at most ten minutes. Once started it cannot be stopped from here."
+								onClick={() => launch(ran(), true)}
+							>
+								Run with a longer limit
+							</Button>
+						</Show>
 					</ErrorBox>
 				)}
 			</Show>
@@ -384,9 +409,9 @@ export function SqlPane(props: {
 						database={props.database}
 						actions={c().actions}
 						onClose={(confirmed) => {
-							const { picked } = c();
+							const { picked, extended } = c();
 							setConfirming(null);
-							if (confirmed) send(picked);
+							if (confirmed) send(picked, extended);
 						}}
 					/>
 				)}

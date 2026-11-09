@@ -6,6 +6,7 @@ import {
 	destructive,
 	errorRange,
 	isWrite,
+	safeToRetry,
 	statementAt,
 	statementRanges,
 	statements,
@@ -290,5 +291,21 @@ describe("statements that can destroy data", () => {
 		);
 		expect(found.map((d) => d.target)).toEqual(["a", "d"]);
 		expect(found.map((d) => d.statement)).toEqual(["delete from a", "drop table d"]);
+	});
+});
+
+describe("running again after a timeout", () => {
+	test("one statement left nothing behind, even a write", () => {
+		expect(safeToRetry("select pg_sleep(60)", "postgres")).toBe(true);
+		expect(safeToRetry("update t set a = 1", "postgres")).toBe(true);
+	});
+
+	test("a script of reads is safe", () => {
+		expect(safeToRetry("select 1; select 2", "sqlite")).toBe(true);
+	});
+
+	test("a script with a write may already have applied part of itself", () => {
+		expect(safeToRetry("insert into t values (1); select 2", "sqlite")).toBe(false);
+		expect(safeToRetry("select 1; delete from t where a", "postgres")).toBe(false);
 	});
 });

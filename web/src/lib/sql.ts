@@ -428,6 +428,14 @@ export function destructive(sql: string, dialect: Adapter): Destructive[] {
 	});
 }
 
+/**
+ * Whether `sql` can simply be run again after timing out. A statement that timed out left nothing
+ * behind, but in a script of several the writes before it may already have been applied.
+ */
+export function safeToRetry(sql: string, dialect: Adapter): boolean {
+	return statements(sql, dialect).length <= 1 || !isWrite(sql, dialect);
+}
+
 const writeVerbs =
 	/^\s*(insert|update|delete|drop|alter|create|truncate|replace|grant|revoke|vacuum|reindex|attach|detach|merge|copy)\b/i;
 

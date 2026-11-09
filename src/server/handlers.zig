@@ -276,6 +276,8 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !s
     // Read before the body, which can reuse the buffer the head was parsed from.
     const count_param = try http.queryParam(arena, q, "count");
     const exact = if (count_param) |v| std.mem.eql(u8, v, "exact") else false;
+    const budget_param = try http.queryParam(arena, q, "budget");
+    const extended = if (budget_param) |v| std.mem.eql(u8, v, "extended") else false;
     if (req.head.content_length) |len| {
         if (len > http.max_body) return fail(req, .payload_too_large, "too_large", "the SQL is over 1 MiB");
     }
@@ -289,9 +291,17 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !s
 
     const started = std.Io.Timestamp.now(ctx.io, .awake);
     var diag: db.Diagnostic = .{};
-    const options: db.QueryOptions = .{ .exact_count = exact, .budget_ms = ctx.statement_timeout_ms };
+    const budget = if (extended) extendedBudget(ctx.statement_timeout_ms) else ctx.statement_timeout_ms;
+    const options: db.QueryOptions = .{ .exact_count = exact, .budget_ms = budget };
     const rs = ctx.adapter.query(arena, sql, options, &diag) catch |err| return dbFail(req, err, &diag);
     return respondResult(ctx, req, rs, started);
+}
+
+/// What a query may use when asked to run again after timing out: ten times the limit, up to ten
+/// minutes, because nothing can stop a statement that is already running. Never below the limit.
+fn extendedBudget(limit: ?u32) ?u32 {
+    const ms = limit orelse return null;
+    return @max(ms, @min(ms *| 10, 600_000));
 }
 
 /// Writes the JSON straight to the socket in chunks, so a large result is never also held as one
@@ -462,6 +472,20 @@ test "the editor can ask which functions an expression may call" {
     var saw_lower = false;
     for (parsed.functions) |f| saw_lower = saw_lower or std.mem.eql(u8, f.name, "lower");
     try testing.expect(saw_lower);
+}
+
+test "a retry after a timeout gets ten times the limit, up to ten minutes" {
+    try testing.expectEqual(300_000, extendedBudget(30_000));
+    try testing.expectEqual(600_000, extendedBudget(120_000));
+}
+
+test "a retry never gets less than the limit already set" {
+    try testing.expectEqual(1_200_000, extendedBudget(1_200_000));
+    try testing.expectEqual(std.math.maxInt(u32), extendedBudget(std.math.maxInt(u32)));
+}
+
+test "with no limit configured a retry has none either" {
+    try testing.expectEqual(null, extendedBudget(null));
 }
 
 test "a query stops past the row limit unless asked for an exact count" {
