@@ -382,7 +382,10 @@ export function Grid(props: {
 		const rows = props.result.rows.length;
 		const cols = visibleCols();
 		if (!rows || !cols.length) return;
-		const cur = cursor() ?? { row: 0, col: cols[0] ?? 0 };
+		const first = { row: 0, col: cols[0] ?? 0 };
+		// Focused by a press that hit no cell: the first arrow lands on the first cell, not past it.
+		if (!cursor() && !toEdge) return place(first);
+		const cur = cursor() ?? first;
 		let row = Math.min(cur.row, rows - 1);
 		let pos = cols.indexOf(cur.col);
 		if (pos < 0) {
@@ -685,8 +688,12 @@ export function Grid(props: {
 		setInspecting(true);
 	};
 
-	const onFocus = () => {
-		if (!cursor()) move(0, 0);
+	/**
+	 * Tabbing in starts at the first cell. A press focuses the table before its click arrives, and
+	 * moving here would scroll the pressed row away, so the click places the cursor instead.
+	 */
+	const onFocus = (e: FocusEvent & { currentTarget: HTMLTableElement }) => {
+		if (!cursor() && e.currentTarget.matches(":focus-visible")) move(0, 0);
 	};
 
 	const closeInspector = () => {
