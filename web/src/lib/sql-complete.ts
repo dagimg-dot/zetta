@@ -1,7 +1,8 @@
 import type { Adapter, Column, SchemaInfo, TableKind } from "./api";
-import { match, type Tier } from "./match";
+import { match, Tier } from "./match";
 import { statementSpan } from "./sql";
 import {
+	commonFunctions,
 	postgresColumnName,
 	postgresReserved,
 	postgresTypeFunctionName,
@@ -43,6 +44,8 @@ export interface Completion {
 	candidates: Candidate[];
 	/** Tables whose columns were wanted but are not loaded yet. */
 	missing: { schema: string; table: string }[];
+	/** The word typed is probably finished, as an alias or a function's name, so Enter leaves it be. */
+	tentative?: boolean;
 }
 
 /** A name as the server prints it with quote_ident: bare when that reads back the same, else quoted. */
@@ -161,6 +164,44 @@ interface Relation {
 
 const significant = (t: Token) => t.kind !== "space" && t.kind !== "comment";
 
+/** Calls whose FROM is followed by a value, as extract(year from d). */
+const valueFromCalls = new Set(["extract", "trim", "substring", "overlay"]);
+
+/** Statements whose own FROM is followed by a file, a role or a cursor. */
+const noTableFromStatements = new Set(["copy", "revoke", "fetch", "move"]);
+
+/** What an UPDATE that is not a statement can be followed by, by the word before it. */
+const afterInnerUpdate: Record<string, string> = {
+	do: "set",
+	for: "of nowait skip",
+	key: "of nowait skip",
+	on: "cascade restrict set no",
+};
+
+/** Whether a table comes after the relation word at `i`, which FROM and UPDATE do only sometimes. */
+function takesRelation(sig: readonly Token[], i: number, text: string): boolean {
+	const lower = (at: number) => {
+		const t = sig[at];
+		return t ? text.slice(t.start, t.end).toLowerCase() : "";
+	};
+	const w = lower(i);
+	const last = lower(i - 1);
+	if (w === "update")
+		return i === 0 || ["(", ")", "explain", "analyze", "analyse", "verbose"].includes(last);
+	if (w !== "from") return relationWords.has(w);
+	if (last === "distinct" && ["is", "not"].includes(lower(i - 2))) return false;
+	let depth = 0;
+	for (let k = i - 1; k >= 0; k--) {
+		const p = lower(k);
+		if (p === ")") depth++;
+		else if (p === "(") {
+			if (depth === 0) return !valueFromCalls.has(lower(k - 1));
+			depth--;
+		}
+	}
+	return !noTableFromStatements.has(lower(0));
+}
+
 /**
  * The relations a statement reads, from each FROM, JOIN, UPDATE and INTO at its top level, with
  * their aliases. Reads the whole statement, so a FROM after the caret still counts.
@@ -172,45 +213,42 @@ function relations(
 	catalog: CatalogView,
 ): Relation[] {
 	const out: Relation[] = [];
+	const sig = tokens.filter(significant);
 	const word = (t: Token | undefined) => (t ? text.slice(t.start, t.end) : "");
 	const isName = (t: Token | undefined) =>
 		!!t && (t.kind === "name" || (t.kind === "word" && !isKeyword(word(t), dialect)));
 	let depth = 0;
 	let inFrom = false;
-	for (let i = 0; i < tokens.length; i++) {
-		const t = tokens[i];
+	for (let i = 0; i < sig.length; i++) {
+		const t = sig[i];
 		if (!t) continue;
 		const w = word(t).toLowerCase();
 		if (w === "(") depth++;
 		else if (w === ")") depth = Math.max(0, depth - 1);
 		if (depth > 0 || (t.kind !== "word" && w !== ",")) continue;
+		if (relationWords.has(w) && !takesRelation(sig, i, text)) continue;
 		if (t.kind === "word" && clauseOf[w] && w !== "join") inFrom = w === "from";
 		const startsRelation = relationWords.has(w) || (w === "," && inFrom);
 		if (!startsRelation) continue;
 		// name [. name] [[as] alias]
 		const parts: string[] = [];
 		let j = i + 1;
-		const next = () => {
-			while (j < tokens.length && !significant(tokens[j] as Token)) j++;
-			return tokens[j];
-		};
-		let n = next();
+		let n = sig[j];
 		if (!isName(n) && !(n && n.kind === "word")) continue;
 		while (n && (n.kind === "name" || n.kind === "word")) {
 			parts.push(unquote(word(n)));
 			j++;
-			const dot = next();
-			if (!dot || word(dot) !== ".") break;
+			if (word(sig[j]) !== ".") break;
 			j++;
-			n = next();
+			n = sig[j];
 		}
 		const [first, second] = parts;
 		if (!first) continue;
 		let alias = second ?? first;
-		let a = next();
+		let a = sig[j];
 		if (a && word(a).toLowerCase() === "as") {
 			j++;
-			a = next();
+			a = sig[j];
 		}
 		if (isName(a)) alias = unquote(word(a));
 		const schema = second ? first : catalog.defaultSchema;
@@ -233,6 +271,31 @@ function findTable(
 		s?.tables.find((x) => x.name === table) ??
 		s?.tables.find((x) => x.name.toLowerCase() === table.toLowerCase());
 	return s && t ? { schema: s.name, table: t.name } : null;
+}
+
+/** Whether the next word sits where a table's alias goes: right after a table or subquery being read. */
+function followsTable(before: readonly Token[], clause: string, text: string): boolean {
+	const word = (at: number) => {
+		const t = before[at];
+		return t ? text.slice(t.start, t.end).toLowerCase() : "";
+	};
+	let k = before.length - 1;
+	if (word(k) === ")") return clause === "from" || clause === "join";
+	const last = before[k];
+	if (!last || (last.kind !== "name" && last.kind !== "word")) return false;
+	while (word(k - 1) === ".") k -= 2;
+	const opener = word(k - 1);
+	if (opener === ",") return clause === "from";
+	return ["from", "join", "update"].includes(opener) && takesRelation(before, k - 1, text);
+}
+
+/** Whether `typed` names a function, which a column that merely begins the same should not replace. */
+function isFunction(typed: string, catalog: CatalogView): boolean {
+	const name = typed.toLowerCase();
+	return (
+		commonFunctions.has(name) ||
+		catalog.schemas.some((s) => s.functions.some((f) => f.name.toLowerCase() === name))
+	);
 }
 
 /**
@@ -328,18 +391,27 @@ export function complete(
 		return { from, to, typed, candidates, missing };
 	}
 
-	if (!explicit && !typed && !relationWords.has(prevWord)) return null;
+	// A new name goes after AS, and a type after a cast; neither can be known.
+	if (prevWord === "::" || (prevWord === "as" && prev?.kind === "word")) return null;
+
+	const afterRelationWord = before.length > 0 && takesRelation(before, before.length - 1, text);
+	if (!explicit && !typed && !afterRelationWord) return null;
 
 	// The clause the caret is in, at its own parenthesis depth.
 	let clause = "start";
 	const outer: string[] = [];
-	for (const t of before) {
+	for (const [i, t] of before.entries()) {
 		const w = word(t).toLowerCase();
 		if (w === "(") {
 			outer.push(clause);
 			clause = "paren";
 		} else if (w === ")") clause = outer.pop() ?? "start";
-		else if (t.kind === "word" && clauseOf[w]) clause = clauseOf[w] ?? clause;
+		else if (
+			t.kind === "word" &&
+			clauseOf[w] &&
+			(!relationWords.has(w) || takesRelation(before, i, text))
+		)
+			clause = clauseOf[w] ?? clause;
 	}
 	if (clause === "paren") clause = "select";
 
@@ -357,7 +429,7 @@ export function complete(
 		}
 	};
 
-	if (relationWords.has(prevWord) || (prevWord === "," && clause === "from")) {
+	if (afterRelationWord || (prevWord === "," && clause === "from")) {
 		const home = catalog.schemas.find((s) => s.name === catalog.defaultSchema);
 		if (home) relationsIn(home, 0, false);
 		for (const s of catalog.schemas) {
@@ -374,6 +446,11 @@ export function complete(
 		return { from, to, typed, candidates, missing };
 	}
 
+	if (prevWord === "update") {
+		keywords(afterInnerUpdate[word(before.at(-2)).toLowerCase()] ?? "", 0);
+		return { from, to, typed, candidates, missing };
+	}
+
 	// INSERT INTO t ( names t's columns.
 	const open = before.at(-1)?.kind === "punct" && prevWord === "(" ? before.length - 1 : -1;
 	const intoTable =
@@ -387,6 +464,21 @@ export function complete(
 	if (before.length === 0) {
 		keywords(follows.start ?? "", 0);
 		return { from, to, typed, candidates, missing };
+	}
+
+	if (followsTable(before, clause, text)) {
+		// An alias is any word at all, so a clause is offered only once two letters rule most out.
+		if (!explicit && typed.length < 2) return null;
+		keywords(follows[clause] ?? "", 0);
+		const begun = typed.toLowerCase();
+		return {
+			from,
+			to,
+			typed,
+			candidates: candidates.filter((c) => c.label.toLowerCase().startsWith(begun)),
+			missing,
+			tentative: true,
+		};
 	}
 
 	// Right after a finished expression, the next word is more often a keyword than a column.
@@ -414,7 +506,7 @@ export function complete(
 		}
 	}
 	keywords(follows[clause] ?? "", ended ? 0 : 3);
-	return { from, to, typed, candidates, missing };
+	return { from, to, typed, candidates, missing, tentative: isFunction(typed, catalog) };
 }
 
 export interface Ranked extends Candidate {
@@ -440,4 +532,22 @@ export function rank(candidates: readonly Candidate[], typed: string, limit = 10
 	}
 	out.sort((a, b) => a.tier - b.tier || a.rank - b.rank || a.cost - b.cost || a.index - b.index);
 	return out.slice(0, limit);
+}
+
+/**
+ * Whether Enter takes `pick` instead of starting a new line. Enter also ends lines, so with no
+ * choice made in the list it takes only a name that continues what was typed. `current` is the
+ * text accepting would replace; `moved` is a choice made with the keys, and `explicit` a list
+ * asked for by key.
+ */
+export function enterAccepts(
+	c: Completion,
+	pick: Ranked,
+	current: string,
+	how: { moved: boolean; explicit: boolean },
+): boolean {
+	if (pick.insert === current) return false;
+	if (how.moved) return true;
+	if (pick.tier > Tier.Prefix || pick.insert.toLowerCase() === current.toLowerCase()) return false;
+	return how.explicit || (!c.tentative && c.typed !== "");
 }

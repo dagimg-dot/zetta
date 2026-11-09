@@ -12,7 +12,7 @@ import {
 	splitProps,
 } from "solid-js";
 import { SqlLine } from "../../components/ui/SqlText";
-import { complete, type Ranked, rank } from "../../lib/sql-complete";
+import { complete, enterAccepts, type Ranked, rank } from "../../lib/sql-complete";
 import { escapeHtml, highlightLines } from "../../lib/sql-highlight";
 import { catalogView, loadColumns } from "../../stores/catalog";
 import { dialect } from "../../stores/dialect";
@@ -103,6 +103,8 @@ export function SqlEditor(props: SqlEditorProps) {
 	const [placement, setPlacement] = createSignal<Placement>({ left: 0, top: 0 });
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let accepting = false;
+	/** A row was chosen with the keys, which is what lets Enter take a guess. */
+	let moved = false;
 	onCleanup(() => clearTimeout(timer));
 
 	const result = createMemo(() => {
@@ -125,6 +127,7 @@ export function SqlEditor(props: SqlEditorProps) {
 	};
 	const open = (explicit: boolean) => {
 		clearTimeout(timer);
+		moved = false;
 		batch(() => {
 			setSelected(0);
 			setRequest({ explicit });
@@ -147,7 +150,10 @@ export function SqlEditor(props: SqlEditorProps) {
 	createEffect(
 		on(
 			() => result()?.typed,
-			() => setSelected(0),
+			() => {
+				moved = false;
+				setSelected(0);
+			},
 			{ defer: true },
 		),
 	);
@@ -213,9 +219,11 @@ export function SqlEditor(props: SqlEditorProps) {
 		});
 		if (accepting || e.isComposing) return;
 		if (el.selectionStart !== el.selectionEnd) return close();
+		// Paste, drop, undo and redo put text in without anyone writing it.
+		if (/^(insertFrom|history)/.test(e.inputType)) return close();
 		if (request()) return;
 		const ch = el.value[el.selectionStart - 1] ?? "";
-		if (e.inputType.startsWith("insert") && /[\p{L}\p{N}_$." \x60[ ]/u.test(ch)) soon();
+		if (e.inputType === "insertText" && /[\p{L}\p{N}_$." \x60[ ]/u.test(ch)) soon();
 	};
 
 	const onKeyDown: JSX.EventHandler<HTMLTextAreaElement, KeyboardEvent> = (e) => {
@@ -239,20 +247,22 @@ export function SqlEditor(props: SqlEditorProps) {
 			} else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 				if (n > 0) {
 					e.preventDefault();
+					moved = true;
 					return setSelected((selected() + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
 				}
 			} else if (e.key === "PageDown" || e.key === "PageUp") {
 				if (n > 0) {
 					e.preventDefault();
 					const step = e.key === "PageDown" ? page : -page;
+					moved = true;
 					return setSelected(Math.max(0, Math.min(n - 1, selected() + step)));
 				}
 			} else if (e.key === "Tab" && !e.shiftKey && !mod && pick) {
 				e.preventDefault();
 				return accept(pick);
 			} else if (e.key === "Enter" && !e.shiftKey && !e.altKey && pick) {
-				// Enter accepts only when that changes the text; otherwise it is a new line.
-				if (pick.insert !== own.value.slice(r.from, r.to)) {
+				const current = own.value.slice(r.from, r.to);
+				if (enterAccepts(r, pick, current, { moved, explicit: !!request()?.explicit })) {
 					e.preventDefault();
 					return accept(pick);
 				}

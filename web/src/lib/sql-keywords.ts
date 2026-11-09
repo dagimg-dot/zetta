@@ -96,3 +96,14 @@ export const sqliteFallback = new Set(
 	window with without
 `),
 );
+
+/** Built-in functions people type in full, which no catalog lists. Not a complete list. */
+export const commonFunctions = new Set(
+	words(`
+	abs array_agg avg ceil ceiling coalesce concat count date date_part date_trunc datetime
+	dense_rank extract first_value floor greatest group_concat if ifnull iif instr json_agg
+	jsonb_agg julianday lag last_value lead least left length lower ltrim max min mod now nullif
+	power printf random rank replace right round row_number rtrim sqrt strftime string_agg substr
+	substring sum to_char to_date to_timestamp trim typeof upper
+`),
+);
