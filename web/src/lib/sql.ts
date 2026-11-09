@@ -253,6 +253,15 @@ export function statementAt(sql: string, at: number, dialect: Adapter): [number,
 	return pick;
 }
 
+/**
+ * The span of the statement a caret at `at` is in, from just after the previous semicolon to its
+ * own, untrimmed, so a caret after the last semicolon is in the new statement being typed there.
+ */
+export function statementSpan(sql: string, at: number, dialect: Adapter): [number, number] {
+	for (const s of segments(sql, dialect)) if (at >= s.start && at <= s.end) return [s.start, s.end];
+	return [at, at];
+}
+
 const writeVerbs =
 	/^\s*(insert|update|delete|drop|alter|create|truncate|replace|grant|revoke|vacuum|reindex|attach|detach|merge|copy)\b/i;
 

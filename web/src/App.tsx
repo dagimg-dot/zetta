@@ -12,6 +12,7 @@ import { getCatalog, getMeta, onUnauthorized } from "./lib/api";
 import { loadBoot, sameDatabase, saveBoot } from "./lib/boot";
 import { createRequest } from "./lib/request";
 import { announce, announcement } from "./stores/announce";
+import { setCatalog } from "./stores/catalog";
 import { setDialect } from "./stores/dialect";
 import { cycleTheme } from "./stores/theme";
 import { setView, type Tab, view } from "./stores/view";
@@ -61,6 +62,7 @@ export function App() {
 		const adapter = shownMeta()?.adapter;
 		if (adapter) setDialect(adapter);
 	});
+	createEffect(() => setCatalog(shownCatalog()));
 
 	const approxRows = (schema: string, table: string): number | null => {
 		const s = shownCatalog()?.schemas.find((x) => x.name === schema);
