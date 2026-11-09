@@ -62,7 +62,12 @@ fn seed(f: Fixture) !void {
             \\create index parts_low on {s}.parts (qty) where qty < 10;
             \\create function {s}.parts_touch() returns trigger language plpgsql as $$ begin return null; end $$;
             \\create trigger parts_touch after update on {s}.parts for each row execute function {s}.parts_touch();
-        , .{ s, s, s, s, s, s, s })),
+            \\create function {s}.add_one(x integer) returns integer language sql immutable strict as 'select x + 1';
+            \\comment on function {s}.add_one(integer) is 'adds one';
+            \\create function {s}.add_one(x text, y text default 'a') returns text language sql as 'select x || y';
+            \\create procedure {s}.do_nothing() language sql as 'select 1';
+            \\create aggregate {s}.total(integer) (sfunc = int4pl, stype = integer);
+        , .{ s, s, s, s, s, s, s, s, s, s, s, s })),
     }
     try exec(f.adapter, try std.fmt.bufPrint(&buf,
         \\insert into {s}.parts (id, item_id, code, qty) values (1, 1, 'a%b', 5), (2, 1, 'axb', 20), (3, 2, 'c', 0);
@@ -294,6 +299,57 @@ fn run(f: Fixture) !void {
         try testing.expectEqual(types.TriggerLevel.row, t.level);
         try testing.expect(t.enabled);
         try testing.expect(contains(t.definition, "parts_touch"));
+    }
+
+    // catalog lists the database's own functions, overloads apart; SQLite can store none
+    {
+        const schema = findSchema(try a.catalog(arena, &diag), f.schema) orelse return error.SchemaMissing;
+        switch (a.info().name) {
+            .sqlite => try testing.expectEqual(0, schema.functions.len),
+            .postgres => {
+                try testing.expectEqual(5, schema.functions.len);
+                const fns = schema.functions;
+                try testing.expectEqualStrings("add_one", fns[0].name);
+                try testing.expectEqualStrings("x integer", fns[0].arguments);
+                try testing.expectEqualStrings("integer", fns[0].returns.?);
+                try testing.expectEqualStrings("add_one", fns[1].name);
+                try testing.expectEqualStrings("x text, y text", fns[1].arguments);
+                try testing.expectEqualStrings("do_nothing", fns[2].name);
+                try testing.expectEqual(types.FunctionKind.procedure, fns[2].kind);
+                try testing.expectEqual(null, fns[2].returns);
+                try testing.expectEqualStrings("trigger", fns[3].returns.?);
+                try testing.expectEqual(types.FunctionKind.aggregate, fns[4].kind);
+            },
+        }
+    }
+
+    // function reads one overload by its arguments, and a missing one is not found
+    {
+        const missing: types.FunctionRef = .{ .schema = f.schema, .name = "no_such_function", .arguments = "" };
+        try testing.expectError(error.NotFound, a.function(arena, missing, &diag));
+        if (a.info().name == .postgres) {
+            const one = try a.function(arena, .{ .schema = f.schema, .name = "add_one", .arguments = "x integer" }, &diag);
+            try testing.expectEqualStrings("sql", one.language);
+            try testing.expectEqual(types.Volatility.immutable, one.volatility);
+            try testing.expect(one.strict);
+            try testing.expect(!one.security_definer);
+            try testing.expectEqualStrings("adds one", one.comment.?);
+            try testing.expect(contains(one.definition.?, "x + 1"));
+            try testing.expect(contains(one.call.?, "add_one(/* x integer */)"));
+
+            const other = try a.function(arena, .{ .schema = f.schema, .name = "add_one", .arguments = "x text, y text" }, &diag);
+            try testing.expect(contains(other.signature, "DEFAULT"));
+            try testing.expectEqualStrings("text", other.returns.?);
+
+            const proc = try a.function(arena, .{ .schema = f.schema, .name = "do_nothing", .arguments = "" }, &diag);
+            try testing.expect(std.mem.startsWith(u8, proc.call.?, "call "));
+
+            const aggregate = try a.function(arena, .{ .schema = f.schema, .name = "total", .arguments = "integer" }, &diag);
+            try testing.expectEqual(null, aggregate.definition);
+
+            const on_trigger = try a.function(arena, .{ .schema = f.schema, .name = "parts_touch", .arguments = "" }, &diag);
+            try testing.expectEqual(null, on_trigger.call);
+        }
     }
 
     // detail DDL mentions the table, its index and its trigger

@@ -73,6 +73,7 @@ const vtable: Adapter.VTable = .{
     .catalog = catalog,
     .columns = columns,
     .detail = detail,
+    .function = function,
     .count = count,
     .browse = browse,
     .query = query,
@@ -155,6 +156,12 @@ fn columnsFrom(arena: Allocator, res: types.ResultSet) Allocator.Error![]types.C
         };
     }
     return out;
+}
+
+/// SQL cannot define a function in SQLite; the only ones are built in or registered from C.
+fn function(_: *anyopaque, _: Allocator, ref: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {
+    diag.print("no function named {s}.{s}: SQLite does not store functions", .{ ref.schema, ref.name });
+    return error.NotFound;
 }
 
 fn notFound(table: types.TableRef, diag: *Diagnostic) types.Error {

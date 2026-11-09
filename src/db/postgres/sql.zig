@@ -128,6 +128,50 @@ pub const detail_triggers =
     \\order by t.tgname
 ;
 
+/// Members of an extension are left out: a database with PostGIS would otherwise list thousands.
+pub const catalog_functions =
+    \\select n.nspname, p.proname, p.prokind::text,
+    \\       pg_get_function_identity_arguments(p.oid),
+    \\       case when p.prokind <> 'p' then pg_get_function_result(p.oid) end
+    \\from pg_proc p
+    \\join pg_namespace n on n.oid = p.pronamespace
+    \\where n.nspname <> 'information_schema' and n.nspname not like 'pg\_%'
+    \\  and not exists (select 1 from pg_depend d
+    \\                  where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
+    \\order by n.nspname, p.proname, 4
+;
+
+/// $1 is the schema, $2 the name and $3 the identity arguments, which together pick one overload.
+pub const function_detail =
+    \\with f as (
+    \\  select p.*, n.nspname,
+    \\         pg_get_function_identity_arguments(p.oid) as identity,
+    \\         format('%I.%I', n.nspname, p.proname) as quoted
+    \\  from pg_proc p
+    \\  join pg_namespace n on n.oid = p.pronamespace
+    \\  where n.nspname = $1 and p.proname = $2
+    \\), a as (
+    \\  select f.*, case when f.identity = '' then '' else '/* ' || f.identity || ' */' end as hole
+    \\  from f where f.identity = $3
+    \\)
+    \\select a.nspname, a.proname, a.prokind::text, a.identity,
+    \\       pg_get_function_arguments(a.oid),
+    \\       case when a.prokind <> 'p' then pg_get_function_result(a.oid) end,
+    \\       l.lanname, a.provolatile::text, a.proisstrict, a.prosecdef,
+    \\       pg_get_userbyid(a.proowner),
+    \\       obj_description(a.oid, 'pg_proc'),
+    \\       case when a.prokind <> 'a' then pg_get_functiondef(a.oid) end,
+    \\       case
+    \\         when a.prorettype in ('trigger'::regtype, 'event_trigger'::regtype) then null
+    \\         when a.prokind = 'p' then format('call %s(%s);', a.quoted, a.hole)
+    \\         when a.prokind = 'a' then format('select %s(%s);', a.quoted, a.hole)
+    \\         when a.prokind = 'w' then format('select %s(%s) over ();', a.quoted, a.hole)
+    \\         else format('select * from %s(%s);', a.quoted, a.hole)
+    \\       end
+    \\from a
+    \\join pg_language l on l.oid = a.prolang
+;
+
 pub const type_name_lookup = "select format_type($1::oid, null)";
 
 /// Short names for the built-in types, so most result sets need no lookup.

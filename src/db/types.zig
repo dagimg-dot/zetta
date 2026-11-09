@@ -22,9 +22,22 @@ pub const Table = struct {
     approx_rows: ?u64,
 };
 
+pub const FunctionKind = enum { function, procedure, aggregate, window };
+
+pub const Function = struct {
+    name: []const u8,
+    kind: FunctionKind,
+    /// The arguments that tell overloads apart, as text. Empty for none.
+    arguments: []const u8,
+    /// Null for a procedure.
+    returns: ?[]const u8,
+};
+
 pub const Schema = struct {
     name: []const u8,
     tables: []const Table,
+    /// What the database's users defined; never built-ins or extension members.
+    functions: []const Function = &.{},
 };
 
 pub const Catalog = struct {
@@ -191,6 +204,37 @@ pub const TableDetail = struct {
     triggers: []const Trigger,
     /// The statements that would create the object.
     ddl: []const u8,
+};
+
+pub const FunctionRef = struct {
+    schema: []const u8,
+    name: []const u8,
+    /// As `Function.arguments`.
+    arguments: []const u8,
+};
+
+pub const Volatility = enum { immutable, stable, @"volatile" };
+
+/// Everything about one function or procedure.
+pub const FunctionDetail = struct {
+    schema: []const u8,
+    name: []const u8,
+    kind: FunctionKind,
+    arguments: []const u8,
+    /// The full argument list, with modes and defaults.
+    signature: []const u8,
+    returns: ?[]const u8,
+    language: []const u8,
+    volatility: Volatility,
+    strict: bool,
+    security_definer: bool,
+    owner: []const u8,
+    comment: ?[]const u8,
+    /// The statement that would create it. Null for an aggregate, which has no single one.
+    definition: ?[]const u8,
+    /// A statement that calls it, with its arguments in a comment to fill in. Null when only
+    /// the database can call it, as with a trigger function.
+    call: ?[]const u8,
 };
 
 pub const ResultColumn = struct {

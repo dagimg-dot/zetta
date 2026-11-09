@@ -50,6 +50,7 @@ const cases = [_]Case{
     .{ .name = "a big result is truncated but counted", .sql = "select g, md5(g::text) from generate_series(1, 20000) g", .max_rows = 5000 },
     .{ .name = "an empty result keeps its columns", .sql = "select 1 as a where false" },
     .{ .name = "the catalog query", .sql = @import("postgres/sql.zig").catalog },
+    .{ .name = "the catalog functions query", .sql = @import("postgres/sql.zig").catalog_functions },
     .{ .name = "a syntax error points at its line", .sql = "select 1;\nselec 2" },
     .{ .name = "a runtime error", .sql = "select 1/0" },
     .{ .name = "a missing table", .sql = "select * from zetta_oracle.nope" },

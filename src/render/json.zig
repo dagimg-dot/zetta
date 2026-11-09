@@ -45,6 +45,17 @@ pub fn catalog(w: *Writer, cat: db.Catalog) Writer.Error!void {
             try s.endObject();
         }
         try s.endArray();
+        try s.objectField("functions");
+        try s.beginArray();
+        for (schema.functions) |f| {
+            try s.beginObject();
+            try field(&s, "name", f.name);
+            try field(&s, "kind", @tagName(f.kind));
+            try field(&s, "arguments", f.arguments);
+            try field(&s, "returns", f.returns);
+            try s.endObject();
+        }
+        try s.endArray();
         try s.endObject();
     }
     try s.endArray();
@@ -181,6 +192,26 @@ pub fn tableDetail(w: *Writer, d: db.TableDetail) Writer.Error!void {
     try s.endObject();
 }
 
+pub fn functionDetail(w: *Writer, d: db.FunctionDetail) Writer.Error!void {
+    var s: Stringify = .{ .writer = w };
+    try s.beginObject();
+    try field(&s, "schema", d.schema);
+    try field(&s, "name", d.name);
+    try field(&s, "kind", @tagName(d.kind));
+    try field(&s, "arguments", d.arguments);
+    try field(&s, "signature", d.signature);
+    try field(&s, "returns", d.returns);
+    try field(&s, "language", d.language);
+    try field(&s, "volatility", @tagName(d.volatility));
+    try field(&s, "strict", d.strict);
+    try field(&s, "securityDefiner", d.security_definer);
+    try field(&s, "owner", d.owner);
+    try field(&s, "comment", d.comment);
+    try field(&s, "definition", d.definition);
+    try field(&s, "call", d.call);
+    try s.endObject();
+}
+
 /// `elapsed_ns` is left out when null (the CLI does not time queries).
 pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ns: ?u64) Writer.Error!void {
     var s: Stringify = .{ .writer = w };
@@ -244,6 +275,41 @@ fn field(s: *Stringify, name: []const u8, value: anytype) Writer.Error!void {
 }
 
 const testing = std.testing;
+
+test "a catalog lists each schema's functions beside its tables" {
+    var buf: [256]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    const functions = [_]db.Function{.{ .name = "f", .kind = .procedure, .arguments = "x integer", .returns = null }};
+    const schemas = [_]db.Schema{.{ .name = "public", .tables = &.{}, .functions = &functions }};
+    try catalog(&w, .{ .schemas = &schemas });
+    try testing.expectEqualStrings(
+        \\{"schemas":[{"name":"public","tables":[],"functions":[{"name":"f","kind":"procedure","arguments":"x integer","returns":null}]}]}
+    , w.buffered());
+}
+
+test "a function's detail matches the API shape" {
+    var buf: [512]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    try functionDetail(&w, .{
+        .schema = "public",
+        .name = "f",
+        .kind = .function,
+        .arguments = "x integer",
+        .signature = "x integer DEFAULT 1",
+        .returns = "integer",
+        .language = "sql",
+        .volatility = .@"volatile",
+        .strict = false,
+        .security_definer = true,
+        .owner = "me",
+        .comment = null,
+        .definition = "CREATE FUNCTION f ...",
+        .call = "select * from public.f(/* x integer */);",
+    });
+    try testing.expectEqualStrings(
+        \\{"schema":"public","name":"f","kind":"function","arguments":"x integer","signature":"x integer DEFAULT 1","returns":"integer","language":"sql","volatility":"volatile","strict":false,"securityDefiner":true,"owner":"me","comment":null,"definition":"CREATE FUNCTION f ...","call":"select * from public.f(/* x integer */);"}
+    , w.buffered());
+}
 
 test "a result set matches the API shape" {
     var buf: [512]u8 = undefined;

@@ -24,7 +24,7 @@ pub const Context = struct {
     version: []const u8,
 };
 
-const Route = enum { index, meta, catalog, columns, table, count, compile, browse, query, not_found };
+const Route = enum { index, meta, catalog, columns, table, function, count, compile, browse, query, not_found };
 
 fn route(method: std.http.Method, path: []const u8) Route {
     const eql = std.mem.eql;
@@ -33,6 +33,7 @@ fn route(method: std.http.Method, path: []const u8) Route {
     if (method == .GET and eql(u8, path, "/api/catalog")) return .catalog;
     if (method == .GET and eql(u8, path, "/api/columns")) return .columns;
     if (method == .GET and eql(u8, path, "/api/table")) return .table;
+    if (method == .GET and eql(u8, path, "/api/function")) return .function;
     if (method == .GET and eql(u8, path, "/api/count")) return .count;
     if (method == .GET and eql(u8, path, "/api/compile")) return .compile;
     if (method == .GET and eql(u8, path, "/api/browse")) return .browse;
@@ -59,6 +60,7 @@ pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.St
         .catalog => catalog(ctx, arena, req),
         .columns => columns(ctx, arena, req, target.query),
         .table => tableDetail(ctx, arena, req, target.query),
+        .function => functionDetail(ctx, arena, req, target.query),
         .count => count(ctx, arena, req, target.query),
         .compile => compile(ctx, arena, req, target.query),
         .browse => browse(ctx, arena, req, target.query),
@@ -148,6 +150,19 @@ fn tableDetail(ctx: *const Context, arena: Allocator, req: *Request, query_strin
     const d = ctx.adapter.detail(arena, ref, &diag) catch |err| return dbFail(req, err, &diag);
     var out: std.Io.Writer.Allocating = .init(arena);
     try render.json.tableDetail(&out.writer, d);
+    try http.respondJson(req, .ok, out.written());
+    return .ok;
+}
+
+fn functionDetail(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !std.http.Status {
+    const schema = try http.queryParam(arena, q, "schema") orelse "";
+    const name = try http.queryParam(arena, q, "name") orelse "";
+    if (schema.len == 0 or name.len == 0) return fail(req, .bad_request, "bad_request", "schema and name are required");
+    const arguments = try http.queryParam(arena, q, "args") orelse "";
+    var diag: db.Diagnostic = .{};
+    const d = ctx.adapter.function(arena, .{ .schema = schema, .name = name, .arguments = arguments }, &diag) catch |err| return dbFail(req, err, &diag);
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try render.json.functionDetail(&out.writer, d);
     try http.respondJson(req, .ok, out.written());
     return .ok;
 }
@@ -295,6 +310,7 @@ test "routes" {
     try std.testing.expectEqual(Route.index, route(.GET, "/"));
     try std.testing.expectEqual(Route.query, route(.POST, "/api/query"));
     try std.testing.expectEqual(Route.table, route(.GET, "/api/table"));
+    try std.testing.expectEqual(Route.function, route(.GET, "/api/function"));
     try std.testing.expectEqual(Route.count, route(.GET, "/api/count"));
     try std.testing.expectEqual(Route.compile, route(.GET, "/api/compile"));
     try std.testing.expectEqual(Route.not_found, route(.GET, "/api/query"));

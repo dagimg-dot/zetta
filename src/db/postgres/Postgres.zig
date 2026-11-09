@@ -87,6 +87,7 @@ const vtable: Adapter.VTable = .{
     .catalog = catalog,
     .columns = columns,
     .detail = detail,
+    .function = function,
     .count = count,
     .browse = browse,
     .query = query,
@@ -226,7 +227,21 @@ fn catalog(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error!typ
         });
     }
     if (current) |name| try schemas.append(arena, .{ .name = name, .tables = try tables.toOwnedSlice(arena) });
-    return .{ .schemas = try schemas.toOwnedSlice(arena) };
+    const out = try schemas.toOwnedSlice(arena);
+
+    // Both queries sort by schema name, so each schema's functions are the next run of rows.
+    const fn_rows = (try self.run(arena, sql.catalog_functions, null, std.math.maxInt(usize), diag)).rows;
+    var next: usize = 0;
+    for (out) |*schema| {
+        const first = next;
+        while (next < fn_rows.len and std.mem.eql(u8, fn_rows[next][0].?, schema.name)) next += 1;
+        const functions = try arena.alloc(types.Function, next - first);
+        for (functions, fn_rows[first..next]) |*f, row| {
+            f.* = .{ .name = row[1].?, .kind = functionKind(row[2].?), .arguments = row[3].?, .returns = row[4] };
+        }
+        schema.functions = functions;
+    }
+    return .{ .schemas = out };
 }
 
 fn tableKind(relkind: []const u8) types.TableKind {
@@ -235,6 +250,46 @@ fn tableKind(relkind: []const u8) types.TableKind {
         'm' => .materialized_view,
         'f' => .foreign_table,
         else => .table,
+    };
+}
+
+fn functionKind(prokind: []const u8) types.FunctionKind {
+    return switch (prokind[0]) {
+        'p' => .procedure,
+        'a' => .aggregate,
+        'w' => .window,
+        else => .function,
+    };
+}
+
+fn function(ptr: *anyopaque, arena: Allocator, ref: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {
+    const self = from(ptr);
+    const params: []const Conn.Param = &.{ ref.schema, ref.name, ref.arguments };
+    const res = try self.run(arena, sql.function_detail, params, 1, diag);
+    if (res.rows.len == 0) {
+        diag.print("no function named {s}.{s}({s})", .{ ref.schema, ref.name, ref.arguments });
+        return error.NotFound;
+    }
+    const row = res.rows[0];
+    return .{
+        .schema = row[0].?,
+        .name = row[1].?,
+        .kind = functionKind(row[2].?),
+        .arguments = row[3].?,
+        .signature = row[4].?,
+        .returns = row[5],
+        .language = row[6].?,
+        .volatility = switch (row[7].?[0]) {
+            'i' => .immutable,
+            's' => .stable,
+            else => .@"volatile",
+        },
+        .strict = isTrue(row[8]),
+        .security_definer = isTrue(row[9]),
+        .owner = row[10].?,
+        .comment = row[11],
+        .definition = row[12],
+        .call = row[13],
     };
 }
 

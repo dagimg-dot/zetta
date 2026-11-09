@@ -45,6 +45,7 @@ const vtable: Adapter.VTable = .{
     .catalog = catalog,
     .columns = columns,
     .detail = detail,
+    .function = function,
     .count = count,
     .browse = browse,
     .query = query,
@@ -139,6 +140,11 @@ fn columns(ptr: *anyopaque, arena: Allocator, table: types.TableRef, diag: *Diag
 
 fn detail(_: *anyopaque, _: Allocator, _: types.TableRef, diag: *Diagnostic) types.Error!types.TableDetail {
     diag.set("table detail is not implemented in the libpq oracle");
+    return error.NotFound;
+}
+
+fn function(_: *anyopaque, _: Allocator, _: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {
+    diag.set("function detail is not implemented in the libpq oracle");
     return error.NotFound;
 }
 

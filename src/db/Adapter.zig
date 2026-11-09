@@ -31,6 +31,7 @@ pub const VTable = struct {
     catalog: *const fn (*anyopaque, Allocator, *Diagnostic) types.Error!types.Catalog,
     columns: *const fn (*anyopaque, Allocator, types.TableRef, *Diagnostic) types.Error![]const types.Column,
     detail: *const fn (*anyopaque, Allocator, types.TableRef, *Diagnostic) types.Error!types.TableDetail,
+    function: *const fn (*anyopaque, Allocator, types.FunctionRef, *Diagnostic) types.Error!types.FunctionDetail,
     count: *const fn (*anyopaque, Allocator, types.CountRequest, *Diagnostic) types.Error!u64,
     browse: *const fn (*anyopaque, Allocator, types.BrowseRequest, *Diagnostic) types.Error!types.ResultSet,
     query: *const fn (*anyopaque, Allocator, []const u8, types.QueryOptions, *Diagnostic) types.Error!types.ResultSet,
@@ -52,6 +53,11 @@ pub fn columns(a: Adapter, arena: Allocator, table: types.TableRef, diag: *Diagn
 /// NotFound when no table or view has that name.
 pub fn detail(a: Adapter, arena: Allocator, table: types.TableRef, diag: *Diagnostic) types.Error!types.TableDetail {
     return a.vtable.detail(a.ptr, arena, table, diag);
+}
+
+/// NotFound when no function has that name and those arguments.
+pub fn function(a: Adapter, arena: Allocator, ref: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {
+    return a.vtable.function(a.ptr, arena, ref, diag);
 }
 
 /// The exact number of rows that pass the filter. NotFound for a missing table or view,
