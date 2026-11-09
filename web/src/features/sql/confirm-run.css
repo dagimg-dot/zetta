@@ -1,0 +1,90 @@
+.confirm-run {
+	margin: auto;
+	padding: var(--space-4);
+	width: min(520px, calc(100vw - 32px));
+	max-height: calc(100dvh - 32px);
+	overflow: hidden;
+	flex-direction: column;
+	gap: var(--space-3);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: var(--surface);
+	color: var(--text);
+	box-shadow: var(--shadow-overlay);
+}
+
+.confirm-run[open] {
+	display: flex;
+}
+
+.confirm-run::backdrop {
+	background: var(--surface-scrim);
+}
+
+.confirm-run h2 {
+	margin: 0;
+	font-size: var(--text-md);
+	font-weight: var(--weight-semibold);
+}
+
+.confirm-run .where {
+	margin: calc(-1 * var(--space-2)) 0 0;
+	color: var(--text-secondary);
+}
+
+.confirm-run ul {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin: 0;
+	padding: 0;
+	max-height: 30dvh;
+	overflow-y: auto;
+	list-style: none;
+}
+
+.confirm-run li {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--space-3);
+	overflow-wrap: anywhere;
+}
+
+.confirm-run .target {
+	font-weight: var(--weight-semibold);
+}
+
+.confirm-run .count {
+	flex: none;
+	color: var(--text-secondary);
+	font-variant-numeric: tabular-nums;
+}
+
+.confirm-run pre {
+	flex: 0 1 auto;
+	min-height: 0;
+	max-height: 24dvh;
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	overflow: auto;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	background: var(--surface-raised);
+	font-size: var(--text-sm);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.confirm-run footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--space-2);
+}
+
+@media (max-width: 560px) {
+	.confirm-run li {
+		flex-direction: column;
+		gap: 0;
+	}
+}

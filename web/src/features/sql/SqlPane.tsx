@@ -15,6 +15,8 @@ import { isMac } from "../../lib/keys";
 import { createRequest } from "../../lib/request";
 import {
 	changesSchema,
+	type Destructive,
+	destructive,
 	errorRange,
 	isWrite,
 	statementAt,
@@ -24,6 +26,7 @@ import {
 import { announce } from "../../stores/announce";
 import { dialect } from "../../stores/dialect";
 import { clearSqlDraft, sqlDraft } from "../../stores/sql-draft";
+import { ConfirmRun } from "./ConfirmRun";
 import { SqlEditor } from "./SqlEditor";
 import "./sql.css";
 
@@ -139,9 +142,21 @@ export function SqlPane(props: {
 		return n > 1 ? n : 0;
 	});
 
+	/** A run held back until someone confirms what it would destroy. */
+	const [confirming, setConfirming] = createSignal<{
+		picked: { text: string; at: number };
+		actions: Destructive[];
+	} | null>(null);
+
+	const send = (picked: { text: string; at: number }) => {
+		setRan(picked);
+		announce("Running");
+		query.run({ text: picked.text, exact: false });
+	};
+
 	/**
-	 * Runs the selection, or the statement at the caret, or with `all` the whole editor. A run while
-	 * another is waiting replaces it.
+	 * Runs the selection, or the statement at the caret, or with `all` the whole editor, asking first
+	 * if that would destroy data. A run while another is waiting replaces it.
 	 */
 	const run = (all = false) => {
 		if (!editor) return;
@@ -153,9 +168,10 @@ export function SqlPane(props: {
 			dialect(),
 		);
 		if (!picked) return;
-		setRan(picked);
-		announce("Running");
-		query.run({ text: picked.text, exact: false });
+		// A read-only connection refuses these itself.
+		const actions = props.readOnly ? [] : destructive(picked.text, dialect());
+		if (actions.length) setConfirming({ picked, actions });
+		else send(picked);
 	};
 
 	/** The shown result stopped counting at the limit. A write is never run twice to count it. */
@@ -360,6 +376,19 @@ export function SqlPane(props: {
 							stale={!!query.error()}
 						/>
 					</div>
+				)}
+			</Show>
+			<Show when={confirming()}>
+				{(c) => (
+					<ConfirmRun
+						database={props.database}
+						actions={c().actions}
+						onClose={(confirmed) => {
+							const { picked } = c();
+							setConfirming(null);
+							if (confirmed) send(picked);
+						}}
+					/>
 				)}
 			</Show>
 			<div class="status">

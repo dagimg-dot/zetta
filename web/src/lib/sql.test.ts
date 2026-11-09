@@ -3,6 +3,7 @@ import type { Adapter } from "./api";
 import {
 	changesSchema,
 	closest,
+	destructive,
 	errorRange,
 	isWrite,
 	statementAt,
@@ -181,5 +182,113 @@ describe("splitting follows each database's rules", () => {
 			"select 2",
 		]);
 		expect(texts("select $a; select 2", "sqlite")).toEqual(["select $a", "select 2"]);
+	});
+});
+
+describe("statements that can destroy data", () => {
+	const brief = (sql: string, dialect: Adapter = "postgres") =>
+		destructive(sql, dialect).map((d) => `${d.what} ${d.target}`);
+
+	test("DELETE and UPDATE without WHERE, but not with one", () => {
+		expect(brief("delete from orders")).toEqual(["Deletes every row of orders"]);
+		expect(brief("update orders set paid = true")).toEqual(["Changes every row of orders"]);
+		expect(brief("delete from orders where id = 1")).toEqual([]);
+		expect(brief("update orders set paid = true where id = 1")).toEqual([]);
+	});
+
+	test("a WHERE inside a subquery does not limit the statement", () => {
+		expect(brief("update a set b = (select c from d where e = 1)")).toEqual([
+			"Changes every row of a",
+		]);
+		expect(brief("delete from a returning (select 1 from b where c)")).toEqual([
+			"Deletes every row of a",
+		]);
+	});
+
+	test("keywords inside strings and comments are only text", () => {
+		expect(brief("select 'delete from orders'")).toEqual([]);
+		expect(brief("-- delete from orders\nselect 1")).toEqual([]);
+		expect(brief("/* drop table a */ select 1")).toEqual([]);
+		expect(brief("delete from orders -- where id = 1")).toEqual(["Deletes every row of orders"]);
+	});
+
+	test("the table is read as the database would read it", () => {
+		const table = (sql: string, dialect: Adapter = "postgres") =>
+			destructive(sql, dialect)[0]?.table;
+		expect(table("delete from Orders")).toEqual({ name: "orders" });
+		expect(table("delete from Orders", "sqlite")).toEqual({ name: "Orders" });
+		expect(table('delete from "Sales"."Orders"')).toEqual({ schema: "Sales", name: "Orders" });
+		expect(table("update only audit.events set a = 1")).toEqual({
+			schema: "audit",
+			name: "events",
+		});
+		expect(table("update or replace t set a = 1", "sqlite")).toEqual({ name: "t" });
+	});
+
+	test("TRUNCATE names each table and says when it cascades", () => {
+		expect(brief("truncate a")).toEqual(["Empties a"]);
+		expect(brief("truncate table only a, s.b restart identity")).toEqual([
+			"Empties a",
+			"Empties s.b",
+		]);
+		expect(destructive("truncate a cascade", "postgres")[0]?.cascade).toBe(true);
+		expect(destructive("truncate a", "postgres")[0]?.cascade).toBe(false);
+	});
+
+	test("DROP TABLE names each table with a count to take, and other DROPs say what they are", () => {
+		expect(brief("drop table if exists a, b")).toEqual(["Drops table a", "Drops table b"]);
+		expect(destructive("drop table a", "postgres")[0]?.table).toEqual({ name: "a" });
+		expect(brief("drop view v")).toEqual(["Drops view v"]);
+		expect(brief("drop materialized view if exists m")).toEqual(["Drops materialized view m"]);
+		expect(brief("drop schema s cascade")).toEqual(["Drops schema s"]);
+		expect(destructive("drop schema s cascade", "postgres")[0]).toMatchObject({
+			cascade: true,
+			table: undefined,
+		});
+	});
+
+	test("dropping a column counts, dropping a constraint does not", () => {
+		expect(brief("alter table t drop column c")).toEqual(["Drops column c of t"]);
+		expect(brief("alter table t drop column if exists c, drop column d")).toEqual([
+			"Drops column c of t",
+			"Drops column d of t",
+		]);
+		expect(brief("alter table t drop constraint k")).toEqual([]);
+		expect(brief("alter table t alter c drop default")).toEqual([]);
+	});
+
+	test("a write inside or after a WITH is found", () => {
+		expect(brief("with d as (delete from t) select * from d")).toEqual(["Deletes every row of t"]);
+		expect(brief("with x as (select 1) update t set a = 1")).toEqual(["Changes every row of t"]);
+		expect(brief("with d as (delete from t where a) select 1")).toEqual([]);
+	});
+
+	test("EXPLAIN only plans, unless ANALYZE really runs it", () => {
+		expect(brief("explain delete from t")).toEqual([]);
+		expect(brief("explain delete from t", "sqlite")).toEqual([]);
+		expect(brief("explain (analyze false) delete from t")).toEqual([]);
+		expect(brief("explain analyze delete from t")).toEqual(["Deletes every row of t"]);
+		expect(brief("explain (verbose, analyze) delete from t")).toEqual(["Deletes every row of t"]);
+	});
+
+	test("words that only look like a write are left alone", () => {
+		for (const sql of [
+			"select * from t for update",
+			"insert into t values (1) on conflict (id) do update set a = 1",
+			"create table t (a int references b (id) on delete cascade on update cascade)",
+			"create trigger g after delete on t begin select 1; end",
+			"grant delete, update on t to u",
+			"select 1",
+		])
+			expect(brief(sql)).toEqual([]);
+	});
+
+	test("every statement of a script is checked, each with its own text", () => {
+		const found = destructive(
+			"select 1; delete from a; delete from b where c; drop table d",
+			"postgres",
+		);
+		expect(found.map((d) => d.target)).toEqual(["a", "d"]);
+		expect(found.map((d) => d.statement)).toEqual(["delete from a", "drop table d"]);
 	});
 });

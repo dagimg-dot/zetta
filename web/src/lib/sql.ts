@@ -262,6 +262,172 @@ export function statementSpan(sql: string, at: number, dialect: Adapter): [numbe
 	return [at, at];
 }
 
+/** A quoted or bare name token as the name it means. */
+export function unquote(text: string): string {
+	const q = text[0];
+	if (q === '"' || q === "`")
+		return text.slice(1, text.at(-1) === q ? -1 : undefined).replaceAll(q + q, q);
+	if (q === "[") return text.slice(1, text.at(-1) === "]" ? -1 : undefined);
+	return text;
+}
+
+/** One thing a statement would destroy. */
+export interface Destructive {
+	/** The statement it comes from, as written. */
+	statement: string;
+	/** What happens, reading on into `target`: "Deletes every row of". */
+	what: string;
+	/** What it happens to, as written. */
+	target: string;
+	/** The table whose rows are at stake, resolved as the database would. */
+	table: { schema?: string; name: string } | undefined;
+	/** It reaches past `target` to whatever depends on it. */
+	cascade: boolean;
+}
+
+/** Where the statement proper starts, past any EXPLAIN that really runs it, or -1 if it only plans. */
+function runsFrom(word: (i: number) => string, count: number, dialect: Adapter): number {
+	if (word(0) !== "explain") return 0;
+	if (dialect !== "postgres") return -1;
+	const isAnalyze = (w: string) => w === "analyze" || w === "analyse";
+	let analyze = false;
+	let i = 1;
+	if (word(1) === "(") {
+		for (i = 2; i < count && word(i) !== ")"; i++)
+			if (isAnalyze(word(i))) analyze = !["false", "off"].includes(word(i + 1));
+		i++;
+	} else {
+		for (; isAnalyze(word(i)) || word(i) === "verbose"; i++) analyze ||= isAnalyze(word(i));
+	}
+	return analyze ? i : -1;
+}
+
+function destroyedBy(
+	sql: string,
+	sig: readonly Token[],
+	statement: string,
+	dialect: Adapter,
+): Destructive[] {
+	const text = (i: number) => {
+		const t = sig[i];
+		return t ? sql.slice(t.start, t.end) : "";
+	};
+	/** A keyword in lower case, or punctuation. Empty for a quoted name or a literal, which are only data. */
+	const word = (i: number) => {
+		const kind = sig[i]?.kind;
+		return kind === "word" ? text(i).toLowerCase() : kind === "punct" ? text(i) : "";
+	};
+	const spanning = (a: number, b: number) =>
+		a < b ? sql.slice(sig[a]?.start ?? 0, sig[b - 1]?.end ?? 0) : "";
+	const nameAt = (i: number) => {
+		if (sig[i]?.kind === "name") return unquote(text(i));
+		return dialect === "postgres" ? text(i).toLowerCase() : text(i);
+	};
+	/** A possibly qualified table name at `at`, and where it ends. */
+	const relation = (at: number) => {
+		const kind = sig[at]?.kind;
+		if (kind !== "name" && kind !== "word") return null;
+		let last = at;
+		while (word(last + 1) === ".") last += 2;
+		const name = nameAt(last);
+		const table = last > at ? { schema: nameAt(last - 2), name } : { name };
+		return { target: spanning(at, last + 1), table, next: last + 1 };
+	};
+	const cascade = sig.some((_, i) => word(i) === "cascade");
+	const out: Destructive[] = [];
+	const add = (what: string, target: string, table: Destructive["table"]) =>
+		out.push({ statement, what, target, table, cascade });
+	/** Each table of a comma-separated list, as TRUNCATE and DROP TABLE take. */
+	const eachTable = (from: number, what: string) => {
+		let i = from;
+		for (;;) {
+			if (word(i) === "only") i++;
+			const r = relation(i);
+			if (!r) return;
+			add(what, r.target, r.table);
+			i = r.next;
+			if (text(i) === "*") i++;
+			if (word(i) !== ",") return;
+			i++;
+		}
+	};
+	const pastIfExists = (i: number) => (word(i) === "if" && word(i + 1) === "exists" ? i + 2 : i);
+
+	const head = runsFrom(word, sig.length, dialect);
+	if (head < 0) return out;
+
+	if (word(head) === "truncate") {
+		eachTable(word(head + 1) === "table" ? head + 2 : head + 1, "Empties");
+		return out;
+	}
+	if (word(head) === "drop") {
+		if (word(head + 1) === "table") {
+			eachTable(pastIfExists(head + 2), "Drops table");
+			return out;
+		}
+		let end = sig.length;
+		while (end > head + 1 && ["cascade", "restrict"].includes(word(end - 1))) end--;
+		const ifAt = sig.findIndex((_, i) => i > head && word(i) === "if" && word(i + 1) === "exists");
+		add(
+			"Drops",
+			ifAt < 0 ? spanning(head + 1, end) : `${spanning(head + 1, ifAt)} ${spanning(ifAt + 2, end)}`,
+			undefined,
+		);
+		return out;
+	}
+	if (word(head) === "alter" && word(head + 1) === "table") {
+		let i = pastIfExists(head + 2);
+		if (word(i) === "only") i++;
+		const r = relation(i);
+		if (!r) return out;
+		for (i = r.next; i < sig.length; i++) {
+			if (word(i) !== "drop" || word(i + 1) !== "column") continue;
+			add(`Drops column ${text(pastIfExists(i + 2))} of`, r.target, undefined);
+		}
+		return out;
+	}
+
+	/** Whether the statement that begins at `from` has its own WHERE, not a subquery's. */
+	const hasWhere = (from: number) => {
+		let depth = 0;
+		for (let i = from; i < sig.length; i++) {
+			const w = word(i);
+			if (w === "(") depth++;
+			else if (w === ")") {
+				if (depth === 0) return false;
+				depth--;
+			} else if (w === "where" && depth === 0) return true;
+		}
+		return false;
+	};
+	// UPDATE and DELETE begin a statement, a WITH's subquery or the query after one. Elsewhere, as in
+	// FOR UPDATE, ON DELETE or GRANT DELETE, they are only words.
+	for (let i = head; i < sig.length; i++) {
+		const w = word(i);
+		if (w !== "update" && w !== "delete") continue;
+		if (i !== head && word(i - 1) !== "(" && word(i - 1) !== ")") continue;
+		let at = i + 1;
+		if (w === "delete") {
+			if (word(at) !== "from") continue;
+			at++;
+		} else if (word(at) === "or") at += 2;
+		if (word(at) === "only") at++;
+		const r = relation(at);
+		if (!r || hasWhere(i + 1)) continue;
+		add(w === "delete" ? "Deletes every row of" : "Changes every row of", r.target, r.table);
+	}
+	return out;
+}
+
+/** What each statement of `sql` would destroy: writes with no WHERE, TRUNCATE, and DROP. */
+export function destructive(sql: string, dialect: Adapter): Destructive[] {
+	const tokens = lex(sql, dialect).filter((t) => t.kind !== "space" && t.kind !== "comment");
+	return statementRanges(sql, dialect).flatMap(([start, end]) => {
+		const sig = tokens.filter((t) => t.start >= start && t.end <= end);
+		return destroyedBy(sql, sig, sql.slice(start, end), dialect);
+	});
+}
+
 const writeVerbs =
 	/^\s*(insert|update|delete|drop|alter|create|truncate|replace|grant|revoke|vacuum|reindex|attach|detach|merge|copy)\b/i;
 

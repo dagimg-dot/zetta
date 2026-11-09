@@ -1,6 +1,6 @@
 import type { Adapter, Column, FunctionInfo, SchemaInfo, TableKind } from "./api";
 import { match, Tier } from "./match";
-import { statementSpan } from "./sql";
+import { statementSpan, unquote } from "./sql";
 import {
 	postgresColumnName,
 	postgresReserved,
@@ -62,15 +62,6 @@ export function quoteName(name: string, dialect: Adapter): string {
 				!postgresTypeFunctionName.has(lower)
 			: /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !sqliteReserved.has(lower);
 	return bare ? name : `"${name.replaceAll('"', '""')}"`;
-}
-
-/** A quoted or bare name token as the name it means. */
-function unquote(text: string): string {
-	const q = text[0];
-	if (q === '"' || q === "`")
-		return text.slice(1, text.at(-1) === q ? -1 : undefined).replaceAll(q + q, q);
-	if (q === "[") return text.slice(1, text.at(-1) === "]" ? -1 : undefined);
-	return text;
 }
 
 function isKeyword(word: string, dialect: Adapter): boolean {
