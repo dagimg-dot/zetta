@@ -27,6 +27,7 @@ pub fn write(comptime Root: type, version: []const u8, w: *Writer) Writer.Error!
 }
 
 fn options(comptime T: type, comptime opts: []const Option, indent: []const u8, w: *Writer) Writer.Error!void {
+    @setEvalBranchQuota(10_000); // Grows with every flag a command declares.
     inline for (opts) |o| {
         try w.writeAll(indent);
         if (o.positional) {

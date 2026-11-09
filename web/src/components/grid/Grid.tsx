@@ -765,6 +765,14 @@ export function Grid(props: {
 		].join("");
 	};
 
+	// A constructed sheet, since the page's security policy allows only the <style> elements it shipped with.
+	const collapse = new CSSStyleSheet();
+	document.adoptedStyleSheets = [...document.adoptedStyleSheets, collapse];
+	createEffect(() => collapse.replaceSync(collapseCss()));
+	onCleanup(() => {
+		document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== collapse);
+	});
+
 	onCleanup(() => cells.clear());
 
 	return (
@@ -791,7 +799,6 @@ export function Grid(props: {
 						</div>
 					}
 				>
-					<style>{collapseCss()}</style>
 					<table
 						ref={table}
 						class="mono"

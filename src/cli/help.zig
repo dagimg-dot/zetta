@@ -153,6 +153,7 @@ fn suffix(comptime T: type, comptime o: Option) []const u8 {
 }
 
 fn renderOptions(comptime T: type, comptime opts: []const Option, long: bool, w: *Writer, style: Style) Writer.Error!void {
+    @setEvalBranchQuota(10_000); // Grows with every flag a command declares.
     const width = comptime blk: {
         var max: usize = 0;
         for (opts) |o| max = @max(max, label(T, o).len);

@@ -9,6 +9,8 @@ pub const Args = struct {
     host: []const u8 = "127.0.0.1",
     port: ?u16 = null,
     token: ?[]const u8 = null,
+    allow_plain_http: bool = false,
+    allowed_hosts: ?[]const u8 = null,
     read_only: bool = false,
     statement_timeout: u32 = 30_000,
     open: ?bool = null,
@@ -25,7 +27,7 @@ pub const Args = struct {
         .{ .field = "host", .short = 'H', .value_name = "ADDR", .env = &.{"ZETTA_HOST"}, .help =
         \\Address to listen on
         \\
-        \\Anything other than a loopback address needs --token.
+        \\Anything other than a loopback address needs --token and --allow-plain-http.
         },
         .{ .field = "port", .short = 'p', .env = &.{"ZETTA_PORT"}, .help =
         \\Port to listen on
@@ -37,6 +39,19 @@ pub const Args = struct {
         \\Access token instead of a random one
         \\
         \\Useful in containers, where the URL is not visible.
+        },
+        .{ .field = "allow_plain_http", .env = &.{"ZETTA_ALLOW_PLAIN_HTTP"}, .help =
+        \\Accept serving unencrypted on a non-loopback address
+        \\
+        \\zetta speaks only HTTP, so on a network the token, the session cookie and every row
+        \\can be read in transit. Prefer an SSH tunnel to 127.0.0.1, or a TLS proxy in front.
+        },
+        .{ .field = "allowed_hosts", .value_name = "NAMES", .env = &.{"ZETTA_ALLOWED_HOSTS"}, .help =
+        \\Host names to answer to, separated by commas
+        \\
+        \\IP addresses and localhost always work. Any other name is refused, which stops a
+        \\web page from reaching zetta by repointing its own domain at this machine. List the
+        \\name you use if zetta sits behind a proxy or has a DNS name of its own.
         },
         common.read_only,
         .{ .field = "statement_timeout", .value_name = "MS", .env = &.{"ZETTA_STATEMENT_TIMEOUT"}, .help =
@@ -55,8 +70,10 @@ pub const Args = struct {
 };
 
 pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
-    if (!server.auth.isLoopback(args.host) and args.token == null) {
-        return ctx.usageError("--host {s} is reachable from other machines; set --token (or ZETTA_TOKEN) as well", .{args.host});
+    switch (exposure(args)) {
+        .fine, .plain_http_accepted => {},
+        .needs_token => return ctx.usageError("--host {s} is reachable from other machines; set --token (or ZETTA_TOKEN) as well", .{args.host}),
+        .needs_plain_http_consent => return ctx.usageError("--host {s} would send the token and every row unencrypted, since zetta speaks only HTTP; use an SSH tunnel to 127.0.0.1, or set --allow-plain-http (or ZETTA_ALLOW_PLAIN_HTTP) to accept that", .{args.host}),
     }
 
     const adapter = switch (ctx.openDatabase(args.dsn.?, .{ .read_only = args.read_only })) {
@@ -74,6 +91,7 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
         .port = wanted,
         .next_ports = if (args.port == null) next_ports else 0,
         .token = token,
+        .allowed_hosts = args.allowed_hosts orelse "",
         .statement_timeout_ms = if (args.statement_timeout == 0) null else args.statement_timeout,
         .name = "zetta",
         .version = ctx.version,
@@ -93,6 +111,7 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
     const info = adapter.info();
     const url = try std.fmt.allocPrint(ctx.arena, "http://{s}:{d}/?token={s}", .{ try urlHost(ctx.arena, args.host), port, token });
     try ctx.stderr.print("zetta {s}: {t} database {s}{s}\n", .{ ctx.version, info.name, info.database, if (info.read_only) ", read-only" else "" });
+    if (exposure(args) == .plain_http_accepted) try ctx.stderr.print("warning: serving plain HTTP on {s}: the token and every row cross the network unencrypted\n", .{args.host});
     if (port != wanted and wanted != 0) try ctx.stderr.print("port {d} is in use, so zetta took {d}\n", .{ wanted, port });
     if (isWildcard(args.host)) {
         for (try server.net.lanAddresses(ctx.arena)) |a| {
@@ -115,6 +134,15 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
 /// The port zetta takes when none is given, and how many above it to try when it is taken.
 const default_port = 1993;
 const next_ports = 20;
+
+const Exposure = enum { fine, needs_token, needs_plain_http_consent, plain_http_accepted };
+
+/// Whether `args` may listen where they ask to, and what they gave up to do so.
+fn exposure(args: Args) Exposure {
+    if (server.auth.isLoopback(args.host)) return .fine;
+    if (args.token == null) return .needs_token;
+    return if (args.allow_plain_http) .plain_http_accepted else .needs_plain_http_consent;
+}
 
 fn isWildcard(host: []const u8) bool {
     return std.mem.eql(u8, host, "0.0.0.0") or std.mem.eql(u8, host, "::");
@@ -145,6 +173,18 @@ fn urlHost(arena: std.mem.Allocator, host: []const u8) ![]const u8 {
     if (isWildcard(host)) return "localhost";
     if (std.mem.indexOfScalar(u8, host, ':') != null) return std.fmt.allocPrint(arena, "[{s}]", .{host});
     return host;
+}
+
+test "loopback needs neither a token nor consent to plain HTTP" {
+    try std.testing.expectEqual(.fine, exposure(.{}));
+    try std.testing.expectEqual(.fine, exposure(.{ .host = "::1" }));
+}
+
+test "a network address needs a token first, then consent to plain HTTP" {
+    try std.testing.expectEqual(.needs_token, exposure(.{ .host = "0.0.0.0" }));
+    try std.testing.expectEqual(.needs_token, exposure(.{ .host = "0.0.0.0", .allow_plain_http = true }));
+    try std.testing.expectEqual(.needs_plain_http_consent, exposure(.{ .host = "192.168.1.4", .token = "t" }));
+    try std.testing.expectEqual(.plain_http_accepted, exposure(.{ .host = "192.168.1.4", .token = "t", .allow_plain_http = true }));
 }
 
 test "wildcard binds print as localhost and IPv6 gets brackets" {

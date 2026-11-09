@@ -8,6 +8,7 @@ pub const net = @import("net.zig");
 test {
     _ = @import("http.zig");
     _ = @import("auth.zig");
+    _ = @import("guard.zig");
     _ = @import("handlers.zig");
     _ = @import("net.zig");
     _ = @import("q.zig");

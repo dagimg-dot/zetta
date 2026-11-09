@@ -8,15 +8,20 @@ const db = @import("db");
 const render = @import("render");
 const http = @import("http.zig");
 const auth = @import("auth.zig");
+const guard = @import("guard.zig");
 const qparam = @import("q.zig");
 
 /// The UI page, gzipped at build time. Every browser accepts gzip, so it is never inflated here.
 const ui_index_gz = @embedFile("ui_index");
+/// The policy for that exact page, which allows its inline code by hash. Built alongside it.
+const ui_csp = @embedFile("ui_csp");
 
 pub const Context = struct {
     io: std.Io,
     adapter: db.Adapter,
     token: []const u8,
+    /// Host names to answer to beyond IP addresses and localhost, separated by commas.
+    allowed_hosts: []const u8 = "",
     /// Names the session cookie, since browsers share cookies across the ports of one host.
     port: u16 = 0,
     statement_timeout_ms: ?u32 = null,
@@ -44,6 +49,7 @@ fn route(method: std.http.Method, path: []const u8) Route {
 /// Returns the status sent, for the access log.
 pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
     const target = http.Target.parse(req.head.target);
+    if (guard.refusal(req, ctx.allowed_hosts, target.path)) |no| return fail(req, .forbidden, no.code, no.message);
     const r = route(req.head.method, target.path);
     var name_buf: [auth.cookie_name_max]u8 = undefined;
     const authed = if (http.cookie(req, auth.cookieName(&name_buf, ctx.port))) |c| auth.matches(c, ctx.token) else false;
@@ -84,6 +90,8 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
     if (!authed) {
         try req.respond(unauthorized_page, .{ .status = .unauthorized, .extra_headers = &.{
             .{ .name = "content-type", .value = "text/html; charset=utf-8" },
+            .{ .name = "content-security-policy", .value = unauthorized_csp },
+            .{ .name = "x-content-type-options", .value = "nosniff" },
         } });
         return .unauthorized;
     }
@@ -96,6 +104,7 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
     }
     try req.respond(ui_index_gz, .{ .extra_headers = &.{
         .{ .name = "content-type", .value = "text/html; charset=utf-8" },
+        .{ .name = "content-security-policy", .value = ui_csp },
         .{ .name = "content-encoding", .value = "gzip" },
         .{ .name = "vary", .value = "accept-encoding" },
         .{ .name = "cache-control", .value = "no-store" },
@@ -104,6 +113,9 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
     } });
     return .ok;
 }
+
+/// That page has no script, so none may run. Its only styling is in attributes.
+const unauthorized_csp = "default-src 'none'; style-src-attr 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 const unauthorized_page =
     \\<!doctype html><meta charset="utf-8"><title>zetta</title>
@@ -319,7 +331,21 @@ test "routes" {
 
 const testing = std.testing;
 
-const Response = struct { status: std.http.Status, body: []const u8 };
+const Response = struct {
+    status: std.http.Status,
+    head: []const u8,
+    body: []const u8,
+
+    fn header(res: Response, name: []const u8) ?[]const u8 {
+        var lines = std.mem.splitSequence(u8, res.head, "\r\n");
+        _ = lines.first();
+        while (lines.next()) |line| {
+            const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+            if (std.ascii.eqlIgnoreCase(line[0..colon], name)) return std.mem.trim(u8, line[colon + 1 ..], " ");
+        }
+        return null;
+    }
+};
 
 /// Runs one GET through `handle` over in-memory streams, signed in.
 fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response {
@@ -328,9 +354,13 @@ fn testGet(ctx: *const Context, arena: Allocator, target: []const u8) !Response 
 
 fn testRequest(ctx: *const Context, arena: Allocator, method: []const u8, target: []const u8, body: []const u8) !Response {
     var name_buf: [auth.cookie_name_max]u8 = undefined;
-    const raw = try std.fmt.allocPrint(arena, "{s} {s} HTTP/1.1\r\nhost: t\r\ncookie: {s}={s}\r\ncontent-length: {d}\r\n\r\n{s}", .{
+    return testSend(ctx, arena, try std.fmt.allocPrint(arena, "{s} {s} HTTP/1.1\r\nhost: 127.0.0.1\r\ncookie: {s}={s}\r\ncontent-length: {d}\r\n\r\n{s}", .{
         method, target, auth.cookieName(&name_buf, ctx.port), ctx.token, body.len, body,
-    });
+    }));
+}
+
+/// Runs the bytes of one whole request through `handle` over in-memory streams.
+fn testSend(ctx: *const Context, arena: Allocator, raw: []const u8) !Response {
     var in: std.Io.Reader = .fixed(raw);
     var out: std.Io.Writer.Allocating = .init(arena);
     var server: std.http.Server = .init(&in, &out.writer);
@@ -342,7 +372,7 @@ fn testRequest(ctx: *const Context, arena: Allocator, method: []const u8, target
     const head = written[0..split];
     const payload = written[split + 4 ..];
     const chunked = std.ascii.indexOfIgnoreCase(head, "transfer-encoding: chunked") != null;
-    return .{ .status = status, .body = if (chunked) try dechunk(arena, payload) else payload };
+    return .{ .status = status, .head = head, .body = if (chunked) try dechunk(arena, payload) else payload };
 }
 
 fn dechunk(arena: Allocator, body: []const u8) ![]const u8 {
@@ -397,6 +427,15 @@ const TestApp = struct {
 
     fn post(app: *TestApp, target: []const u8, body: []const u8) !Response {
         return testRequest(&app.ctx, app.arena_state.allocator(), "POST", target, body);
+    }
+
+    /// A signed-in request with these header lines in place of the usual Host.
+    fn send(app: *TestApp, method: []const u8, target: []const u8, headers: []const u8, body: []const u8) !Response {
+        const arena = app.arena_state.allocator();
+        var name_buf: [auth.cookie_name_max]u8 = undefined;
+        return testSend(&app.ctx, arena, try std.fmt.allocPrint(arena, "{s} {s} HTTP/1.1\r\n{s}cookie: {s}={s}\r\ncontent-length: {d}\r\n\r\n{s}", .{
+            method, target, headers, auth.cookieName(&name_buf, app.ctx.port), app.ctx.token, body.len, body,
+        }));
     }
 };
 
@@ -526,4 +565,157 @@ test "a browse past the statement timeout is a 504 that names the budget" {
     try testing.expectEqual(std.http.Status.gateway_timeout, res.status);
     try testing.expect(std.mem.indexOf(u8, res.body, "\"timeout\"") != null);
     try testing.expect(std.mem.indexOf(u8, res.body, "20 ms") != null);
+}
+
+test "a name repointed at this machine gets nothing, even with the right token" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.send("GET", "/?token=t", "host: evil.example:1993\r\n", "");
+    try testing.expectEqual(.forbidden, res.status);
+    try testing.expect(std.mem.indexOf(u8, res.body, "\"host_not_allowed\"") != null);
+    try testing.expectEqual(null, res.header("set-cookie"));
+}
+
+test "a signed-in session cannot be used through a repointed name" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    try testing.expectEqual(.forbidden, (try app.send("GET", "/api/meta", "host: evil.example\r\n", "")).status);
+    try testing.expectEqual(.forbidden, (try app.send("POST", "/api/query", "host: evil.example\r\n", "select 1")).status);
+    try testing.expectEqual(.forbidden, (try app.send("GET", "/", "host: evil.example\r\naccept-encoding: gzip\r\n", "")).status);
+}
+
+test "a request with no Host, or with two, is refused" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    try testing.expectEqual(.forbidden, (try app.send("GET", "/api/meta", "", "")).status);
+    try testing.expectEqual(.forbidden, (try app.send("GET", "/api/meta", "host: 127.0.0.1\r\nhost: evil.example\r\n", "")).status);
+}
+
+test "a listed host name is answered" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    app.ctx.allowed_hosts = "db.internal";
+    try testing.expectEqual(.ok, (try app.send("GET", "/api/meta", "host: db.internal:1993\r\n", "")).status);
+    try testing.expectEqual(.forbidden, (try app.send("GET", "/api/meta", "host: other.internal\r\n", "")).status);
+}
+
+test "a page on another port cannot run SQL with the session cookie" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    try testing.expectEqual(.ok, (try app.post("/api/query", "create table kept (a)")).status);
+
+    const res = try app.send("POST", "/api/query", "host: 127.0.0.1:1993\r\norigin: http://127.0.0.1:3000\r\n", "drop table kept");
+    try testing.expectEqual(.forbidden, res.status);
+    try testing.expect(std.mem.indexOf(u8, res.body, "\"origin_not_allowed\"") != null);
+    try testing.expectEqual(.ok, (try app.post("/api/query", "select * from kept")).status);
+}
+
+test "a same-site GET cannot reach the API, because a filter is SQL" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.send("GET", "/api/meta", "host: 127.0.0.1:1993\r\nsec-fetch-site: same-site\r\n", "");
+    try testing.expectEqual(.forbidden, res.status);
+}
+
+test "the page's own calls and a typed API URL go through" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const own = "host: 127.0.0.1:1993\r\norigin: http://127.0.0.1:1993\r\nsec-fetch-site: same-origin\r\n";
+    try testing.expectEqual(.ok, (try app.send("POST", "/api/query", own, "select 1")).status);
+    try testing.expectEqual(.ok, (try app.send("GET", "/api/meta", "host: localhost:1993\r\nsec-fetch-site: none\r\n", "")).status);
+}
+
+test "a link from another site still reaches the page, which the cookie then signs in or not" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const arena = app.arena_state.allocator();
+    const res = try testSend(&app.ctx, arena, "GET / HTTP/1.1\r\nhost: 127.0.0.1:1993\r\nsec-fetch-site: cross-site\r\n\r\n");
+    try testing.expectEqual(.unauthorized, res.status);
+}
+
+test "the page carries its policy and cannot be framed" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.send("GET", "/", "host: 127.0.0.1:1993\r\naccept-encoding: gzip\r\n", "");
+    try testing.expectEqual(.ok, res.status);
+    const csp = res.header("content-security-policy").?;
+    try testing.expectEqualStrings(ui_csp, csp);
+    try testing.expect(std.mem.indexOf(u8, csp, "frame-ancestors 'none'") != null);
+    try testing.expect(std.mem.indexOf(u8, csp, "script-src 'sha256-") != null);
+    try testing.expect(std.mem.indexOf(u8, csp, "unsafe-eval") == null);
+}
+
+test "the signed-out page allows no script and cannot be framed" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try testSend(&app.ctx, app.arena_state.allocator(), "GET / HTTP/1.1\r\nhost: 127.0.0.1\r\n\r\n");
+    try testing.expectEqual(.unauthorized, res.status);
+    const csp = res.header("content-security-policy").?;
+    try testing.expect(std.mem.startsWith(u8, csp, "default-src 'none'"));
+    try testing.expect(std.mem.indexOf(u8, csp, "script-src") == null);
+    try testing.expect(std.mem.indexOf(u8, csp, "frame-ancestors 'none'") != null);
+    try testing.expect(std.mem.indexOf(u8, unauthorized_page, "<script") == null);
+}
+
+test "API answers tell a browser not to guess their type" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.get("/api/meta", null);
+    try testing.expectEqualStrings("nosniff", res.header("x-content-type-options").?);
+}
+
+test "every inline script and style in the embedded page is in the embedded policy" {
+    const arena_alloc = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(arena_alloc);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    var in: std.Io.Reader = .fixed(ui_index_gz);
+    var window: [std.compress.flate.max_window_len]u8 = undefined;
+    var inflate: std.compress.flate.Decompress = .init(&in, .gzip, &window);
+    const html = try inflate.reader.allocRemaining(arena, .unlimited);
+
+    var found: usize = 0;
+    var at: usize = 0;
+    while (nextInline(html, at)) |block| : (at = block.end) {
+        var digest: [std.crypto.hash.sha2.Sha256.digest_length]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(block.body, &digest, .{});
+        var encoded: [std.base64.standard.Encoder.calcSize(digest.len)]u8 = undefined;
+        const source = try std.fmt.allocPrint(arena, "'sha256-{s}'", .{std.base64.standard.Encoder.encode(&encoded, &digest)});
+        try testing.expect(std.mem.indexOf(u8, ui_csp, source) != null);
+        found += 1;
+    }
+    try testing.expect(found >= 2);
+}
+
+/// The next inline script or style at or past `from`, skipping comments as an HTML parser would.
+fn nextInline(html: []const u8, from: usize) ?struct { body: []const u8, end: usize } {
+    var at = from;
+    while (std.mem.indexOfScalarPos(u8, html, at, '<')) |open| {
+        const rest = html[open..];
+        if (std.mem.startsWith(u8, rest, "<!--")) {
+            const close = std.mem.indexOfPos(u8, html, open, "-->") orelse return null;
+            at = close + "-->".len;
+            continue;
+        }
+        const closer: []const u8 = if (std.mem.startsWith(u8, rest, "<script")) "</script>" else if (std.mem.startsWith(u8, rest, "<style")) "</style>" else {
+            at = open + 1;
+            continue;
+        };
+        const body = (std.mem.indexOfScalarPos(u8, html, open, '>') orelse return null) + 1;
+        const end = std.mem.indexOfPos(u8, html, body, closer) orelse return null;
+        return .{ .body = html[body..end], .end = end + closer.len };
+    }
+    return null;
 }

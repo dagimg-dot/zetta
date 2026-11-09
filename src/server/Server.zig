@@ -22,6 +22,8 @@ pub const Config = struct {
     /// How many ports above `port` to try when it is taken. 0 makes `port` the only choice.
     next_ports: u16 = 0,
     token: []const u8,
+    /// As `handlers.Context.allowed_hosts`.
+    allowed_hosts: []const u8 = "",
     /// Applied to every browse and query. Null means no limit.
     statement_timeout_ms: ?u32,
     name: []const u8,
@@ -48,6 +50,7 @@ pub fn listen(io: Io, adapter: db.Adapter, config: Config) ListenError!Server {
             .io = io,
             .adapter = adapter,
             .token = config.token,
+            .allowed_hosts = config.allowed_hosts,
             .port = listener.socket.address.getPort(),
             .statement_timeout_ms = config.statement_timeout_ms,
             .name = config.name,

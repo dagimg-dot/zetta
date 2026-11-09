@@ -4,7 +4,7 @@ const zon = @import("build.zig.zon");
 const Ui = enum {
     /// Run `bun run build` in web/ before compiling.
     bun,
-    /// Use the existing web/dist/index.html.gz as is.
+    /// Use the existing web/dist/index.html.gz and csp.txt as they are.
     prebuilt,
 };
 
@@ -67,6 +67,7 @@ pub fn build(b: *std.Build) void {
         },
     });
     server.addAnonymousImport("ui_index", .{ .root_source_file = b.path("web/dist/index.html.gz") });
+    server.addAnonymousImport("ui_csp", .{ .root_source_file = b.path("web/dist/csp.txt") });
 
     const exe = b.addExecutable(.{
         .name = "zetta",

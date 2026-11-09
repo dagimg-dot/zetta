@@ -11,6 +11,7 @@ pub const max_body = 1 << 20;
 pub const json_headers = [_]std.http.Header{
     .{ .name = "content-type", .value = "application/json" },
     .{ .name = "cache-control", .value = "no-store" },
+    .{ .name = "x-content-type-options", .value = "nosniff" },
 };
 
 pub fn respondJson(req: *Request, status: std.http.Status, body: []const u8) !void {

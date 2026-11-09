@@ -18,7 +18,11 @@ export default defineConfig(({ mode }) => {
 				"/api": {
 					target: `http://127.0.0.1:${port}`,
 					changeOrigin: true,
-					headers: env.ZETTA_TOKEN ? { cookie: `zetta_${port}=${env.ZETTA_TOKEN}` } : {},
+					// Host is rewritten to the target above, so Origin has to follow or zetta refuses the call.
+					headers: {
+						origin: `http://127.0.0.1:${port}`,
+						...(env.ZETTA_TOKEN ? { cookie: `zetta_${port}=${env.ZETTA_TOKEN}` } : {}),
+					},
 				},
 			},
 		},
