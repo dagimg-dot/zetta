@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { Adapter, Column, SchemaInfo } from "./api";
-import { type CatalogView, complete, enterAccepts, quoteName, rank } from "./sql-complete";
+import type { Adapter, Column, FunctionInfo } from "./api";
+import {
+	type CatalogView,
+	complete,
+	enterAccepts,
+	quoteName,
+	rank,
+	stepsOverParen,
+} from "./sql-complete";
 
 const col = (name: string, type = "text"): Column => ({
 	name,
@@ -9,6 +16,24 @@ const col = (name: string, type = "text"): Column => ({
 	primaryKey: false,
 	default: null,
 });
+
+const fn = (
+	name: string,
+	kind: FunctionInfo["kind"],
+	args: string,
+	returns: string | null = "text",
+): FunctionInfo => ({ name, kind, arguments: args, returns });
+
+const builtins = [
+	fn("MixedCase", "function", ""),
+	fn("count", "aggregate", "", "bigint"),
+	fn("count", "aggregate", '"any"', "bigint"),
+	fn("left", "function", "text, integer"),
+	fn("like", "function", "text, text", "boolean"),
+	fn("lower", "function", "text"),
+	fn("now", "function", "", "timestamp"),
+	fn("row_number", "window", "", "bigint"),
+];
 
 function catalog(defaultSchema: string): CatalogView {
 	const columns: Record<string, Column[]> = {
@@ -37,9 +62,18 @@ function catalog(defaultSchema: string): CatalogView {
 				],
 				functions: [],
 			},
-			{ name: "audit", tables: [{ name: "events", kind: "table", approxRows: 1 }], functions: [] },
+			{
+				name: "audit",
+				tables: [{ name: "events", kind: "table", approxRows: 1 }],
+				functions: [
+					fn("on_change", "function", "", "trigger"),
+					fn("purge", "function", "days integer", "void"),
+					fn("run_it", "procedure", "", null),
+				],
+			},
 		],
 		columns: (s, t) => columns[`${s}.${t}`],
+		functions: () => builtins,
 	};
 }
 
@@ -260,32 +294,22 @@ describe("what Enter takes", () => {
 		expect(enter("select CreatedAt| from customers")).toBe(true);
 	});
 
-	test("not over a function name that happens to begin a column", () => {
-		const cat: CatalogView = {
-			...pg,
-			columns: () => [col("country"), col("name")],
-		};
+	test("a function typed in full is taken over a column that merely begins the same", () => {
+		const cat: CatalogView = { ...pg, columns: () => [col("country"), col("name")] };
 		const c = complete("select count from customers", 12, "postgres", cat, false);
 		const pick = c && rank(c.candidates, c.typed)[0];
-		expect(pick?.label).toBe("country");
+		expect(pick?.insert).toBe("count()");
 		expect(c && pick && enterAccepts(c, pick, "count", { moved: false, explicit: false })).toBe(
-			false,
+			true,
 		);
 	});
 
-	test("a function the database defines counts too", () => {
-		const cat: CatalogView = {
-			...pg,
-			schemas: pg.schemas.map((s) =>
-				s.name === "public"
-					? { ...s, functions: [{ name: "name_of" } as SchemaInfo["functions"][number]] }
-					: s,
-			),
-			columns: () => [col("name_of_user")],
-		};
-		const c = complete("select name_of from customers", 14, "postgres", cat, false);
+	test("a column named like a function stays what was typed", () => {
+		const cat: CatalogView = { ...pg, columns: () => [col("count")] };
+		const c = complete("select count from customers", 12, "postgres", cat, false);
 		const pick = c && rank(c.candidates, c.typed)[0];
-		expect(c && pick && enterAccepts(c, pick, "name_of", { moved: false, explicit: false })).toBe(
+		expect(pick?.kind).toBe("column");
+		expect(c && pick && enterAccepts(c, pick, "count", { moved: false, explicit: false })).toBe(
 			false,
 		);
 	});
@@ -300,6 +324,111 @@ describe("what Enter takes", () => {
 		expect(enter("select * from |")).toBe(false);
 		expect(enter("select * from |", { explicit: true })).toBe(true);
 		expect(enter("select * from |", { moved: true })).toBe(true);
+	});
+});
+
+describe("functions", () => {
+	const item = (textWithCaret: string, label: string, dialect: Adapter = "postgres") => {
+		const caret = textWithCaret.indexOf("|");
+		const c = complete(textWithCaret.replace("|", ""), caret, dialect, pg, false);
+		return c && rank(c.candidates, c.typed).find((r) => r.label === label);
+	};
+
+	test("one row per name, showing a signature and how many more there are", () => {
+		const count = item("select cou| from customers", "count");
+		expect(count?.kind).toBe("function");
+		expect(count?.detail).toBe('("any") → bigint +1');
+		expect(offered("select cou| from customers").filter((l) => l === "count")).toHaveLength(1);
+	});
+
+	test("a call opens with the caret inside, unless nothing can go there", () => {
+		expect(item("select cou|", "count")).toMatchObject({ insert: "count()", caretInside: true });
+		expect(item("select no|", "now")).toMatchObject({ insert: "now()", caretInside: false });
+	});
+
+	test("parentheses already there are not doubled", () => {
+		expect(item("select cou|(*)", "count")).toMatchObject({ insert: "count", caretInside: false });
+	});
+
+	test("columns come before functions", () => {
+		const cat: CatalogView = { ...pg, columns: () => [col("lowest")] };
+		const c = complete("select lo from customers", 9, "postgres", cat, false);
+		expect(c && rank(c.candidates, c.typed).map((r) => r.label)).toEqual(["lowest", "lower"]);
+	});
+
+	test("typed in capitals, written in capitals", () => {
+		expect(item("select COU|", "COUNT")?.insert).toBe("COUNT()");
+	});
+
+	test("a built-in with a reserved name is called bare, and a mixed-case one quoted", () => {
+		expect(item("select lef|", "left")?.insert).toBe("left()");
+		expect(item("select Mix|", "MixedCase")?.insert).toBe('"MixedCase"()');
+	});
+
+	test("aggregates and window functions only where they are allowed", () => {
+		const where = "select * from customers where ";
+		expect(offered(`${where}cou|`)).not.toContain("count");
+		expect(offered(`${where}row|`)).not.toContain("row_number");
+		expect(offered(`${where}low|`)).toContain("lower");
+		expect(offered("select * from customers group by id having cou|")).toContain("count");
+		expect(offered("select * from customers order by row|")).toContain("row_number");
+	});
+
+	test("a keyword offered here is not offered again as a function", () => {
+		const labels = offered("select * from customers where not lik|");
+		expect(labels.filter((l) => l === "like")).toHaveLength(1);
+		expect(item("select * from customers where not lik|", "like")?.kind).toBe("keyword");
+	});
+
+	test("not after a finished expression, a relation word or an alias", () => {
+		expect(offered("select name cou| from customers")).not.toContain("count");
+		expect(offered("select * from cou|")).not.toContain("count");
+		expect(offered("select * from customers cou|")).not.toContain("count");
+		expect(offered("select * from a join b using (cou|")).not.toContain("count");
+	});
+
+	test("nothing typed lists no functions, since there are hundreds", () => {
+		expect(offered("select | from customers")).not.toContain("count");
+	});
+
+	test("a column definition is a new name, but its DEFAULT is a value", () => {
+		expect(offered("create table t (cou|")).not.toContain("count");
+		expect(offered("create table t (at timestamp default no|")).toContain("now");
+	});
+
+	test("another schema's functions are qualified, and triggers and procedures left out", () => {
+		expect(item("select pur|", "audit.purge")?.insert).toBe("audit.purge()");
+		expect(offered("select on_|")).toEqual([]);
+		expect(offered("select run|")).not.toContain("audit.run_it");
+	});
+
+	test("after a schema's dot its functions follow, except where a table goes", () => {
+		expect(offered("select audit.pur|")).toEqual(["purge"]);
+		expect(offered("select * from audit.pur|")).toEqual([]);
+	});
+
+	test("initials find a function, but a scatter of letters does not", () => {
+		expect(offered("select rn|")).toContain("row_number");
+		expect(offered("select cnt|")).not.toContain("count");
+	});
+});
+
+describe("typing a closing parenthesis", () => {
+	const steps = (t: string) => stepsOverParen(t.replace("|", ""), t.indexOf("|"), "postgres");
+
+	test("steps over one that balances the statement", () => {
+		expect(steps("select count(|)")).toBe(true);
+		expect(steps("select lower(trim(|))")).toBe(true);
+		expect(steps("select lower(trim(a)|)")).toBe(true);
+	});
+
+	test("adds one where the statement still needs it", () => {
+		expect(steps("select (count(|)")).toBe(false);
+		expect(steps("select count(|")).toBe(false);
+	});
+
+	test("a parenthesis inside a string is only text", () => {
+		expect(steps("select '(|)'")).toBe(false);
 	});
 });
 

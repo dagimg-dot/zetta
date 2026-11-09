@@ -141,6 +141,36 @@ pub const catalog_functions =
     \\order by n.nspname, p.proname, 4
 ;
 
+/// What the search path lets an expression call. pg_catalog also holds the machinery behind types,
+/// operators, indexes and aggregates, told apart by its pseudo-types and catalogued descriptions.
+/// coalesce and its like are grammar, so no pg_proc row exists for them.
+pub const callable_functions =
+    \\select name, kind, arguments, result from (
+    \\  select p.proname as name, p.prokind::text as kind,
+    \\         pg_get_function_identity_arguments(p.oid) as arguments,
+    \\         pg_get_function_result(p.oid) as result, p.pronargs::int as nargs
+    \\  from pg_proc p
+    \\  left join pg_description d
+    \\    on d.objoid = p.oid and d.classoid = 'pg_proc'::regclass and d.objsubid = 0
+    \\  where p.prokind <> 'p' and pg_function_is_visible(p.oid)
+    \\    and p.prorettype not in ('internal'::regtype, 'cstring'::regtype, 'trigger'::regtype,
+    \\                             'event_trigger'::regtype, 'language_handler'::regtype,
+    \\                             'fdw_handler'::regtype, 'index_am_handler'::regtype,
+    \\                             'tsm_handler'::regtype, 'table_am_handler'::regtype)
+    \\    and not p.proargtypes::oid[] && array['internal'::regtype::oid, 'cstring'::regtype::oid]
+    \\    and (p.pronamespace <> 'pg_catalog'::regnamespace or coalesce(d.description, '') !~
+    \\         '^(implementation of|I/O|hash|less-equal-greater|statistics:|smaller of|larger of|aggregate [a-z]+ function|for use by pg_|sort support|planner support|map )')
+    \\  union all
+    \\  select * from (values
+    \\    ('coalesce', 'f', 'value, ...', 'first non-null argument', 1),
+    \\    ('greatest', 'f', 'value, ...', 'largest argument', 1),
+    \\    ('least', 'f', 'value, ...', 'smallest argument', 1),
+    \\    ('nullif', 'f', 'a, b', 'null when equal, else a', 2)
+    \\  ) as grammar
+    \\) f
+    \\order by name collate "C", nargs, arguments
+;
+
 /// $1 is the schema, $2 the name and $3 the identity arguments, which together pick one overload.
 pub const function_detail =
     \\with f as (

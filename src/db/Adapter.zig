@@ -32,6 +32,7 @@ pub const VTable = struct {
     columns: *const fn (*anyopaque, Allocator, types.TableRef, *Diagnostic) types.Error![]const types.Column,
     detail: *const fn (*anyopaque, Allocator, types.TableRef, *Diagnostic) types.Error!types.TableDetail,
     function: *const fn (*anyopaque, Allocator, types.FunctionRef, *Diagnostic) types.Error!types.FunctionDetail,
+    functions: *const fn (*anyopaque, Allocator, *Diagnostic) types.Error![]const types.Function,
     count: *const fn (*anyopaque, Allocator, types.CountRequest, *Diagnostic) types.Error!u64,
     browse: *const fn (*anyopaque, Allocator, types.BrowseRequest, *Diagnostic) types.Error!types.ResultSet,
     query: *const fn (*anyopaque, Allocator, []const u8, types.QueryOptions, *Diagnostic) types.Error!types.ResultSet,
@@ -58,6 +59,12 @@ pub fn detail(a: Adapter, arena: Allocator, table: types.TableRef, diag: *Diagno
 /// NotFound when no function has that name and those arguments.
 pub fn function(a: Adapter, arena: Allocator, ref: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {
     return a.vtable.function(a.ptr, arena, ref, diag);
+}
+
+/// What an expression can call by bare name, built-ins and extensions included, sorted by name in
+/// byte order with the fewest arguments first, so overloads are adjacent. Never procedures.
+pub fn functions(a: Adapter, arena: Allocator, diag: *Diagnostic) types.Error![]const types.Function {
+    return a.vtable.functions(a.ptr, arena, diag);
 }
 
 /// The exact number of rows that pass the filter. NotFound for a missing table or view,

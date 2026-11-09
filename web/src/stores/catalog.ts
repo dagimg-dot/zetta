@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { type Catalog, type Column, getColumns } from "../lib/api";
+import { type Catalog, type Column, type FunctionInfo, getColumns, getFunctions } from "../lib/api";
 import type { CatalogView } from "../lib/sql-complete";
 import { dialect } from "./dialect";
 
@@ -9,6 +9,8 @@ const [catalog, setCatalogSignal] = createSignal<Catalog | undefined>();
 const [columnsVersion, setColumnsVersion] = createSignal(0);
 const columns = new Map<string, readonly Column[]>();
 const loading = new Set<string>();
+let functions: readonly FunctionInfo[] = [];
+let functionsAsked = false;
 
 const key = (schema: string, table: string) => `${schema}\u0000${table}`;
 
@@ -17,6 +19,8 @@ export function setCatalog(next: Catalog | undefined): void {
 	setCatalogSignal(next);
 	columns.clear();
 	loading.clear();
+	functions = [];
+	functionsAsked = false;
 	setColumnsVersion((v) => v + 1);
 }
 
@@ -36,6 +40,19 @@ export function loadColumns(schema: string, table: string): void {
 	);
 }
 
+/** Fetches what expressions can call, once per catalog. A failed fetch counts as none. */
+export function loadFunctions(): void {
+	if (functionsAsked) return;
+	functionsAsked = true;
+	getFunctions().then(
+		(r) => {
+			functions = r.functions;
+			setColumnsVersion((v) => v + 1);
+		},
+		() => {},
+	);
+}
+
 /** The catalog as completion reads it. Tracks both the tables and the columns loaded so far. */
 export function catalogView(): CatalogView {
 	columnsVersion();
@@ -43,5 +60,6 @@ export function catalogView(): CatalogView {
 		schemas: catalog()?.schemas ?? [],
 		defaultSchema: dialect() === "postgres" ? "public" : "main",
 		columns: (schema, table) => columns.get(key(schema, table)),
+		functions: () => functions,
 	};
 }

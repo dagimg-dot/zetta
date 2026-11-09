@@ -79,6 +79,11 @@ fn findSchema(cat: types.Catalog, name: []const u8) ?types.Schema {
     return null;
 }
 
+fn findFunction(fns: []const types.Function, name: []const u8) ?types.Function {
+    for (fns) |f| if (std.mem.eql(u8, f.name, name)) return f;
+    return null;
+}
+
 fn findNamed(comptime T: type, items: []const T, name: []const u8) !T {
     for (items) |item| if (std.mem.eql(u8, item.name, name)) return item;
     std.debug.print("no {s} named {s}\n", .{ @typeName(T), name });
@@ -320,6 +325,31 @@ fn run(f: Fixture) !void {
                 try testing.expectEqualStrings("trigger", fns[3].returns.?);
                 try testing.expectEqual(types.FunctionKind.aggregate, fns[4].kind);
             },
+        }
+    }
+
+    // functions lists what an expression can call by bare name, built-ins included, overloads adjacent
+    {
+        const fns = try a.functions(arena, &diag);
+        const count_fn = findFunction(fns, "count") orelse return error.FunctionMissing;
+        try testing.expect(count_fn.kind != .function);
+        try testing.expectEqual(types.FunctionKind.function, (findFunction(fns, "lower") orelse return error.FunctionMissing).kind);
+        try testing.expectEqual(types.FunctionKind.window, (findFunction(fns, "row_number") orelse return error.FunctionMissing).kind);
+        try testing.expect(findFunction(fns, "coalesce") != null);
+        for (fns[0 .. fns.len - 1], fns[1..]) |before, after| {
+            try testing.expect(std.mem.order(u8, before.name, after.name) != .gt);
+        }
+        for (fns) |fun| try testing.expect(fun.kind != .procedure);
+        if (a.info().name == .sqlite) {
+            var variadic_max = false;
+            for (fns) |fun| variadic_max = variadic_max or (std.mem.eql(u8, fun.name, "max") and std.mem.eql(u8, fun.arguments, "..."));
+            try testing.expect(variadic_max);
+        }
+        if (a.info().name == .postgres) {
+            try testing.expect(findFunction(fns, "int4pl") == null);
+            try testing.expect(findFunction(fns, "boolin") == null);
+            try testing.expect(findFunction(fns, "hashint4") == null);
+            try testing.expect(findFunction(fns, "array_append") != null);
         }
     }
 

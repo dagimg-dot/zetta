@@ -38,6 +38,11 @@ export interface Catalog {
 	schemas: SchemaInfo[];
 }
 
+/** What an expression can call by bare name, overloads adjacent. */
+export interface Functions {
+	functions: FunctionInfo[];
+}
+
 export interface Column {
 	name: string;
 	type: string;
@@ -142,6 +147,10 @@ export function getMeta(): Promise<Meta> {
 
 export function getCatalog(): Promise<Catalog> {
 	return request<Catalog>("/api/catalog");
+}
+
+export function getFunctions(): Promise<Functions> {
+	return request<Functions>("/api/functions");
 }
 
 export function getColumns(schema: string, table: string): Promise<Columns> {

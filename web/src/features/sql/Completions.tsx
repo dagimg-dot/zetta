@@ -14,6 +14,7 @@ function iconOf(item: Ranked): IconName {
 	if (item.kind === "column") return "columns";
 	if (item.kind === "schema") return "database";
 	if (item.kind === "keyword") return "code";
+	if (item.kind === "function") return "function";
 	return item.relationKind === "view" || item.relationKind === "materialized_view"
 		? "view"
 		: "table";

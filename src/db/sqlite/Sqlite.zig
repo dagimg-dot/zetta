@@ -74,6 +74,7 @@ const vtable: Adapter.VTable = .{
     .columns = columns,
     .detail = detail,
     .function = function,
+    .functions = listFunctions,
     .count = count,
     .browse = browse,
     .query = query,
@@ -159,6 +160,33 @@ fn columnsFrom(arena: Allocator, res: types.ResultSet) Allocator.Error![]types.C
 }
 
 /// SQL cannot define a function in SQLite; the only ones are built in or registered from C.
+/// SQLite names no parameters, so each shows as a placeholder. Any negative narg means variable.
+const functions_sql =
+    \\select distinct name, type,
+    \\       case when narg < 0 then '...' else substr('?, ?, ?, ?, ?, ?, ?, ?', 1, max(narg * 3 - 2, 0)) end,
+    \\       narg
+    \\from pragma_function_list
+    \\where name glob '[a-zA-Z_]*'
+    \\order by name, case when narg < 0 then 127 else narg end
+;
+
+fn listFunctions(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error![]const types.Function {
+    const self = from(ptr);
+    const lease = try self.pool.acquire(diag);
+    defer lease.release();
+    const rows = (try lease.conn.runAll(arena, functions_sql, .{}, diag)).rows;
+    const out = try arena.alloc(types.Function, rows.len);
+    for (out, rows) |*f, row| {
+        const kind: types.FunctionKind = switch (row[1].?[0]) {
+            'a' => .aggregate,
+            'w' => .window,
+            else => .function,
+        };
+        f.* = .{ .name = row[0].?, .kind = kind, .arguments = row[2].?, .returns = null };
+    }
+    return out;
+}
+
 fn function(_: *anyopaque, _: Allocator, ref: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {
     diag.print("no function named {s}.{s}: SQLite does not store functions", .{ ref.schema, ref.name });
     return error.NotFound;

@@ -47,17 +47,31 @@ pub fn catalog(w: *Writer, cat: db.Catalog) Writer.Error!void {
         try s.endArray();
         try s.objectField("functions");
         try s.beginArray();
-        for (schema.functions) |f| {
-            try s.beginObject();
-            try field(&s, "name", f.name);
-            try field(&s, "kind", @tagName(f.kind));
-            try field(&s, "arguments", f.arguments);
-            try field(&s, "returns", f.returns);
-            try s.endObject();
-        }
+        try functionList(&s, schema.functions);
         try s.endArray();
         try s.endObject();
     }
+    try s.endArray();
+    try s.endObject();
+}
+
+fn functionList(s: *Stringify, fns: []const db.Function) Writer.Error!void {
+    for (fns) |f| {
+        try s.beginObject();
+        try field(s, "name", f.name);
+        try field(s, "kind", @tagName(f.kind));
+        try field(s, "arguments", f.arguments);
+        try field(s, "returns", f.returns);
+        try s.endObject();
+    }
+}
+
+pub fn functions(w: *Writer, fns: []const db.Function) Writer.Error!void {
+    var s: Stringify = .{ .writer = w };
+    try s.beginObject();
+    try s.objectField("functions");
+    try s.beginArray();
+    try functionList(&s, fns);
     try s.endArray();
     try s.endObject();
 }
@@ -276,11 +290,21 @@ fn field(s: *Stringify, name: []const u8, value: anytype) Writer.Error!void {
 
 const testing = std.testing;
 
+test "callable functions render with their kind, and a return type may be unknown" {
+    var buf: [256]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    const fns = [_]db.Function{.{ .name = "count", .kind = .aggregate, .arguments = "...", .returns = null }};
+    try functions(&w, &fns);
+    try std.testing.expectEqualStrings(
+        \\{"functions":[{"name":"count","kind":"aggregate","arguments":"...","returns":null}]}
+    , w.buffered());
+}
+
 test "a catalog lists each schema's functions beside its tables" {
     var buf: [256]u8 = undefined;
     var w: Writer = .fixed(&buf);
-    const functions = [_]db.Function{.{ .name = "f", .kind = .procedure, .arguments = "x integer", .returns = null }};
-    const schemas = [_]db.Schema{.{ .name = "public", .tables = &.{}, .functions = &functions }};
+    const fns = [_]db.Function{.{ .name = "f", .kind = .procedure, .arguments = "x integer", .returns = null }};
+    const schemas = [_]db.Schema{.{ .name = "public", .tables = &.{}, .functions = &fns }};
     try catalog(&w, .{ .schemas = &schemas });
     try testing.expectEqualStrings(
         \\{"schemas":[{"name":"public","tables":[],"functions":[{"name":"f","kind":"procedure","arguments":"x integer","returns":null}]}]}

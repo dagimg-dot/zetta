@@ -12,9 +12,9 @@ import {
 	splitProps,
 } from "solid-js";
 import { SqlLine } from "../../components/ui/SqlText";
-import { complete, enterAccepts, type Ranked, rank } from "../../lib/sql-complete";
+import { complete, enterAccepts, type Ranked, rank, stepsOverParen } from "../../lib/sql-complete";
 import { escapeHtml, highlightLines } from "../../lib/sql-highlight";
-import { catalogView, loadColumns } from "../../stores/catalog";
+import { catalogView, loadColumns, loadFunctions } from "../../stores/catalog";
 import { dialect } from "../../stores/dialect";
 import { Completions, type Placement } from "./Completions";
 import "./sql-editor.css";
@@ -142,6 +142,11 @@ export function SqlEditor(props: SqlEditorProps) {
 		}, openDelay);
 	};
 
+	// Up front and again for each new catalog, so that the first word typed can already find them.
+	createEffect(() => {
+		catalogView();
+		loadFunctions();
+	});
 	// An auto-opened list closes once nothing completes here; a requested one stays to say so.
 	createEffect(() => {
 		if (request() && !shown()) close();
@@ -209,6 +214,11 @@ export function SqlEditor(props: SqlEditorProps) {
 			input.setRangeText(item.insert, r.from, r.to, "end");
 			input.dispatchEvent(new Event("input", { bubbles: true }));
 		}
+		if (item.caretInside) {
+			const inside = input.selectionStart - 1;
+			input.setSelectionRange(inside, inside);
+			setCaret(inside);
+		}
 	};
 
 	const onInput: JSX.EventHandler<HTMLTextAreaElement, InputEvent> = (e) => {
@@ -224,6 +234,18 @@ export function SqlEditor(props: SqlEditorProps) {
 		if (request()) return;
 		const ch = el.value[el.selectionStart - 1] ?? "";
 		if (e.inputType === "insertText" && /[\p{L}\p{N}_$." \x60[ ]/u.test(ch)) soon();
+	};
+
+	// On beforeinput rather than keydown, since not every keyboard or input method sends the key.
+	const onBeforeInput: JSX.EventHandler<HTMLTextAreaElement, InputEvent> = (e) => {
+		if (e.inputType !== "insertText" || e.data !== ")") return;
+		const el = e.currentTarget;
+		const at = el.selectionStart;
+		if (at !== el.selectionEnd || !stepsOverParen(own.value, at, dialect())) return;
+		e.preventDefault();
+		close();
+		el.setSelectionRange(at + 1, at + 1);
+		setCaret(at + 1);
 	};
 
 	const onKeyDown: JSX.EventHandler<HTMLTextAreaElement, KeyboardEvent> = (e) => {
@@ -297,6 +319,7 @@ export function SqlEditor(props: SqlEditorProps) {
 				aria-controls={shown() ? listId : undefined}
 				aria-activedescendant={shown()?.items.length ? `${listId}-${selected()}` : undefined}
 				onInput={onInput}
+				onBeforeInput={onBeforeInput}
 				onKeyDown={onKeyDown}
 				onCompositionEnd={() => soon()}
 				onMouseDown={(e) => {

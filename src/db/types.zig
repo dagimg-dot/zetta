@@ -29,7 +29,7 @@ pub const Function = struct {
     kind: FunctionKind,
     /// The arguments that tell overloads apart, as text. Empty for none.
     arguments: []const u8,
-    /// Null for a procedure.
+    /// Null for a procedure, or where the database does not say, as in SQLite.
     returns: ?[]const u8,
 };
 

@@ -1,8 +1,7 @@
-import type { Adapter, Column, SchemaInfo, TableKind } from "./api";
+import type { Adapter, Column, FunctionInfo, SchemaInfo, TableKind } from "./api";
 import { match, Tier } from "./match";
 import { statementSpan } from "./sql";
 import {
-	commonFunctions,
 	postgresColumnName,
 	postgresReserved,
 	postgresTypeFunctionName,
@@ -12,7 +11,7 @@ import {
 } from "./sql-keywords";
 import { lex, type Token } from "./sql-lex";
 
-export type CandidateKind = "keyword" | "schema" | "relation" | "column";
+export type CandidateKind = "keyword" | "schema" | "relation" | "column" | "function";
 
 export interface Candidate {
 	label: string;
@@ -23,6 +22,8 @@ export interface Candidate {
 	detail: string;
 	/** For a relation, whether it is a view. */
 	relationKind?: TableKind;
+	/** Accepting leaves the caret between the parentheses that `insert` ends with. */
+	caretInside?: boolean;
 	/** Among equal matches, lower comes first: what fits here before what merely exists. */
 	rank: number;
 }
@@ -33,6 +34,8 @@ export interface CatalogView {
 	/** Where unqualified names resolve: public in Postgres, main in SQLite. */
 	defaultSchema: string;
 	columns(schema: string, table: string): readonly Column[] | undefined;
+	/** What an expression can call by bare name, empty until it has loaded. */
+	functions(): readonly FunctionInfo[];
 }
 
 export interface Completion {
@@ -44,7 +47,7 @@ export interface Completion {
 	candidates: Candidate[];
 	/** Tables whose columns were wanted but are not loaded yet. */
 	missing: { schema: string; table: string }[];
-	/** The word typed is probably finished, as an alias or a function's name, so Enter leaves it be. */
+	/** The word typed is probably an alias, so Enter leaves it be. */
 	tentative?: boolean;
 }
 
@@ -289,13 +292,13 @@ function followsTable(before: readonly Token[], clause: string, text: string): b
 	return ["from", "join", "update"].includes(opener) && takesRelation(before, k - 1, text);
 }
 
-/** Whether `typed` names a function, which a column that merely begins the same should not replace. */
-function isFunction(typed: string, catalog: CatalogView): boolean {
-	const name = typed.toLowerCase();
-	return (
-		commonFunctions.has(name) ||
-		catalog.schemas.some((s) => s.functions.some((f) => f.name.toLowerCase() === name))
-	);
+/** Clauses where an aggregate or window function is allowed. */
+const aggregateClauses = new Set(["select", "having", "order"]);
+
+function callableHere(f: FunctionInfo, aggregates: boolean): boolean {
+	if (f.kind === "procedure" || f.returns === "trigger" || f.returns === "event_trigger")
+		return false;
+	return aggregates || f.kind === "function";
 }
 
 /**
@@ -368,6 +371,38 @@ export function complete(
 		}
 	};
 	const scope = () => relations(text, tokens, dialect, catalog);
+	const upperTyped = typed.length > 0 && typed === typed.toUpperCase() && /[A-Z]/.test(typed);
+	/** Offers `list` as calls, one row per name, since overloads are adjacent. */
+	const functionsIn = (
+		list: readonly FunctionInfo[],
+		how: { rank: number; aggregates: boolean; schema?: string; skip?: ReadonlySet<string> },
+	) => {
+		const opensCall = text[to] === "(";
+		const qualifier = how.schema ? `${quoteName(how.schema, dialect)}.` : "";
+		for (let i = 0; i < list.length; ) {
+			const name = list[i]?.name ?? "";
+			const overloads: FunctionInfo[] = [];
+			for (; list[i]?.name === name; i++) {
+				const f = list[i] as FunctionInfo;
+				if (callableHere(f, how.aggregates)) overloads.push(f);
+			}
+			const shown = overloads.find((f) => f.arguments) ?? overloads[0];
+			if (!shown || how.skip?.has(name)) continue;
+			// Built-ins like left are reserved words yet called bare, so only a name that folding would change is quoted.
+			const bare = dialect === "sqlite" || /^[a-z_][a-z0-9_$]*$/.test(name);
+			const written = !bare ? quoteName(name, dialect) : upperTyped ? name.toUpperCase() : name;
+			const returns = shown.returns ? ` → ${shown.returns}` : "";
+			const more = overloads.length > 1 ? ` +${overloads.length - 1}` : "";
+			candidates.push({
+				label: how.schema ? `${how.schema}.${name}` : bare ? written : name,
+				insert: `${qualifier}${written}${opensCall ? "" : "()"}`,
+				kind: "function",
+				detail: `(${shown.arguments})${returns}${more}`,
+				caretInside: !opensCall && overloads.some((f) => f.arguments !== ""),
+				rank: how.rank,
+			});
+		}
+	};
 
 	// After a dot: the columns of a table or alias, or the tables of a schema.
 	if (prevWord === ".") {
@@ -386,7 +421,11 @@ export function complete(
 				: findTable(catalog, catalog.defaultSchema, name);
 			const s = catalog.schemas.find((x) => x.name.toLowerCase() === name.toLowerCase());
 			if (t) columnsOf(t.schema, t.table, 0, "");
-			if (s) relationsIn(s, 1, false);
+			if (s) {
+				relationsIn(s, 1, false);
+				if (before.length < 3 || !takesRelation(before, before.length - 3, text))
+					functionsIn(s.functions, { rank: 2, aggregates: true });
+			}
 		}
 		return { from, to, typed, candidates, missing };
 	}
@@ -413,15 +452,18 @@ export function complete(
 		)
 			clause = clauseOf[w] ?? clause;
 	}
+	// USING's parentheses hold column names, and CREATE's new ones, until a DEFAULT asks for a value.
+	const namesOnly =
+		clause === "paren" &&
+		(outer.at(-1) === "using" || (outer.at(-1) === "create" && prevWord !== "default"));
 	if (clause === "paren") clause = "select";
 
 	const keywords = (list: string, rank: number) => {
-		const upper = typed.length > 0 && typed === typed.toUpperCase() && /[A-Z]/.test(typed);
 		for (const k of list.split(" ")) {
 			if (!k || !isKeyword(k, dialect)) continue;
 			candidates.push({
-				label: upper ? k.toUpperCase() : k,
-				insert: upper ? k.toUpperCase() : k,
+				label: upperTyped ? k.toUpperCase() : k,
+				insert: upperTyped ? k.toUpperCase() : k,
 				kind: "keyword",
 				detail: "keyword",
 				rank,
@@ -481,6 +523,14 @@ export function complete(
 		};
 	}
 
+	// Postgres lists plenty of words people name columns with, such as name and type.
+	const isColumnInScope = () =>
+		scope().some((r) => {
+			const t = findTable(catalog, r.schema, r.table);
+			return (
+				!!t && catalog.columns(t.schema, t.table)?.some((c) => c.name.toLowerCase() === prevWord)
+			);
+		});
 	// Right after a finished expression, the next word is more often a keyword than a column.
 	const ended =
 		!!prev &&
@@ -489,7 +539,7 @@ export function complete(
 			prev.kind === "string" ||
 			prevWord === ")" ||
 			prevWord === "*" ||
-			(prev.kind === "word" && !isKeyword(prevWord, dialect)));
+			(prev.kind === "word" && (!isKeyword(prevWord, dialect) || isColumnInScope())));
 	if (columnClauses.has(clause)) {
 		const rels = scope();
 		for (const r of rels) {
@@ -505,8 +555,16 @@ export function complete(
 				});
 		}
 	}
+	if (typed && !ended && !namesOnly && columnClauses.has(clause)) {
+		const aggregates = aggregateClauses.has(clause);
+		const skip = new Set((follows[clause] ?? "").split(" "));
+		functionsIn(catalog.functions(), { rank: 1, aggregates, skip });
+		for (const s of catalog.schemas)
+			if (s.name !== catalog.defaultSchema)
+				functionsIn(s.functions, { rank: 2, aggregates, skip, schema: s.name });
+	}
 	keywords(follows[clause] ?? "", ended ? 0 : 3);
-	return { from, to, typed, candidates, missing, tentative: isFunction(typed, catalog) };
+	return { from, to, typed, candidates, missing };
 }
 
 export interface Ranked extends Candidate {
@@ -528,10 +586,30 @@ export function rank(candidates: readonly Candidate[], typed: string, limit = 10
 		if (seen.has(key)) continue;
 		seen.add(key);
 		const m = match(typed, c.label);
-		if (m) out.push({ ...c, tier: m.tier, ranges: m.ranges, cost: m.cost, index });
+		// Hundreds of function names would answer almost any scatter of letters.
+		if (m && !(c.kind === "function" && m.tier === Tier.Scattered))
+			out.push({ ...c, tier: m.tier, ranges: m.ranges, cost: m.cost, index });
 	}
 	out.sort((a, b) => a.tier - b.tier || a.rank - b.rank || a.cost - b.cost || a.index - b.index);
 	return out.slice(0, limit);
+}
+
+/** Whether typing `)` at `caret` steps over the one there instead of adding another, as after a completed call. */
+export function stepsOverParen(text: string, caret: number, dialect: Adapter): boolean {
+	if (text[caret] !== ")") return false;
+	const [start, end] = statementSpan(text, caret, dialect);
+	let depth = 0;
+	let here = false;
+	for (const t of lex(text, dialect)) {
+		if (t.start < start || t.end > end || t.kind !== "punct") continue;
+		const w = text.slice(t.start, t.end);
+		if (w === "(") depth++;
+		else if (w === ")") {
+			depth--;
+			here ||= t.start === caret;
+		}
+	}
+	return here && depth === 0;
 }
 
 /**

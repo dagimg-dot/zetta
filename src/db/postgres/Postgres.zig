@@ -88,6 +88,7 @@ const vtable: Adapter.VTable = .{
     .columns = columns,
     .detail = detail,
     .function = function,
+    .functions = listFunctions,
     .count = count,
     .browse = browse,
     .query = query,
@@ -260,6 +261,16 @@ fn functionKind(prokind: []const u8) types.FunctionKind {
         'w' => .window,
         else => .function,
     };
+}
+
+fn listFunctions(ptr: *anyopaque, arena: Allocator, diag: *Diagnostic) types.Error![]const types.Function {
+    const self = from(ptr);
+    const rows = (try self.run(arena, sql.callable_functions, null, std.math.maxInt(usize), diag)).rows;
+    const out = try arena.alloc(types.Function, rows.len);
+    for (out, rows) |*f, row| {
+        f.* = .{ .name = row[0].?, .kind = functionKind(row[1].?), .arguments = row[2].?, .returns = row[3] };
+    }
+    return out;
 }
 
 fn function(ptr: *anyopaque, arena: Allocator, ref: types.FunctionRef, diag: *Diagnostic) types.Error!types.FunctionDetail {

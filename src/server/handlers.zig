@@ -29,13 +29,14 @@ pub const Context = struct {
     version: []const u8,
 };
 
-const Route = enum { index, meta, catalog, columns, table, function, count, compile, browse, query, not_found };
+const Route = enum { index, meta, catalog, functions, columns, table, function, count, compile, browse, query, not_found };
 
 fn route(method: std.http.Method, path: []const u8) Route {
     const eql = std.mem.eql;
     if (method == .GET and (eql(u8, path, "/") or eql(u8, path, "/index.html"))) return .index;
     if (method == .GET and eql(u8, path, "/api/meta")) return .meta;
     if (method == .GET and eql(u8, path, "/api/catalog")) return .catalog;
+    if (method == .GET and eql(u8, path, "/api/functions")) return .functions;
     if (method == .GET and eql(u8, path, "/api/columns")) return .columns;
     if (method == .GET and eql(u8, path, "/api/table")) return .table;
     if (method == .GET and eql(u8, path, "/api/function")) return .function;
@@ -64,6 +65,7 @@ pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.St
         .index => unreachable,
         .meta => meta(ctx, arena, req),
         .catalog => catalog(ctx, arena, req),
+        .functions => functions(ctx, arena, req),
         .columns => columns(ctx, arena, req, target.query),
         .table => tableDetail(ctx, arena, req, target.query),
         .function => functionDetail(ctx, arena, req, target.query),
@@ -142,6 +144,15 @@ fn catalog(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Statu
     const cat = ctx.adapter.catalog(arena, &diag) catch |err| return dbFail(req, err, &diag);
     var out: std.Io.Writer.Allocating = .init(arena);
     try render.json.catalog(&out.writer, cat);
+    try http.respondJson(req, .ok, out.written());
+    return .ok;
+}
+
+fn functions(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
+    var diag: db.Diagnostic = .{};
+    const fns = ctx.adapter.functions(arena, &diag) catch |err| return dbFail(req, err, &diag);
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try render.json.functions(&out.writer, fns);
     try http.respondJson(req, .ok, out.written());
     return .ok;
 }
@@ -322,6 +333,7 @@ test "routes" {
     try std.testing.expectEqual(Route.index, route(.GET, "/"));
     try std.testing.expectEqual(Route.query, route(.POST, "/api/query"));
     try std.testing.expectEqual(Route.table, route(.GET, "/api/table"));
+    try std.testing.expectEqual(Route.functions, route(.GET, "/api/functions"));
     try std.testing.expectEqual(Route.function, route(.GET, "/api/function"));
     try std.testing.expectEqual(Route.count, route(.GET, "/api/count"));
     try std.testing.expectEqual(Route.compile, route(.GET, "/api/compile"));
@@ -438,6 +450,19 @@ const TestApp = struct {
         }));
     }
 };
+
+test "the editor can ask which functions an expression may call" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.get("/api/functions", null);
+    try testing.expectEqual(std.http.Status.ok, res.status);
+    const Shape = struct { functions: []const struct { name: []const u8, kind: []const u8, arguments: []const u8, returns: ?[]const u8 } };
+    const parsed = try std.json.parseFromSliceLeaky(Shape, app.arena_state.allocator(), res.body, .{});
+    var saw_lower = false;
+    for (parsed.functions) |f| saw_lower = saw_lower or std.mem.eql(u8, f.name, "lower");
+    try testing.expect(saw_lower);
+}
 
 test "a query stops past the row limit unless asked for an exact count" {
     var app: TestApp = undefined;

@@ -51,6 +51,7 @@ const cases = [_]Case{
     .{ .name = "an empty result keeps its columns", .sql = "select 1 as a where false" },
     .{ .name = "the catalog query", .sql = @import("postgres/sql.zig").catalog },
     .{ .name = "the catalog functions query", .sql = @import("postgres/sql.zig").catalog_functions },
+    .{ .name = "the callable functions query", .sql = @import("postgres/sql.zig").callable_functions },
     .{ .name = "a syntax error points at its line", .sql = "select 1;\nselec 2" },
     .{ .name = "a runtime error", .sql = "select 1/0" },
     .{ .name = "a missing table", .sql = "select * from zetta_oracle.nope" },
