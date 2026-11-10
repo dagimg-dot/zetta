@@ -4,7 +4,8 @@
 #
 #   docker build -t zetta --build-arg ZETTA_COMMIT=$(git rev-parse --short HEAD) .
 #   docker buildx build --platform linux/amd64,linux/arm64 -t zetta .
-#   docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://... zetta
+#   export ZETTA_TOKEN=$(openssl rand -hex 16)
+#   docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN -e DATABASE_URL=postgres://... zetta
 #
 # The container listens on 0.0.0.0, so zetta needs ZETTA_TOKEN to start. Plain HTTP is accepted
 # below because `docker run -p` decides what is reachable; publish on 127.0.0.1 unless a TLS proxy

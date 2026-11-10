@@ -81,7 +81,7 @@ fn index(ctx: *const Context, arena: Allocator, req: *Request, target: http.Targ
     if (try http.queryParam(arena, target.query, "token")) |given| {
         if (!auth.matches(given, ctx.token)) return fail(req, .unauthorized, "unauthorized", "wrong token");
         // Trade the token for a cookie and drop it from the address bar.
-        var buf: [128]u8 = undefined;
+        var buf: [auth.set_cookie_max]u8 = undefined;
         try req.respond("", .{ .status = .see_other, .extra_headers = &.{
             .{ .name = "location", .value = "/" },
             .{ .name = "set-cookie", .value = auth.setCookie(&buf, ctx.port, ctx.token) },

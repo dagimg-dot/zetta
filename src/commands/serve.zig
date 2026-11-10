@@ -38,7 +38,8 @@ pub const Args = struct {
         .{ .field = "token", .env = &.{"ZETTA_TOKEN"}, .help =
         \\Access token instead of a random one
         \\
-        \\Useful in containers, where the URL is not visible.
+        \\Useful in containers, where the URL is not visible. 16 to 64 letters, digits and
+        \\- . _ ~, since it travels in a URL and a cookie; `openssl rand -hex 16` makes one.
         },
         .{ .field = "allow_plain_http", .env = &.{"ZETTA_ALLOW_PLAIN_HTTP"}, .help =
         \\Accept serving unencrypted on a non-loopback address
@@ -72,6 +73,9 @@ pub const Args = struct {
 };
 
 pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
+    if (args.token) |given| {
+        if (server.auth.tokenProblem(given)) |why| return ctx.usageError("the token {s}; `openssl rand -hex 16` makes one that works", .{why});
+    }
     switch (exposure(args)) {
         .fine, .plain_http_accepted => {},
         .needs_token => return ctx.usageError("--host {s} is reachable from other machines; set --token (or ZETTA_TOKEN) as well", .{args.host}),

@@ -25,9 +25,27 @@ pub fn matches(given: []const u8, token: []const u8) bool {
     return diff == 0;
 }
 
-pub fn setCookie(buf: []u8, port: u16, token: []const u8) []const u8 {
+pub const token_min = 16;
+pub const token_max = 64;
+
+/// Why a token given at startup cannot be used, or null. It travels in a URL and a cookie, so it
+/// keeps to the characters both carry unchanged, and it has to be long enough not to be guessed.
+pub fn tokenProblem(token: []const u8) ?[]const u8 {
+    if (token.len < token_min) return std.fmt.comptimePrint("is shorter than {d} characters", .{token_min});
+    if (token.len > token_max) return std.fmt.comptimePrint("is longer than {d} characters", .{token_max});
+    for (token) |ch| {
+        if (!std.ascii.isAlphanumeric(ch) and std.mem.indexOfScalar(u8, "-._~", ch) == null) return "may only use letters, digits and - . _ ~";
+    }
+    return null;
+}
+
+const cookie_attributes = "; Path=/; HttpOnly; SameSite=Strict";
+pub const set_cookie_max = cookie_name_max + "=".len + token_max + cookie_attributes.len;
+
+pub fn setCookie(buf: *[set_cookie_max]u8, port: u16, token: []const u8) []const u8 {
     var name_buf: [cookie_name_max]u8 = undefined;
-    return std.fmt.bufPrint(buf, "{s}={s}; Path=/; HttpOnly; SameSite=Strict", .{ cookieName(&name_buf, port), token }) catch unreachable;
+    // Fits: the token is either the random one or passed `tokenProblem` at startup.
+    return std.fmt.bufPrint(buf, "{s}={s}" ++ cookie_attributes, .{ cookieName(&name_buf, port), token }) catch unreachable;
 }
 
 pub fn isLoopback(host: []const u8) bool {
@@ -57,6 +75,25 @@ test "each port gets its own cookie, so two zettas on one host keep their sessio
     var b: [cookie_name_max]u8 = undefined;
     try std.testing.expectEqualStrings("zetta_1993", cookieName(&a, 1993));
     try std.testing.expectEqualStrings("zetta_65535", cookieName(&b, 65535));
-    var buf: [128]u8 = undefined;
+    var buf: [set_cookie_max]u8 = undefined;
     try std.testing.expectEqualStrings("zetta_1994=abc; Path=/; HttpOnly; SameSite=Strict", setCookie(&buf, 1994, "abc"));
+}
+
+test "a given token must be 16 to 64 URL-safe characters" {
+    try testing.expect(tokenProblem("") != null);
+    try testing.expect(tokenProblem("change-me") != null);
+    try testing.expect(tokenProblem("a" ** 65) != null);
+    try testing.expect(tokenProblem("abcdefghijklmnop+") != null);
+    try testing.expect(tokenProblem("abcdefghijklmnop;") != null);
+    try testing.expectEqual(null, tokenProblem("0123456789abcdef"));
+    try testing.expectEqual(null, tokenProblem("A-b.C_d~" ** 8));
+}
+
+test "the longest allowed token still fits the cookie" {
+    var buf: [set_cookie_max]u8 = undefined;
+    try testing.expect(std.mem.indexOf(u8, setCookie(&buf, 65535, "x" ** token_max), "SameSite=Strict") != null);
+}
+
+test "the random token passes the rules for a given one" {
+    try testing.expectEqual(null, tokenProblem(&randomToken(testing.io)));
 }

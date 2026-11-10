@@ -99,14 +99,15 @@ docker build -t zetta --build-arg ZETTA_COMMIT=$(git rev-parse --short HEAD) .
 ```
 
 ```sh
-docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN=change-me -e DATABASE_URL=postgres://user:password@db:5432/app zetta
+export ZETTA_TOKEN=$(openssl rand -hex 16)
+docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN -e DATABASE_URL=postgres://user:password@db:5432/app zetta
 ```
 
 ```sh
-docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN=change-me -v "$PWD/app.db:/data/app.db:ro" zetta serve /data/app.db --read-only
+docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN -v "$PWD/app.db:/data/app.db:ro" zetta serve /data/app.db --read-only
 ```
 
-Inside the container zetta listens on `0.0.0.0`, so it refuses to start without `ZETTA_TOKEN`. It serves plain HTTP, so publish the port on `127.0.0.1` as above unless a TLS proxy is in front. Open `http://localhost:1993/?token=<your token>`. The CLI works too: `docker run --rm zetta query <dsn> "select 1"`.
+Inside the container zetta listens on `0.0.0.0`, so it refuses to start without `ZETTA_TOKEN`, which must be 16 to 64 letters, digits and `- . _ ~`. It serves plain HTTP, so publish the port on `127.0.0.1` as above unless a TLS proxy is in front. Open `http://localhost:1993/?token=$ZETTA_TOKEN`. The CLI works too: `docker run --rm zetta query <dsn> "select 1"`.
 
 ## Shell completion
 
