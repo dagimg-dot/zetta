@@ -659,6 +659,8 @@ test "postgres read-only mode cannot be switched off from SQL" {
         try std.fmt.allocPrint(arena, "set default_transaction_read_only = off; {s}", .{insert}),
         try std.fmt.allocPrint(arena, "do $$ begin perform set_config('default_transaction_read_only', 'off', false); commit; {s}; end $$", .{insert}),
         try std.fmt.allocPrint(arena, "/* hidden */ ; call nothing_{s}()", .{t}),
+        // Postgres ends a line comment at a carriage return too.
+        try std.fmt.allocPrint(arena, "--\rdo $$ begin perform set_config('default_transaction_read_only', 'off', false); commit; {s}; end $$", .{insert}),
     };
     for (attempts) |sql| {
         if (ro.query(arena, sql, .{}, &diag)) |_| {

@@ -663,14 +663,15 @@ fn controlsTransactions(text: []const u8) bool {
     return std.ascii.eqlIgnoreCase(word, "do") or std.ascii.eqlIgnoreCase(word, "call");
 }
 
-/// The first word, past whitespace, empty statements and comments, which nest in Postgres.
+/// The first word, past whitespace, empty statements and comments. As in Postgres, block comments
+/// nest and a line comment ends at a carriage return as well as a newline.
 fn leadingWord(text: []const u8) []const u8 {
     var i: usize = 0;
     while (i < text.len) {
         if (std.ascii.isWhitespace(text[i]) or text[i] == ';') {
             i += 1;
         } else if (std.mem.startsWith(u8, text[i..], "--")) {
-            i = std.mem.indexOfScalarPos(u8, text, i, '\n') orelse text.len;
+            i = std.mem.indexOfAnyPos(u8, text, i, "\r\n") orelse text.len;
         } else if (std.mem.startsWith(u8, text[i..], "/*")) {
             var depth: usize = 0;
             while (i < text.len) {
@@ -721,5 +722,7 @@ test "DO and CALL are found past comments and empty statements" {
     try std.testing.expect(!controlsTransactions("select 'do'"));
     try std.testing.expect(!controlsTransactions("do_things()"));
     try std.testing.expect(!controlsTransactions("-- do"));
+    try std.testing.expect(controlsTransactions("--\rdo $$ begin commit; end $$"));
+    try std.testing.expect(controlsTransactions("-- note\r\ncall p()"));
     try std.testing.expect(!controlsTransactions(""));
 }
