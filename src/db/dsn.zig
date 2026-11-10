@@ -42,30 +42,60 @@ pub fn parse(arena: Allocator, text: []const u8) ParseError!Dsn {
     return error.UnknownScheme;
 }
 
-/// Writes `text` with any password replaced by `***`.
+/// Writes `text` with every password replaced by `***`: the one in a URI's user info, and each
+/// `password` or `sslpassword` value in a URI query or a keyword string, quoted or not.
 pub fn redact(text: []const u8, w: *std.Io.Writer) std.Io.Writer.Error!void {
+    var done: usize = 0;
     if (mem.indexOf(u8, text, "://")) |scheme_end| {
         const auth_start = scheme_end + 3;
         const rest = text[auth_start..];
-        const host_end = mem.indexOfScalar(u8, rest, '/') orelse rest.len;
+        const host_end = mem.indexOfAny(u8, rest, "/?") orelse rest.len;
         if (mem.lastIndexOfScalar(u8, rest[0..host_end], '@')) |at| {
             if (mem.indexOfScalar(u8, rest[0..at], ':')) |colon| {
                 try w.writeAll(text[0 .. auth_start + colon + 1]);
                 try w.writeAll("***");
-                try w.writeAll(text[auth_start + at ..]);
-                return;
+                done = auth_start + at;
             }
         }
     }
-    if (mem.indexOf(u8, text, "password=")) |p| {
-        const value_start = p + "password=".len;
-        const value_end = mem.indexOfScalarPos(u8, text, value_start, ' ') orelse text.len;
-        try w.writeAll(text[0..value_start]);
+    while (passwordValue(text, done)) |value| {
+        try w.writeAll(text[done..value.start]);
         try w.writeAll("***");
-        try w.writeAll(text[value_end..]);
-        return;
+        done = value.end;
     }
-    try w.writeAll(text);
+    try w.writeAll(text[done..]);
+}
+
+/// `text` as `redact` writes it.
+pub fn redactAlloc(arena: Allocator, text: []const u8) Allocator.Error![]const u8 {
+    var out: std.Io.Writer.Allocating = .init(arena);
+    redact(text, &out.writer) catch return error.OutOfMemory;
+    return out.written();
+}
+
+/// Where the next password value at or after `from` starts and ends.
+fn passwordValue(text: []const u8, from: usize) ?struct { start: usize, end: usize } {
+    var pos = from;
+    while (mem.indexOfPos(u8, text, pos, "password")) |k| {
+        pos = k + 1;
+        const key_start = if (k >= 3 and mem.eql(u8, text[k - 3 .. k], "ssl")) k - 3 else k;
+        if (key_start > 0 and mem.indexOfScalar(u8, " \t\r\n?&", text[key_start - 1]) == null) continue;
+        var v = k + "password".len;
+        while (v < text.len and std.ascii.isWhitespace(text[v])) v += 1;
+        if (v >= text.len or text[v] != '=') continue;
+        v += 1;
+        while (v < text.len and std.ascii.isWhitespace(text[v])) v += 1;
+        const quoted = v < text.len and text[v] == '\'';
+        var e = if (quoted) v + 1 else v;
+        while (e < text.len) : (e += 1) {
+            if (text[e] == '\\') {
+                e += 1;
+            } else if (if (quoted) text[e] == '\'' else (std.ascii.isWhitespace(text[e]) or text[e] == '&')) break;
+        }
+        if (quoted and e < text.len) e += 1;
+        return .{ .start = v, .end = @min(e, text.len) };
+    }
+    return null;
 }
 
 fn expectKind(text: []const u8, comptime kind: std.meta.Tag(Dsn), path: []const u8) !void {
@@ -113,4 +143,18 @@ test "passwords never survive redaction" {
     try expectRedacted("host=h password=hunter2 dbname=x", "host=h password=*** dbname=x");
     try expectRedacted("postgres://jd@host/db", "postgres://jd@host/db");
     try expectRedacted("./app.db", "./app.db");
+}
+
+test "passwords in every connection string spelling are redacted" {
+    try expectRedacted("host=h password = hunter2 dbname=x", "host=h password = *** dbname=x");
+    try expectRedacted("host=h password='two words' dbname=x", "host=h password=*** dbname=x");
+    try expectRedacted("host=h password='it\\'s here' dbname=x", "host=h password=*** dbname=x");
+    try expectRedacted("host=h password=a\\ b dbname=x", "host=h password=*** dbname=x");
+    try expectRedacted("password=first", "password=***");
+    try expectRedacted("sslkey=k sslpassword=keypass", "sslkey=k sslpassword=***");
+    try expectRedacted("postgres://u:p@h/db?password=q&sslmode=require", "postgres://u:***@h/db?password=***&sslmode=require");
+    try expectRedacted("postgres://u@h?password=q", "postgres://u@h?password=***");
+    try expectRedacted("postgre://u:secretpw@h/db", "postgre://u:***@h/db");
+    try expectRedacted("host=h passfile=/x/.pgpass", "host=h passfile=/x/.pgpass");
+    try expectRedacted("host=h mypassword=x", "host=h mypassword=x");
 }

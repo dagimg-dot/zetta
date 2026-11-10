@@ -41,7 +41,7 @@ pub fn openDatabase(ctx: *Context, text: []const u8, options: db.OpenOptions) un
         error.Empty => ctx.usageError("the database is empty", .{}),
         error.UnknownScheme => ctx.usageError(
             "cannot tell which database '{s}' is; use postgres://..., sqlite:<path> or a .db/.sqlite file",
-            .{text},
+            .{db.dsn.redactAlloc(ctx.arena, text) catch return .{ .exit = ctx.fail("out of memory", .{}) }},
         ),
     } };
     var diag: db.Diagnostic = .{};

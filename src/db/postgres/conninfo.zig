@@ -5,6 +5,7 @@
 const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const dsn = @import("../dsn.zig");
 
 pub const SslMode = enum {
     disable,
@@ -119,11 +120,11 @@ fn parseUri(arena: Allocator, uri: []const u8, prefix_len: usize, err: *ErrorTex
         const at = i + rel_at;
         const userinfo = uri[i..at];
         if (mem.indexOfScalar(u8, userinfo, ':')) |colon| {
-            const user = try decode(arena, userinfo[0..colon], err);
+            const user = try decode(arena, userinfo[0..colon], .public, err);
             if (user.len > 0) cfg.user = user;
-            cfg.password = try decode(arena, userinfo[colon + 1 ..], err);
+            cfg.password = try decode(arena, userinfo[colon + 1 ..], .secret, err);
         } else {
-            const user = try decode(arena, userinfo, err);
+            const user = try decode(arena, userinfo, .public, err);
             if (user.len > 0) cfg.user = user;
         }
         i = at + 1;
@@ -131,32 +132,32 @@ fn parseUri(arena: Allocator, uri: []const u8, prefix_len: usize, err: *ErrorTex
 
     if (i < uri.len and uri[i] == '[') {
         const close = mem.indexOfScalarPos(u8, uri, i + 1, ']') orelse
-            return err.set("end of string reached when looking for matching \"]\" in IPv6 host address in URI: \"{s}\"", .{uri});
-        if (close == i + 1) return err.set("IPv6 host address may not be empty in URI: \"{s}\"", .{uri});
+            return err.set("end of string reached when looking for matching \"]\" in IPv6 host address in URI: \"{s}\"", .{try dsn.redactAlloc(arena, uri)});
+        if (close == i + 1) return err.set("IPv6 host address may not be empty in URI: \"{s}\"", .{try dsn.redactAlloc(arena, uri)});
         cfg.host = uri[i + 1 .. close];
         i = close + 1;
         if (i < uri.len and mem.indexOfScalar(u8, ":/?,", uri[i]) == null) {
-            return err.set("unexpected character \"{c}\" at position {d} in URI (expected \":\" or \"/\"): \"{s}\"", .{ uri[i], i + 1, uri });
+            return err.set("unexpected character \"{c}\" at position {d} in URI (expected \":\" or \"/\"): \"{s}\"", .{ uri[i], i + 1, try dsn.redactAlloc(arena, uri) });
         }
     } else {
         const end = mem.indexOfAnyPos(u8, uri, i, ":/?,") orelse uri.len;
-        const host = try decode(arena, uri[i..end], err);
+        const host = try decode(arena, uri[i..end], .public, err);
         if (host.len > 0) cfg.host = host;
         i = end;
     }
 
-    if (i < uri.len and uri[i] == ',') return err.set("multiple hosts are not supported: \"{s}\"", .{uri});
+    if (i < uri.len and uri[i] == ',') return err.set("multiple hosts are not supported: \"{s}\"", .{try dsn.redactAlloc(arena, uri)});
 
     if (i < uri.len and uri[i] == ':') {
         const end = mem.indexOfAnyPos(u8, uri, i + 1, "/?") orelse uri.len;
-        const port = try decode(arena, uri[i + 1 .. end], err);
+        const port = try decode(arena, uri[i + 1 .. end], .public, err);
         if (port.len > 0) cfg.port = port;
         i = end;
     }
 
     if (i < uri.len and uri[i] == '/') {
         const end = mem.indexOfScalarPos(u8, uri, i + 1, '?') orelse uri.len;
-        const db = try decode(arena, uri[i + 1 .. end], err);
+        const db = try decode(arena, uri[i + 1 .. end], .public, err);
         if (db.len > 0) cfg.dbname = db;
         i = end;
     }
@@ -169,16 +170,25 @@ fn parseUri(arena: Allocator, uri: []const u8, prefix_len: usize, err: *ErrorTex
                 return err.set("missing key/value separator \"=\" in URI query parameter: \"{s}\"", .{param});
             if (mem.indexOfScalarPos(u8, param, eq + 1, '=') != null)
                 return err.set("extra key/value separator \"=\" in URI query parameter: \"{s}\"", .{param[0..eq]});
-            const key = try decode(arena, param[0..eq], err);
-            const value = try decode(arena, param[eq + 1 ..], err);
+            const key = try decode(arena, param[0..eq], .public, err);
+            const value = try decode(arena, param[eq + 1 ..], if (isSecret(key)) .secret else .public, err);
             if (!setOption(&cfg, key, value)) return err.set("invalid URI query parameter: \"{s}\"", .{key});
         }
     }
     return cfg;
 }
 
-fn decode(arena: Allocator, text: []const u8, err: *ErrorText) Error![]const u8 {
+const Exposure = enum { public, secret };
+
+fn isSecret(key: []const u8) bool {
+    return mem.eql(u8, key, "password") or mem.eql(u8, key, "sslpassword");
+}
+
+/// Percent-decodes one part of a URI. An error quotes the part, as libpq does, unless it is a
+/// password: the message reaches the terminal and the server log.
+fn decode(arena: Allocator, text: []const u8, exposure: Exposure, err: *ErrorText) Error![]const u8 {
     if (mem.indexOfScalar(u8, text, '%') == null) return text;
+    const shown = if (exposure == .secret) "***" else text;
     const out = try arena.alloc(u8, text.len);
     var n: usize = 0;
     var i: usize = 0;
@@ -188,10 +198,10 @@ fn decode(arena: Allocator, text: []const u8, err: *ErrorText) Error![]const u8 
             n += 1;
             continue;
         }
-        if (i + 2 >= text.len) return err.set("invalid percent-encoded token: \"{s}\"", .{text});
+        if (i + 2 >= text.len) return err.set("invalid percent-encoded token: \"{s}\"", .{shown});
         const byte = std.fmt.parseInt(u8, text[i + 1 .. i + 3], 16) catch
-            return err.set("invalid percent-encoded token: \"{s}\"", .{text});
-        if (byte == 0) return err.set("forbidden value %00 in percent-encoded value: \"{s}\"", .{text});
+            return err.set("invalid percent-encoded token: \"{s}\"", .{shown});
+        if (byte == 0) return err.set("forbidden value %00 in percent-encoded value: \"{s}\"", .{shown});
         out[n] = byte;
         n += 1;
         i += 2;
@@ -366,6 +376,25 @@ test "every libpq URI case parses to libpq's answer" {
         }
     }
     try testing.expectEqual(0, failures);
+}
+
+test "a connection string error never quotes a password" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const cases = [_][]const u8{
+        "postgres://u:pa%ss@h/db",
+        "postgres://u:pa%00ss@h/db",
+        "postgres://u@h/db?password=pa%ss",
+        "postgres://u:hunter2@h1,h2/db",
+        "postgres://u:hunter2@[::1]z/db",
+        "postgres://u:hunter2@[]/db",
+    };
+    for (cases) |uri| {
+        var err: ErrorText = .{};
+        try testing.expectError(error.InvalidConnInfo, parse(arena_state.allocator(), uri, &err));
+        try testing.expect(mem.indexOf(u8, err.message(), "pa%") == null);
+        try testing.expect(mem.indexOf(u8, err.message(), "hunter2") == null);
+    }
 }
 
 test "keyword strings handle quoting and escapes" {
