@@ -20,7 +20,36 @@ pub fn respondJson(req: *Request, status: std.http.Status, body: []const u8) !vo
 
 pub fn respondError(req: *Request, status: std.http.Status, code: []const u8, message: []const u8) !void {
     var buf: [16 * 1024]u8 = undefined;
-    try respondJson(req, status, errorBody(&buf, code, message));
+    try req.respond(errorBody(&buf, code, message), .{
+        .status = status,
+        .keep_alive = bodyDone(req),
+        .extra_headers = &json_headers,
+    });
+}
+
+/// Whether the connection can take another request: only when this one's body was read to the
+/// end or it never had one. Otherwise the rest of the body would be read as the next request, or
+/// discarded at whatever length the client claimed before the answer goes out.
+fn bodyDone(req: *const Request) bool {
+    return switch (req.server.reader.state) {
+        .ready => true,
+        .received_head => !req.head.method.requestHasBody(),
+        else => false,
+    };
+}
+
+/// Why the request cannot be read safely, or null. std.http asserts on a body with no length and
+/// on an unknown expectation, and either would stop the whole server.
+pub fn framingProblem(req: *const Request) ?struct { status: std.http.Status, code: []const u8, message: []const u8 } {
+    if (req.head.expect) |expect| {
+        if (!std.ascii.eqlIgnoreCase(expect, "100-continue")) {
+            return .{ .status = .expectation_failed, .code = "bad_request", .message = "the only Expect zetta knows is 100-continue" };
+        }
+    }
+    if (req.head.method.requestHasBody() and req.head.content_length == null and req.head.transfer_encoding == .none) {
+        return .{ .status = .length_required, .code = "bad_request", .message = "send the body with a Content-Length" };
+    }
+    return null;
 }
 
 /// The JSON for an error. Escaping can grow a message several times over, so one that does not

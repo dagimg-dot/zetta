@@ -49,6 +49,12 @@ fn route(method: std.http.Method, path: []const u8) Route {
 
 /// Returns the status sent, for the access log.
 pub fn handle(ctx: *const Context, arena: Allocator, req: *Request) !std.http.Status {
+    if (http.framingProblem(req)) |no| {
+        // Answered without reading the body, which closes the connection; std.http would
+        // otherwise refuse to write anything while an expectation it does not know is pending.
+        req.head.expect = null;
+        return fail(req, no.status, no.code, no.message);
+    }
     const target = http.Target.parse(req.head.target);
     if (guard.refusal(req, ctx.allowed_hosts, target.path)) |no| return fail(req, .forbidden, no.code, no.message);
     const r = route(req.head.method, target.path);
@@ -282,7 +288,8 @@ fn query(ctx: *const Context, arena: Allocator, req: *Request, q: []const u8) !s
         if (len > http.max_body) return fail(req, .payload_too_large, "too_large", "the SQL is over 1 MiB");
     }
     var body_buf: [4096]u8 = undefined;
-    const reader = req.readerExpectNone(&body_buf);
+    // curl sends `Expect: 100-continue` on its own for larger bodies and waits for the go-ahead.
+    const reader = try req.readerExpectContinue(&body_buf);
     const sql = reader.allocRemaining(arena, .limited(http.max_body)) catch |err| switch (err) {
         error.StreamTooLong => return fail(req, .payload_too_large, "too_large", "the SQL is over 1 MiB"),
         else => return fail(req, .bad_request, "bad_request", "could not read the request body"),
@@ -389,7 +396,9 @@ fn testSend(ctx: *const Context, arena: Allocator, raw: []const u8) !Response {
     var req = try server.receiveHead();
     const status = try handle(ctx, arena, &req);
     try out.writer.flush();
-    const written = out.written();
+    const interim = "HTTP/1.1 100 Continue\r\n\r\n";
+    const all = out.written();
+    const written = if (std.mem.startsWith(u8, all, interim)) all[interim.len..] else all;
     const split = std.mem.indexOf(u8, written, "\r\n\r\n") orelse return error.TestNoBody;
     const head = written[0..split];
     const payload = written[split + 4 ..];
@@ -614,6 +623,67 @@ test "a browse past the statement timeout is a 504 that names the budget" {
     try testing.expectEqual(std.http.Status.gateway_timeout, res.status);
     try testing.expect(std.mem.indexOf(u8, res.body, "\"timeout\"") != null);
     try testing.expect(std.mem.indexOf(u8, res.body, "20 ms") != null);
+}
+
+test "a POST with no length is refused and closed, signed in or not" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const arena = app.arena_state.allocator();
+    for ([_][]const u8{ "", "cookie: zetta_0=t\r\n" }) |cookie| {
+        const res = try testSend(&app.ctx, arena, try std.fmt.allocPrint(arena, "POST /api/query HTTP/1.1\r\nhost: 127.0.0.1\r\n{s}\r\n", .{cookie}));
+        try testing.expectEqual(.length_required, res.status);
+        try testing.expectEqualStrings("close", res.header("connection").?);
+    }
+}
+
+test "a query sent with Expect: 100-continue runs" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.send("POST", "/api/query", "host: 127.0.0.1\r\nexpect: 100-continue\r\n", "select 41 + 1");
+    try testing.expectEqual(.ok, res.status);
+    try testing.expect(std.mem.indexOf(u8, res.body, "\"42\"") != null);
+}
+
+test "an unknown expectation is a 417, not a dropped connection" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.send("POST", "/api/query", "host: 127.0.0.1\r\nexpect: something-else\r\n", "select 1");
+    try testing.expectEqual(.expectation_failed, res.status);
+}
+
+test "a request refused before its body is read closes the connection" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const arena = app.arena_state.allocator();
+    const res = try testSend(&app.ctx, arena, "POST /api/query HTTP/1.1\r\nhost: 127.0.0.1\r\ncontent-length: 8\r\n\r\nselect 1");
+    try testing.expectEqual(.unauthorized, res.status);
+    try testing.expectEqualStrings("close", res.header("connection").?);
+}
+
+test "a chunked body over the limit closes the connection rather than reading its tail as a request" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const arena = app.arena_state.allocator();
+    const size = http.max_body + 1;
+    const body = try arena.alloc(u8, size);
+    @memset(body, ' ');
+    const res = try testSend(&app.ctx, arena, try std.fmt.allocPrint(arena, "POST /api/query HTTP/1.1\r\nhost: 127.0.0.1\r\ncookie: zetta_0=t\r\ntransfer-encoding: chunked\r\n\r\n{x}\r\n{s}\r\n0\r\n\r\n", .{ size, body }));
+    try testing.expectEqual(.payload_too_large, res.status);
+    try testing.expectEqualStrings("close", res.header("connection").?);
+}
+
+test "a signed-in error after the body was read keeps the connection" {
+    var app: TestApp = undefined;
+    try app.init();
+    defer app.deinit();
+    const res = try app.post("/api/query", "selec 1");
+    try testing.expectEqual(.bad_request, res.status);
+    try testing.expectEqual(null, res.header("connection"));
 }
 
 test "a name repointed at this machine gets nothing, even with the right token" {
