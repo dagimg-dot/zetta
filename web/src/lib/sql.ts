@@ -380,9 +380,13 @@ function destroyedBy(
 		if (word(i) === "only") i++;
 		const r = relation(i);
 		if (!r) return out;
+		// COLUMN is optional after DROP; these are the other things an ALTER TABLE can drop.
+		const notColumns = ["constraint", "default", "not", "identity", "expression"];
 		for (i = r.next; i < sig.length; i++) {
-			if (word(i) !== "drop" || word(i + 1) !== "column") continue;
-			add(`Drops column ${text(pastIfExists(i + 2))} of`, r.target, undefined);
+			if (word(i) !== "drop" || notColumns.includes(word(i + 1))) continue;
+			const at = pastIfExists(word(i + 1) === "column" ? i + 2 : i + 1);
+			if (!sig[at]) continue;
+			add(`Drops column ${text(at)} of`, r.target, undefined);
 		}
 		return out;
 	}

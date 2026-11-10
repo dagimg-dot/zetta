@@ -258,6 +258,16 @@ describe("statements that can destroy data", () => {
 		expect(brief("alter table t alter c drop default")).toEqual([]);
 	});
 
+	test("COLUMN is optional, so a bare DROP of a name drops that column", () => {
+		expect(brief("alter table users drop email")).toEqual(["Drops column email of users"]);
+		expect(brief("ALTER TABLE users DROP IF EXISTS email")).toEqual([
+			"Drops column email of users",
+		]);
+		expect(brief('alter table t drop "Note"', "sqlite")).toEqual(['Drops column "Note" of t']);
+		expect(brief("alter table t alter c drop not null, alter d drop expression")).toEqual([]);
+		expect(brief("alter table t alter c drop identity if exists")).toEqual([]);
+	});
+
 	test("a write inside or after a WITH is found", () => {
 		expect(brief("with d as (delete from t) select * from d")).toEqual(["Deletes every row of t"]);
 		expect(brief("with x as (select 1) update t set a = 1")).toEqual(["Changes every row of t"]);
