@@ -3,6 +3,7 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
 const db = @import("db");
+const utf8 = @import("utf8.zig");
 
 const max_cell = 60;
 
@@ -109,8 +110,10 @@ const Align = enum { left, right, center };
 
 /// Writes `v` in `width` columns, with newlines and tabs made visible and
 /// long values cut with an ellipsis. The last column gets no trailing spaces.
+/// Bytes that start no valid character are shown as U+FFFD.
 fn pad(w: *Writer, v: []const u8, width: usize, alignment: Align, last: bool) Writer.Error!void {
-    const shown = displayWidth(v);
+    const total = utf8.count(v);
+    const shown = @min(total, max_cell);
     const gap = width - shown;
     const before = switch (alignment) {
         .left => 0,
@@ -118,26 +121,30 @@ fn pad(w: *Writer, v: []const u8, width: usize, alignment: Align, last: bool) Wr
         .center => gap / 2,
     };
     try w.splatByteAll(' ', before);
-    var count: usize = 0;
-    var it = std.unicode.Utf8View.initUnchecked(v).iterator();
-    while (it.nextCodepointSlice()) |cp| {
-        if (count == max_cell - 1 and displayWidth(v) == max_cell) {
+    var i: usize = 0;
+    var n: usize = 0;
+    while (i < v.len) : (n += 1) {
+        if (n == max_cell - 1 and total > max_cell) {
             try w.writeAll("…");
             break;
         }
-        switch (cp[0]) {
+        const ch = utf8.next(v[i..]) orelse {
+            try w.writeAll(utf8.replacement);
+            i += 1;
+            continue;
+        };
+        i += ch.len;
+        switch (ch[0]) {
             '\n' => try w.writeAll("↵"),
             '\t', '\r' => try w.writeByte(' '),
-            else => try w.writeAll(cp),
+            else => try w.writeAll(ch),
         }
-        count += 1;
     }
     if (!last) try w.splatByteAll(' ', gap - before);
 }
 
 fn displayWidth(v: []const u8) usize {
-    const n = std.unicode.utf8CountCodepoints(v) catch v.len;
-    return @min(n, max_cell);
+    return @min(utf8.count(v), max_cell);
 }
 
 fn isNumeric(type_name: []const u8) bool {
@@ -204,4 +211,34 @@ test "long cells are cut to the cell width" {
     var w: Writer = .fixed(&buf);
     try pad(&w, "x" ** 100, max_cell, .left, false);
     try testing.expectEqual(max_cell, try std.unicode.utf8CountCodepoints(w.buffered()));
+    try testing.expect(std.mem.endsWith(u8, w.buffered(), "…"));
+}
+
+test "a cell exactly the cell width is shown whole" {
+    var buf: [256]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    try pad(&w, "x" ** max_cell, max_cell, .left, true);
+    try testing.expectEqualStrings("x" ** max_cell, w.buffered());
+}
+
+test "bytes that are not UTF-8 show as replacement characters and keep the columns aligned" {
+    var buf: [512]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    const rows = [_]db.Row{ &.{"a\xffb"}, &.{"end \xe2"}, &.{"ok"} };
+    try table(&w, .{
+        .columns = &.{.{ .name = "v", .type_name = "text" }},
+        .rows = &rows,
+        .row_count = 3,
+        .truncated = false,
+        .command = "SELECT 3",
+    }, .{});
+    try testing.expectEqualStrings(
+        \\   v
+        \\-------
+        \\ a�b
+        \\ end �
+        \\ ok
+        \\(3 rows)
+        \\
+    , w.buffered());
 }

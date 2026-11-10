@@ -4,6 +4,7 @@ const std = @import("std");
 const Writer = std.Io.Writer;
 const Stringify = std.json.Stringify;
 const db = @import("db");
+const utf8 = @import("utf8.zig");
 
 pub const Meta = struct {
     name: []const u8,
@@ -241,7 +242,7 @@ pub fn resultSet(w: *Writer, rs: db.ResultSet, elapsed_ns: ?u64) Writer.Error!vo
     try s.endArray();
     try s.objectField("rows");
     try s.beginArray();
-    for (rs.rows) |row| try s.write(row);
+    for (rs.rows) |row| try value(&s, row);
     try s.endArray();
     try field(&s, "rowCount", rs.row_count);
     try field(&s, "rowCountExact", rs.row_count_exact);
@@ -283,9 +284,47 @@ pub fn err(w: *Writer, code: []const u8, message: []const u8) Writer.Error!void 
     try s.endObject();
 }
 
-fn field(s: *Stringify, name: []const u8, value: anytype) Writer.Error!void {
+fn field(s: *Stringify, name: []const u8, v: anytype) Writer.Error!void {
     try s.objectField(name);
-    try s.write(value);
+    try value(s, v);
+}
+
+/// As `Stringify.write`, but every string goes through `text`, however deep it sits.
+fn value(s: *Stringify, v: anytype) Writer.Error!void {
+    switch (@typeInfo(@TypeOf(v))) {
+        .optional => return if (v) |inner| value(s, inner) else s.write(null),
+        .pointer => |p| if (p.size == .slice) {
+            if (p.child == u8) return text(s, v);
+            try s.beginArray();
+            for (v) |item| try value(s, item);
+            return s.endArray();
+        },
+        else => {},
+    }
+    return s.write(v);
+}
+
+/// A string as JSON. std writes one that is not valid UTF-8 as an array of numbers, which the UI
+/// cannot show, so each byte that starts no character becomes U+FFFD instead.
+fn text(s: *Stringify, v: []const u8) Writer.Error!void {
+    if (std.unicode.utf8ValidateSlice(v)) return s.write(v);
+    try s.beginWriteRaw();
+    try s.writer.writeByte('"');
+    var start: usize = 0;
+    var i: usize = 0;
+    while (i < v.len) {
+        if (utf8.next(v[i..])) |ch| {
+            i += ch.len;
+            continue;
+        }
+        try Stringify.encodeJsonStringChars(v[start..i], s.options, s.writer);
+        try s.writer.writeAll(utf8.replacement);
+        i += 1;
+        start = i;
+    }
+    try Stringify.encodeJsonStringChars(v[start..], s.options, s.writer);
+    try s.writer.writeByte('"');
+    s.endWriteRaw();
 }
 
 const testing = std.testing;
@@ -478,6 +517,31 @@ test "a count matches the API shape" {
     try count(&w, 4000, 1_230_000);
     try testing.expectEqualStrings(
         \\{"count":4000,"elapsedMs":1.2}
+    , w.buffered());
+}
+
+test "a value that is not UTF-8 is still a string, with the bad bytes replaced" {
+    var buf: [256]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    const rows = [_]db.Row{&.{ "a\xff\"b", "cut \xe2\x82", null }};
+    try resultSet(&w, .{
+        .columns = &.{ .{ .name = "x\xfe", .type_name = "text" }, .{ .name = "y", .type_name = "text" }, .{ .name = "z", .type_name = "text" } },
+        .rows = &rows,
+        .row_count = 1,
+        .truncated = false,
+        .command = "SELECT 1",
+    }, null);
+    try testing.expectEqualStrings(
+        \\{"columns":[{"name":"x�","type":"text"},{"name":"y","type":"text"},{"name":"z","type":"text"}],"rows":[["a�\"b","cut ��",null]],"rowCount":1,"rowCountExact":true,"truncated":false,"truncatedBy":"rows","command":"SELECT 1"}
+    , w.buffered());
+}
+
+test "an error message cut inside a character is still a string" {
+    var buf: [128]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    try err(&w, "db_error", "no such column: caf\xc3");
+    try testing.expectEqualStrings(
+        \\{"error":"db_error","message":"no such column: caf�"}
     , w.buffered());
 }
 

@@ -7,4 +7,5 @@ pub const text = @import("text.zig");
 test {
     _ = @import("json.zig");
     _ = @import("text.zig");
+    _ = @import("utf8.zig");
 }
