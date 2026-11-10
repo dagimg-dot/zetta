@@ -574,6 +574,17 @@ fn run(f: Fixture) !void {
         _ = try a.query(arena, "begin; commit", .{}, &diag);
     }
 
+    // COPY FROM STDIN fails with the reason, as one statement or in a script, and the connection goes on
+    if (a.info().name == .postgres) {
+        const copy = try std.fmt.allocPrint(arena, "copy {s}.items (name) from stdin", .{f.schema});
+        for ([_]types.QueryOptions{ .{}, .{ .exact_count = true } }) |options| {
+            try testing.expectError(error.QueryFailed, a.query(arena, copy, options, &diag));
+            try testing.expect(contains(diag.message(), "COPY FROM STDIN"));
+            const res = try a.query(arena, "select 1", options, &diag);
+            try testing.expectEqualStrings("1", res.rows[0][0].?);
+        }
+    }
+
     // a bad statement is QueryFailed with the database's message
     {
         try testing.expectError(error.QueryFailed, a.query(arena, "selec 1", .{}, &diag));

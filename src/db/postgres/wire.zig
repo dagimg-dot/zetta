@@ -135,7 +135,11 @@ pub const Out = struct {
         try o.int32(gpa, @bitCast(max_rows));
         o.finish(at);
 
-        at = try o.begin(gpa, 'S');
+        try o.sync(gpa);
+    }
+
+    pub fn sync(o: *Out, gpa: Allocator) Allocator.Error!void {
+        const at = try o.begin(gpa, 'S');
         o.finish(at);
     }
 

@@ -540,6 +540,7 @@ fn exec(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param,
     var cut_by_bytes = false;
     var failure: ?Error = null;
     var as_script = false;
+    var copy_refused = false;
 
     while (true) {
         const msg = st.read() catch return lost(st, diag);
@@ -586,7 +587,12 @@ fn exec(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param,
             },
             'E' => {
                 const multiple = wire.Notice.parse(msg.body).multipleCommands();
-                if (multiple and script == .fall_back) {
+                if (copy_refused) {
+                    // Postgres reports the refusal below as a cancelled query, which reads as a timeout.
+                    copy_refused = false;
+                    diag.set("COPY FROM STDIN needs data from the client, which zetta has no way to send; use INSERT, or COPY FROM a file on the server");
+                    failure = error.QueryFailed;
+                } else if (multiple and script == .fall_back) {
                     as_script = true;
                 } else if (multiple and script == .refuse) {
                     diag.set("read-only mode runs one statement at a time");
@@ -597,7 +603,11 @@ fn exec(self: *Conn, arena: Allocator, text: []const u8, params: ?[]const Param,
             },
             'G' => {
                 st.out.copyFail(st.gpa, "COPY FROM STDIN is not supported by zetta") catch return error.OutOfMemory;
+                // Postgres ignores a Sync that arrives while it waits for data, as the one sent with
+                // the query did, and after the failure it waits for another before it answers.
+                if (params != null) st.out.sync(st.gpa) catch return error.OutOfMemory;
                 st.send() catch return lost(st, diag);
+                copy_refused = true;
             },
             'H', 'd', 'c' => {},
             'W' => return protocolError(st, diag, 'W'),
