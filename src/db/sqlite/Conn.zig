@@ -357,6 +357,46 @@ test "identifiers are quoted only when they need it" {
     try std.testing.expectEqualStrings("\"two words\"", try quoteIfNeeded(arena, "two words"));
 }
 
+fn testConn() !Conn {
+    var diag: Diagnostic = .{};
+    return connect(.{ .path = ":memory:", .uri = false, .read_only = false }, &diag);
+}
+
+/// The detail lines of the plan SQLite picks for `sql`, joined by semicolons.
+fn testPlan(conn: *Conn, buf: []u8, sql: [:0]const u8) ![]const u8 {
+    var stmt: ?*c.sqlite3_stmt = null;
+    if (c.sqlite3_prepare_v2(conn.raw, sql.ptr, -1, &stmt, null) != c.SQLITE_OK) return error.TestPrepare;
+    defer _ = c.sqlite3_finalize(stmt);
+    var w: std.Io.Writer = .fixed(buf);
+    while (c.sqlite3_step(stmt) == c.SQLITE_ROW) try w.print("{s};", .{std.mem.span(c.sqlite3_column_text(stmt, 3))});
+    return w.buffered();
+}
+
+test "indexed BETWEEN, OR and LIKE prefix filters search the index instead of scanning" {
+    var conn = try testConn();
+    defer conn.close();
+    try std.testing.expectEqual(c.SQLITE_OK, c.sqlite3_exec(conn.raw,
+        \\create table t (a integer, b integer, name text collate nocase);
+        \\create index t_a on t (a);
+        \\create index t_b on t (b);
+        \\create index t_name on t (name);
+    , null, null, null));
+    var buf: [512]u8 = undefined;
+    try std.testing.expectStringStartsWith(try testPlan(&conn, &buf, "explain query plan select * from t where a between 1 and 2"), "SEARCH");
+    try std.testing.expectStringStartsWith(try testPlan(&conn, &buf, "explain query plan select * from t where a = 1 or b = 2"), "MULTI-INDEX OR");
+    try std.testing.expectStringStartsWith(try testPlan(&conn, &buf, "explain query plan select * from t where name like 'ab%'"), "SEARCH");
+}
+
+test "VACUUM works on a table with a generated column" {
+    var conn = try testConn();
+    defer conn.close();
+    try std.testing.expectEqual(c.SQLITE_OK, c.sqlite3_exec(conn.raw,
+        \\create table g (x integer, y integer generated always as (x * 2));
+        \\insert into g (x) values (1);
+        \\vacuum;
+    , null, null, null));
+}
+
 test "the leading keyword skips whitespace" {
     try std.testing.expectEqualStrings("update", leadingKeyword("\n  update t set x = 1"));
 }

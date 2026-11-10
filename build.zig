@@ -181,11 +181,9 @@ fn addSqlite(
             "-DSQLITE_OMIT_SEH",
             "-DSQLITE_UNTESTABLE",
             "-DSQLITE_OMIT_SHARED_CACHE",
-            "-DSQLITE_OMIT_XFER_OPT",
-            "-DSQLITE_OMIT_OR_OPTIMIZATION",
-            "-DSQLITE_OMIT_BETWEEN_OPTIMIZATION",
-            "-DSQLITE_OMIT_LIKE_OPTIMIZATION",
-            "-DSQLITE_OMIT_TRUNCATE_OPTIMIZATION",
+            // The OR, BETWEEN, LIKE, TRUNCATE and XFER optimisations stay in. Without them indexed
+            // queries become full scans and VACUUM fails on a table with a generated column, all to
+            // save about 12 KB.
             // mmap is off by default anyway; this drops its code.
             "-DSQLITE_MAX_MMAP_SIZE=0",
         },
