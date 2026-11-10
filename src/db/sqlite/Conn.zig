@@ -42,12 +42,16 @@ pub fn connect(config: Config, diag: *Diagnostic) Error!Conn {
         return error.ConnectFailed;
     }
     _ = c.sqlite3_busy_timeout(db, 5000);
-    // SQLITE_OPEN_READONLY is not honoured on a shared-cache connection;
-    // query_only is enforced per connection either way.
-    if (config.read_only and c.sqlite3_exec(db, "pragma query_only = 1", null, null, null) != c.SQLITE_OK) {
-        diag.set(std.mem.span(c.sqlite3_errmsg(db)));
-        _ = c.sqlite3_close(db);
-        return error.ConnectFailed;
+    if (config.read_only) {
+        // SQL can turn query_only off again, so it only covers temp tables. The file itself is
+        // protected by SQLITE_OPEN_READONLY, and with no attach slots VACUUM INTO cannot write a
+        // new file, nor ATTACH open another database.
+        _ = c.sqlite3_limit(db, c.SQLITE_LIMIT_ATTACHED, 0);
+        if (c.sqlite3_exec(db, "pragma query_only = 1", null, null, null) != c.SQLITE_OK) {
+            diag.set(std.mem.span(c.sqlite3_errmsg(db)));
+            _ = c.sqlite3_close(db);
+            return error.ConnectFailed;
+        }
     }
     return .{ .raw = db.? };
 }

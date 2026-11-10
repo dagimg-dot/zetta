@@ -605,6 +605,12 @@ test "sqlite read-only mode rejects writes" {
     const res = try ro.query(arena, "select x from t", .{}, &diag);
     try testing.expectEqual(1, res.row_count);
     try testing.expectError(error.ReadOnly, ro.query(arena, "insert into t values (2)", .{}, &diag));
+
+    // SQL can switch query_only off, but still cannot write a new file or open another database.
+    const copy = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/copy.db", .{tmp.sub_path});
+    try testing.expectError(error.QueryFailed, ro.query(arena, try std.fmt.allocPrint(arena, "pragma query_only = 0; vacuum into '{s}'", .{copy}), .{}, &diag));
+    try testing.expectError(error.FileNotFound, tmp.dir.access(testing.io, "copy.db", .{}));
+    try testing.expectError(error.QueryFailed, ro.query(arena, try std.fmt.allocPrint(arena, "attach '{s}' as other", .{path}), .{}, &diag));
 }
 
 test "sqlite refuses to create a missing file" {
