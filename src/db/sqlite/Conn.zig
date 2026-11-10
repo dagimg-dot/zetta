@@ -9,6 +9,7 @@ const types = @import("../types.zig");
 const Error = types.Error;
 
 const Conn = @This();
+const log = std.log.scoped(.sqlite);
 
 raw: *c.sqlite3,
 
@@ -54,6 +55,15 @@ pub fn connect(config: Config, diag: *Diagnostic) Error!Conn {
         }
     }
     return .{ .raw = db.? };
+}
+
+/// Rolls back a transaction the caller's SQL left open, as the Postgres adapter does, so the next
+/// request on this pooled connection neither sees its uncommitted rows nor waits on its locks.
+pub fn endTransaction(self: *Conn) void {
+    if (c.sqlite3_get_autocommit(self.raw) != 0) return;
+    if (c.sqlite3_exec(self.raw, "rollback", null, null, null) != c.SQLITE_OK) {
+        log.warn("could not roll back a transaction left open: {s}", .{std.mem.span(c.sqlite3_errmsg(self.raw))});
+    }
 }
 
 pub fn close(self: *Conn) void {

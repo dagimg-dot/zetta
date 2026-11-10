@@ -508,6 +508,7 @@ fn browse(ptr: *anyopaque, arena: Allocator, req: types.BrowseRequest, diag: *Di
     const self = from(ptr);
     const lease = try self.pool.acquire(diag);
     defer lease.release();
+    defer lease.conn.endTransaction();
     var deadline: Conn.Deadline = undefined;
     if (req.budget_ms) |ms| {
         deadline = .after(self.io, ms);
@@ -543,6 +544,7 @@ fn query(ptr: *anyopaque, arena: Allocator, text: []const u8, options: types.Que
     const self = from(ptr);
     const lease = try self.pool.acquire(diag);
     defer lease.release();
+    defer lease.conn.endTransaction();
     var deadline: Conn.Deadline = undefined;
     if (options.budget_ms) |ms| {
         deadline = .after(self.io, ms);

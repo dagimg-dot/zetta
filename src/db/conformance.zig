@@ -562,6 +562,18 @@ fn run(f: Fixture) !void {
         try testing.expectError(error.QueryFailed, a.browse(arena, .{ .table = parts, .builder = b }, &diag));
     }
 
+    // a transaction left open ends with its request, rolled back, whether its SQL ran or failed
+    {
+        const s = f.schema;
+        _ = try a.query(arena, try std.fmt.allocPrint(arena, "begin; update {s}.items set name = 'open' where id = 1", .{s}), .{}, &diag);
+        try testing.expectError(error.QueryFailed, a.query(arena, try std.fmt.allocPrint(arena, "begin; update {s}.items set name = 'failed' where id = 2; selec", .{s}), .{}, &diag));
+        const res = try a.query(arena, try std.fmt.allocPrint(arena, "select name from {s}.items where id in (1, 2) order by id", .{s}), .{}, &diag);
+        try testing.expectEqualStrings("alpha", res.rows[0][0].?);
+        try testing.expectEqualStrings("beta", res.rows[1][0].?);
+        // and the connection takes a new one
+        _ = try a.query(arena, "begin; commit", .{}, &diag);
+    }
+
     // a bad statement is QueryFailed with the database's message
     {
         try testing.expectError(error.QueryFailed, a.query(arena, "selec 1", .{}, &diag));
