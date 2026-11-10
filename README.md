@@ -108,3 +108,7 @@ dev/pg-matrix.sh                                                           # aut
 cd web && bun run check                                                    # types, lint and UI tests
 cd web && bun run dev                                                      # UI dev server, proxies /api to zetta on port 1993
 ```
+
+## License
+
+MIT. The binary also carries SQLite (public domain), solid-js and Ark UI (MIT), and the Lexend and Source Code Pro fonts (SIL Open Font License 1.1).
