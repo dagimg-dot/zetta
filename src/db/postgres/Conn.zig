@@ -62,6 +62,11 @@ pub const Config = struct {
 
 const buf_len = tls.Client.min_buffer_len;
 
+/// Messages up to this size are read in place, and larger ones into `big`. The TLS reader decrypts
+/// each record into the space after what it already holds, so a part-read message plus a whole
+/// record must fit: its buffer is this much larger than the minimum TLS asks for.
+const inline_max = 16 * 1024;
+
 const State = struct {
     gpa: Allocator,
     io: Io,
@@ -74,13 +79,13 @@ const State = struct {
     /// From ReadyForQuery: 'I' idle, 'T' in a transaction, 'E' in a failed transaction.
     txn_status: u8 = 'I',
     out: wire.Out = .{},
-    /// Messages bigger than the read buffer land here.
+    /// Messages bigger than `inline_max` land here.
     big: std.ArrayList(u8) = .empty,
     type_names: std.AutoHashMapUnmanaged(u32, []u8) = .empty,
     statement_timeout: StatementTimeout = .default,
     net_rbuf: [buf_len]u8,
     net_wbuf: [buf_len]u8,
-    tls_rbuf: [buf_len]u8,
+    tls_rbuf: [buf_len + inline_max]u8,
     tls_wbuf: [buf_len]u8,
 
     fn reader(s: *State) *Io.Reader {
@@ -108,7 +113,7 @@ const State = struct {
         const len = try r.takeInt(u32, .big);
         if (len < 4) return error.ReadFailed;
         const n = len - 4;
-        if (n <= r.buffer.len) return .{ .tag = tag, .body = try r.take(n) };
+        if (n <= inline_max) return .{ .tag = tag, .body = try r.take(n) };
         s.big.clearRetainingCapacity();
         s.big.ensureTotalCapacity(s.gpa, n) catch return error.ReadFailed;
         s.big.items.len = n;

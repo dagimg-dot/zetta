@@ -13,13 +13,15 @@ ZETTA=$(realpath "${1:-zig-out/bin/zetta}")
 WORK=$(mktemp -d)
 TLS_NAME=zetta-matrix-tls
 PLAIN_NAME=zetta-matrix-plain
+OLD_NAME=zetta-matrix-pg16
 TLS_PORT=55501
 PLAIN_PORT=55502
+OLD_PORT=55503
 
 cleanup() {
 	# A clean shutdown removes the socket files, which belong to the container's user.
-	docker stop -t 10 "$TLS_NAME" "$PLAIN_NAME" >/dev/null 2>&1 || true
-	docker rm -f "$TLS_NAME" "$PLAIN_NAME" >/dev/null 2>&1 || true
+	docker stop -t 10 "$TLS_NAME" "$PLAIN_NAME" "$OLD_NAME" >/dev/null 2>&1 || true
+	docker rm -f "$TLS_NAME" "$PLAIN_NAME" "$OLD_NAME" >/dev/null 2>&1 || true
 	rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -58,20 +60,23 @@ EOF
 
 mkdir -p "$WORK/socket"
 chmod 777 "$WORK/socket"
+# start NAME PORT SSL IMAGE [socket], where socket shares the server's Unix socket at $WORK/socket.
 start() {
-	local name=$1 port=$2 ssl=$3
+	local name=$1 port=$2 ssl=$3 image=$4 socket=${5:-}
 	docker run -d --name "$name" -p "127.0.0.1:$port:5432" \
 		-e POSTGRES_PASSWORD=super -v "$WORK:/conf:ro" \
 		-v "$WORK/users.sql:/docker-entrypoint-initdb.d/users.sql:ro" \
-		$([ "$ssl" = on ] && printf -- '-v %s:/var/run/postgresql' "$WORK/socket") \
-		postgres:17-alpine sh -c "cp /conf/server.crt /conf/server.key /conf/pg_hba.conf /tmp/ \
+		$([ "$socket" = socket ] && printf -- '-v %s:/var/run/postgresql' "$WORK/socket") \
+		"$image" sh -c "cp /conf/server.crt /conf/server.key /conf/pg_hba.conf /tmp/ \
 			&& chown postgres /tmp/server.key && chmod 600 /tmp/server.key \
 			&& exec docker-entrypoint.sh postgres -c ssl=$ssl -c ssl_cert_file=/tmp/server.crt \
 			   -c ssl_key_file=/tmp/server.key -c hba_file=/tmp/pg_hba.conf" >/dev/null
 }
-start "$TLS_NAME" "$TLS_PORT" on
-start "$PLAIN_NAME" "$PLAIN_PORT" off
-for name in "$TLS_NAME" "$PLAIN_NAME"; do
+start "$TLS_NAME" "$TLS_PORT" on postgres:17-alpine socket
+start "$PLAIN_NAME" "$PLAIN_PORT" off postgres:17-alpine
+# PostgreSQL 16 and older send large rows as several 8 KB TLS records, which 17 no longer does.
+start "$OLD_NAME" "$OLD_PORT" on postgres:16-alpine
+for name in "$TLS_NAME" "$PLAIN_NAME" "$OLD_NAME"; do
 	for _ in $(seq 60); do
 		docker exec "$name" pg_isready -U postgres -h 127.0.0.1 -q 2>/dev/null && break
 		sleep 1
@@ -110,6 +115,23 @@ check() {
 	else
 		fail=$((fail + 1))
 		printf '  FAIL  %-52s want %s\n        got %s\n' "$name" "$expect" "$got"
+	fi
+}
+
+# check_rows NAME DSN SIZE fetches 50 rows of SIZE bytes and checks that every one arrives whole.
+check_rows() {
+	local name=$1 dsn=$2 size=$3 out status got
+	set +e
+	out=$("$ZETTA" query "$dsn" "select repeat('x', $size) from generate_series(1, 50)" -f csv 2>&1)
+	status=$?
+	set -e
+	got=$(printf '%s\n' "$out" | tr -d '\r' | awk -v s="$size" 'length($0) == s' | wc -l)
+	if [ $status -eq 0 ] && [ "$got" -eq 50 ]; then
+		pass=$((pass + 1))
+		printf '  ok    %-52s %s\n' "$name" "50 rows"
+	else
+		fail=$((fail + 1))
+		printf '  FAIL  %-52s want 50 whole rows\n        got exit %s, %s rows: %s\n' "$name" "$status" "$got" "$(printf '%s' "$out" | tail -n 1 | cut -c1-200)"
 	fi
 }
 
@@ -152,6 +174,13 @@ check "sslmode=require fails" "postgres://postgres:super@$P/postgres?sslmode=req
 check "sslmode=disable" "postgres://postgres:super@$P/postgres?sslmode=disable" plain
 check "unreachable port" "postgres://postgres:super@127.0.0.1:1/postgres" "fail:connection to server"
 check "unknown host name" "postgres://postgres:super@no-such-host.invalid/postgres" "fail:could not translate host name"
+
+echo "large rows over TLS"
+O="127.0.0.1:$OLD_PORT"
+for size in 9000 12000 16000 16385 100000; do
+	check_rows "PostgreSQL 17, rows of $size bytes" "postgres://scram_user:scram-pw@$T/postgres?sslmode=require" "$size"
+	check_rows "PostgreSQL 16, rows of $size bytes" "postgres://scram_user:scram-pw@$O/postgres?sslmode=require" "$size"
+done
 
 echo
 echo "$pass passed, $fail failed"
