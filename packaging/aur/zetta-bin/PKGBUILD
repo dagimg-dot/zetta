@@ -1,7 +1,7 @@
 # Maintainer: Dagim G. Astatkie
 
 pkgname=zetta-bin
-pkgver=0.1.1
+pkgver=0.1.2
 pkgrel=1
 pkgdesc='Database explorer for Postgres and SQLite in a single binary'
 arch=('x86_64' 'aarch64')
@@ -12,8 +12,8 @@ conflicts=('zetta')
 options=('!strip' '!debug')
 source_x86_64=("zetta-$pkgver-linux-x86_64.tar.gz::$url/releases/download/v$pkgver/zetta-$pkgver-linux-x86_64.tar.gz")
 source_aarch64=("zetta-$pkgver-linux-aarch64.tar.gz::$url/releases/download/v$pkgver/zetta-$pkgver-linux-aarch64.tar.gz")
-sha256sums_x86_64=('e213a1894c1aa176c56777e7c77b1b25670a83d7eb89f936cdd2698545f1ecd7')
-sha256sums_aarch64=('26f4c486ff8fd402dba8c645c11fd846ac5da9bb4504cb2755aeaad550bfb22d')
+sha256sums_x86_64=('6d080d53169f521ddd2447f046fef7d8c932d882b01dde24f8a7a15385079186')
+sha256sums_aarch64=('3f3bab8eab0e82151892de2346c10c56ecd43ef738b0089fe109f2a1b353a9cb')
 
 package() {
 	cd "zetta-$pkgver-linux-$CARCH"
