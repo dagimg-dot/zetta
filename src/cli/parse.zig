@@ -89,11 +89,15 @@ pub fn parse(comptime Root: type, argv: []const []const u8, env: anytype) Outcom
                     inline for (comptime spec.commandFields(Root)) |f| {
                         if (commandMatches(f, name)) return .{ .help = .{ .command = f.name, .long = true } };
                     }
+                    if (mem.eql(u8, name, "completion")) return .{ .help = .{ .command = "completion", .long = true } };
                     return fail(Out, .{ .kind = .unknown_command, .token = name, .suggestion = suggestCommand(Root, name) }, root_usage);
                 }
                 return .{ .help = .{ .command = null, .long = true } };
             }
             if (mem.eql(u8, tok, "completion")) {
+                for (argv[i + 1 ..]) |arg| {
+                    if (mem.eql(u8, arg, "-h") or mem.eql(u8, arg, "--help")) return .{ .help = .{ .command = "completion", .long = arg.len > 2 } };
+                }
                 const name = if (i + 1 < argv.len) argv[i + 1] else return fail(Out, .{ .kind = .missing_required, .token = "<SHELL>" }, Root.name ++ " completion <SHELL>");
                 const shell = std.meta.stringToEnum(Shell, name) orelse
                     return fail(Out, .{ .kind = .invalid_value, .token = name, .expected = "bash, zsh, fish" }, Root.name ++ " completion <SHELL>");
@@ -590,6 +594,13 @@ test "help, version and hidden builtins" {
     try testing.expect(parseTest(&.{"--version"}, .{}) == .version);
     try testing.expectEqual(Shell.zsh, parseTest(&.{ "completion", "zsh" }, .{}).completion_script);
     try testing.expectEqual(2, parseTest(&.{ "__complete", "--", "serve", "--p" }, .{}).complete.len);
+}
+
+test "completion --help asks for help instead of naming a shell" {
+    for ([_][]const []const u8{ &.{ "completion", "--help" }, &.{ "completion", "-h" }, &.{ "completion", "bash", "--help" }, &.{ "help", "completion" } }) |argv| {
+        try testing.expectEqualStrings("completion", parseTest(argv, .{}).help.command.?);
+    }
+    try testing.expectEqual(false, parseTest(&.{ "completion", "-h" }, .{}).help.long);
 }
 
 test "edit distance" {

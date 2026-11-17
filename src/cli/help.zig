@@ -23,14 +23,26 @@ pub const Style = struct {
     }
 };
 
+const completion_about = "Print a shell completion script (bash, zsh, fish)";
+
 pub fn render(comptime Root: type, req: parse.HelpRequest, w: *Writer, style: Style) Writer.Error!void {
     if (req.command) |name| {
         inline for (comptime spec.commandFields(Root)) |f| {
             if (std.mem.eql(u8, f.name, name)) return renderCommand(Root, f.type, f.name, req.long, w, style);
         }
+        if (std.mem.eql(u8, name, "completion")) return renderCommand(Root, Completion, "completion", req.long, w, style);
     }
     return renderCommand(Root, Root, null, req.long, w, style);
 }
+
+/// The builtin `completion` command, described for its help page; the parser handles it itself.
+const Completion = struct {
+    shell: parse.Shell = .bash,
+    pub const about = completion_about;
+    pub const options = [_]Option{
+        .{ .field = "shell", .positional = true, .required = true, .help = "Shell to print the script for" },
+    };
+};
 
 fn renderCommand(comptime Root: type, comptime T: type, comptime name: ?[]const u8, long: bool, w: *Writer, style: Style) Writer.Error!void {
     const about = comptime spec.about(T);
@@ -54,7 +66,7 @@ fn renderCommand(comptime Root: type, comptime T: type, comptime name: ?[]const 
             if (comptime spec.defaultCommand(Root)) |d| if (comptime std.mem.eql(u8, d, f.name)) try w.writeAll(" (default)");
             try w.writeByte('\n');
         }
-        inline for (.{ .{ "completion", "Print a shell completion script (bash, zsh, fish)" }, .{ "help", "Print help for a command" } }) |builtin| {
+        inline for (.{ .{ "completion", completion_about }, .{ "help", "Print help for a command" } }) |builtin| {
             try w.writeAll("  ");
             try style.strong(w, builtin[0]);
             try w.splatByteAll(' ', width - builtin[0].len + 2);
@@ -240,6 +252,16 @@ test "long help shows every paragraph" {
     try render(DemoCli, .{ .command = "serve", .long = true }, &w, .{ .color = false });
     try testing.expect(std.mem.indexOf(u8, w.buffered(), "More about ports.") != null);
     try testing.expect(std.mem.indexOf(u8, w.buffered(), "Longer story.") != null);
+}
+
+test "completion has its own help page" {
+    var buf: [1024]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    try render(DemoCli, .{ .command = "completion", .long = false }, &w, .{ .color = false });
+    const out = w.buffered();
+    try testing.expect(std.mem.startsWith(u8, out, "Print a shell completion script (bash, zsh, fish)\n\nUsage: demo completion [OPTIONS] <SHELL>\n"));
+    try testing.expect(std.mem.indexOf(u8, out, "<SHELL>  Shell to print the script for [possible values: bash, zsh, fish]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "-h, --help") != null);
 }
 
 test "failures end with the usage line and a tip" {
