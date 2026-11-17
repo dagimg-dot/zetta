@@ -1,0 +1,110 @@
+---
+import Base from "../../layouts/Base.astro";
+import Logo from "../../components/Logo.astro";
+---
+
+<Base
+	title="zetta · Try it in your browser"
+	description="zetta running entirely in your browser on a sample shop database. Nothing to install, nothing leaves the page."
+>
+	<main class="boot">
+		<div class="mark" aria-hidden="true"><Logo size={56} /></div>
+		<h1>Starting zetta in your browser</h1>
+		<p class="status" role="status" aria-live="polite">Downloading zetta and a sample shop database, about 2.6 MB.</p>
+		<p class="note">
+			It runs here as WebAssembly, read-only, and nothing you do leaves this page.
+		</p>
+		<p class="error" hidden></p>
+		<a class="back" href="/">Back to the zetta site</a>
+		<noscript><p class="error">The demo needs JavaScript.</p></noscript>
+	</main>
+</Base>
+
+<script>
+	const status = document.querySelector<HTMLElement>(".status");
+	const errorEl = document.querySelector<HTMLElement>(".error");
+
+	function fail(message: string) {
+		if (status) status.hidden = true;
+		if (errorEl) {
+			errorEl.hidden = false;
+			errorEl.textContent = message;
+		}
+	}
+
+	async function start() {
+		const sw = navigator.serviceWorker;
+		if (!sw) {
+			fail("This browser cannot run the demo: it has no service workers, or they are turned off here.");
+			return;
+		}
+		// Once the worker controls this page, a reload gets the UI from it instead of this page.
+		sw.addEventListener("controllerchange", () => location.reload(), { once: true });
+		const reg = await sw.register("sw.js", { scope: "./" });
+		if (sw.controller) {
+			location.reload();
+			return;
+		}
+		// A hard reload leaves an active worker without control of the page; ask it to take over.
+		const ready = await sw.ready;
+		ready.active?.postMessage("claim");
+		reg.installing?.addEventListener("statechange", (e) => {
+			if ((e.target as ServiceWorker).state === "redundant") fail("The demo failed to load. Reload to try again.");
+		});
+	}
+
+	start().catch((err: unknown) => fail(`The demo failed to start: ${err instanceof Error ? err.message : String(err)}`));
+</script>
+
+<style>
+	.boot {
+		min-height: 100dvh;
+		display: grid;
+		place-content: center;
+		justify-items: center;
+		gap: 16px;
+		padding: 24px;
+		text-align: center;
+	}
+
+	.mark {
+		margin-bottom: 12px;
+		animation: breathe 2.4s var(--ease) infinite;
+	}
+
+	@keyframes breathe {
+		50% {
+			transform: scale(0.94);
+			opacity: 0.7;
+		}
+	}
+
+	h1 {
+		margin: 0;
+		font-size: clamp(26px, 4vw, 36px);
+		font-weight: 500;
+		letter-spacing: -0.035em;
+	}
+
+	p {
+		margin: 0;
+		max-width: 46ch;
+		color: var(--fg-2);
+		text-wrap: balance;
+	}
+
+	.note {
+		font-size: 14px;
+		color: var(--fg-3);
+	}
+
+	.error {
+		color: var(--accent);
+	}
+
+	.back {
+		margin-top: 16px;
+		font-size: 14px;
+		color: var(--accent);
+	}
+</style>

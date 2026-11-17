@@ -26,3 +26,6 @@ web/dist/
 # Landing page
 landing/dist/
 landing/.astro/
+landing/public/demo/zetta.wasm
+landing/public/demo/demo.db
+
