@@ -31,6 +31,15 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: |
+            web/dist/index.html.gz
+            web/dist/csp.txt
+          if-no-files-found: error
+          retention-days: 1
 
   zig:
     runs-on: ubuntu-latest
@@ -125,3 +134,95 @@ jobs:
           build-args: ZETTA_COMMIT=${{ steps.commit.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  binaries:
+    needs: [web, zig]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-linux-musl, name: linux-x86_64, runner: ubuntu-latest }
+          - { target: aarch64-linux-musl, name: linux-aarch64, runner: ubuntu-24.04-arm }
+          - { target: aarch64-macos, name: macos-aarch64, runner: macos-latest }
+          - { target: x86_64-windows, name: windows-x86_64, runner: windows-latest, exe: .exe }
+          - { target: aarch64-windows, name: windows-aarch64, runner: windows-11-arm, exe: .exe }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
+
+      - id: names
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else version="${GITHUB_SHA::7}"; fi
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "package=zetta-$version-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      - run: >-
+          zig build
+          -Doptimize=ReleaseSafe
+          -Dtarget=${{ matrix.target }}
+          -Dcpu=baseline
+          -Dui=prebuilt
+          -Dcommit=${{ steps.names.outputs.commit }}
+
+      - name: Smoke-test on the target's own OS and architecture
+        run: |
+          bin="zig-out/bin/zetta${{ matrix.exe }}"
+          "$bin" --version
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            "$bin" --version | grep -q "^zetta ${{ steps.names.outputs.version }} " \
+              || { echo "tag $GITHUB_REF_NAME does not match the version in build.zig.zon" >&2; exit 1; }
+          fi
+          : > smoke.db
+          "$bin" query smoke.db "create table t (x); insert into t values (42); select x from t" | grep -q 42
+
+      - name: Package
+        run: |
+          pkg="${{ steps.names.outputs.package }}"
+          mkdir "$pkg"
+          cp "zig-out/bin/zetta${{ matrix.exe }}" LICENSE README.md "$pkg/"
+          if [[ -n "${{ matrix.exe }}" ]]; then
+            pwsh -NoProfile -Command "Compress-Archive -Path '$pkg' -DestinationPath '$pkg.zip'"
+          else
+            tar -czf "$pkg.tar.gz" "$pkg"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.names.outputs.package }}
+          path: ${{ steps.names.outputs.package }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [binaries, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: zetta-*
+          path: dist
+          merge-multiple: true
+      - run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+        working-directory: dist
+      - run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes
+          --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
