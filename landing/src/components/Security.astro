@@ -25,39 +25,25 @@ const items = [
 ] as const;
 ---
 
-<section class="section security" id="security">
+<section class="section" id="security">
 	<div class="wrap split">
 		<div class="side">
-			<div class="sticky">
-				<span class="eyebrow reveal">Security</span>
-				<h2 class="h2 reveal" style="--d:1">
-					Local by default.<br /><span class="serif ember-text">Careful by design.</span>
-				</h2>
-				<p class="lede reveal" style="--d:2">
-					An explorer holds the keys to your data. zetta treats the browser tab as a guest, not a
-					trusted client.
-				</p>
-				<div class="seal reveal" style="--d:3" aria-hidden="true">
-					<div class="ring"></div>
-					<div class="ring r2"></div>
-					<div class="badge"><Icon name="lock" size={28} /></div>
-					<code class="addr">127.0.0.1:1993</code>
-				</div>
-			</div>
+			<h2 class="h2 reveal">Local by default.</h2>
+			<p class="lede reveal" style="--d:1">
+				An explorer holds the keys to your data, so zetta treats the browser tab as a guest rather
+				than a trusted client.
+			</p>
 		</div>
 
 		<ol class="list">
 			{
 				items.map((it, i) => (
 					<li class="reveal" style={`--d:${i}`}>
-						<span class="n">0{i + 1}</span>
-						<div>
-							<h3>
-								<Icon name={it.icon} size={20} />
-								{it.title}
-							</h3>
-							<p set:html={it.body} />
-						</div>
+						<h3>
+							<Icon name={it.icon} size={20} />
+							{it.title}
+						</h3>
+						<p set:html={it.body} />
 					</li>
 				))
 			}
@@ -66,119 +52,30 @@ const items = [
 </section>
 
 <style>
-	.security {
-		background:
-			radial-gradient(900px 500px at 10% 30%, oklch(0.7 0.19 45 / 0.07), transparent 70%),
-			linear-gradient(180deg, transparent, oklch(1 0 0 / 0.012) 30%, transparent);
-	}
-
 	.split {
 		display: grid;
 		grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
 		gap: clamp(40px, 8vw, 120px);
+		align-items: start;
 	}
 
-	.sticky {
+	.side {
 		position: sticky;
 		top: 140px;
 		display: grid;
 		gap: 24px;
-		justify-items: start;
-	}
-
-	.seal {
-		position: relative;
-		display: grid;
-		place-items: center;
-		width: 220px;
-		height: 220px;
-		margin-top: 24px;
-	}
-
-	.ring {
-		position: absolute;
-		inset: 0;
-		border-radius: 50%;
-		border: 1px dashed oklch(1 0 0 / 0.12);
-		animation: spin 40s linear infinite;
-	}
-
-	.r2 {
-		inset: 34px;
-		border-style: solid;
-		border-color: oklch(0.7 0.19 45 / 0.25);
-		animation-direction: reverse;
-		animation-duration: 28s;
-		box-shadow: 0 0 60px -10px var(--ember-glow);
-	}
-
-	.r2::before {
-		content: "";
-		position: absolute;
-		top: -4px;
-		left: 50%;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--ember-hi);
-		box-shadow: 0 0 14px var(--ember);
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	.badge {
-		display: grid;
-		place-items: center;
-		width: 72px;
-		height: 72px;
-		border-radius: 22px;
-		background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
-		box-shadow:
-			inset 0 0 0 1px var(--hair-2),
-			inset 0 1px 0 oklch(1 0 0 / 0.1),
-			0 20px 40px -10px oklch(0 0 0 / 0.7);
-		color: var(--ember-hi);
-	}
-
-	.addr {
-		position: absolute;
-		bottom: -6px;
-		padding: 4px 12px;
-		border-radius: 999px;
-		background: var(--ink-1);
-		box-shadow: inset 0 0 0 1px var(--hair-2);
-		font-size: 12px;
-		color: var(--fg-2);
 	}
 
 	.list {
 		margin: 0;
 		padding: 0;
 		list-style: none;
-	}
-
-	.list li {
-		display: grid;
-		grid-template-columns: 56px 1fr;
-		gap: 8px;
-		padding: 40px 0;
 		border-top: 1px solid var(--hair);
 	}
 
-	.list li:last-child {
+	.list li {
+		padding: 36px 0;
 		border-bottom: 1px solid var(--hair);
-	}
-
-	.n {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		letter-spacing: 0.12em;
-		color: var(--fg-4);
-		padding-top: 6px;
 	}
 
 	h3 {
@@ -186,14 +83,22 @@ const items = [
 		align-items: center;
 		gap: 12px;
 		margin: 0 0 12px;
-		font-size: clamp(20px, 1.8vw, 24px);
+		font-size: clamp(19px, 1.7vw, 22px);
 		font-weight: 500;
 		letter-spacing: -0.03em;
 	}
 
 	h3 :global(svg) {
-		color: var(--ember-hi);
 		flex: none;
+		color: var(--accent);
+	}
+
+	.list p {
+		margin: 0 0 0 32px;
+		max-width: 56ch;
+		font-size: 15.5px;
+		color: var(--fg-3);
+		text-wrap: pretty;
 	}
 
 	.list p :global(code) {
@@ -201,26 +106,15 @@ const items = [
 		color: var(--fg-2);
 	}
 
-	.list p {
-		margin: 0;
-		color: var(--fg-3);
-		font-size: 15.5px;
-		max-width: 56ch;
-		text-wrap: pretty;
-	}
-
 	@media (max-width: 960px) {
 		.split {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.sticky {
+		.side {
 			position: static;
 		}
-		.seal {
-			display: none;
-		}
-		.list li {
-			grid-template-columns: 1fr;
+		.list p {
+			margin-left: 0;
 		}
 	}
 </style>

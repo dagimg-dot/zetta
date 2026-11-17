@@ -24,7 +24,10 @@ const year = new Date().getFullYear();
 				<div class="actions">
 					<button class="btn btn-primary" data-copy={installCmd}>
 						<span class="lbl">Copy install command</span>
-						<span class="knob"><Icon name="copy" size={16} class="i-copy" /><Icon name="check" size={16} class="i-check" /></span>
+						<span class="knob">
+							<Icon name="copy" size={16} class="i-copy" />
+							<Icon name="check" size={16} class="i-check" />
+						</span>
 					</button>
 					<a class="btn btn-ghost" href={links.repo} target="_blank" rel="noopener">
 						View source
@@ -48,7 +51,7 @@ const year = new Date().getFullYear();
 			<a href={links.issues} target="_blank" rel="noopener">Issues</a>
 			<a href={links.license} target="_blank" rel="noopener">MIT License</a>
 		</nav>
-		<p class="muted">&copy; {year} zetta contributors</p>
+		<p>&copy; {year} zetta contributors</p>
 	</footer>
 </section>
 
@@ -69,8 +72,8 @@ const year = new Date().getFullYear();
 		padding: clamp(56px, 9vw, 120px) clamp(20px, 5vw, 64px);
 		text-align: center;
 		background:
-			radial-gradient(800px 420px at 50% 115%, oklch(0.66 0.2 42 / 0.45), transparent 70%),
-			linear-gradient(180deg, var(--ink-2), var(--ink-1));
+			radial-gradient(800px 420px at 50% 115%, var(--glow), transparent 70%),
+			linear-gradient(180deg, var(--surface-top), var(--surface-bottom));
 	}
 
 	.cta .display {
@@ -85,8 +88,8 @@ const year = new Date().getFullYear();
 		border-radius: 20px;
 		background: var(--ember);
 		box-shadow:
-			0 0 0 1px oklch(1 0 0 / 0.15) inset,
-			0 20px 60px -10px var(--ember-glow);
+			inset 0 0 0 1px oklch(1 0 0 / 0.15),
+			0 20px 60px -10px var(--glow);
 	}
 
 	.mark i {
@@ -123,18 +126,6 @@ const year = new Date().getFullYear();
 		gap: 12px;
 	}
 
-	.btn :global(.i-check) {
-		display: none;
-	}
-
-	.btn[data-copied] :global(.i-copy) {
-		display: none;
-	}
-
-	.btn[data-copied] :global(.i-check) {
-		display: block;
-	}
-
 	.foot {
 		display: flex;
 		flex-wrap: wrap;
@@ -157,6 +148,11 @@ const year = new Date().getFullYear();
 		color: var(--fg-4);
 	}
 
+	.foot p {
+		margin: 0;
+		color: var(--fg-3);
+	}
+
 	.foot nav {
 		display: flex;
 		flex-wrap: wrap;
@@ -170,9 +166,5 @@ const year = new Date().getFullYear();
 
 	.foot nav a:hover {
 		color: var(--fg);
-	}
-
-	.foot p {
-		margin: 0;
 	}
 </style>

@@ -2,32 +2,48 @@
 @import "@fontsource-variable/source-code-pro";
 @import "@fontsource/instrument-serif/400-italic.css";
 
+/*
+ * Every color is one light-dark() pair, so a theme is only a color-scheme.
+ * The OS picks by default and [data-theme] on <html> overrides it. A subtree
+ * can set its own color-scheme (the terminal is always dark).
+ */
 :root {
-	color-scheme: dark;
+	color-scheme: light dark;
 
-	--ink-0: oklch(0.135 0.004 50);
-	--ink-1: oklch(0.165 0.004 50);
-	--ink-2: oklch(0.195 0.005 50);
-	--ink-3: oklch(0.235 0.006 50);
-	--ink-4: oklch(0.3 0.007 50);
+	--bg: light-dark(oklch(0.985 0.003 70), oklch(0.135 0.004 50));
+	--surface-top: light-dark(oklch(1 0 0), oklch(0.2 0.005 50));
+	--surface-bottom: light-dark(oklch(0.993 0.002 70), oklch(0.165 0.004 50));
+	--sunken: light-dark(oklch(0.972 0.004 70), oklch(0.135 0.004 50));
+	--raised: light-dark(oklch(1 0 0), oklch(0.235 0.006 50));
 
-	--fg: oklch(0.965 0.004 60);
-	--fg-2: oklch(0.78 0.008 55);
-	--fg-3: oklch(0.6 0.009 50);
-	--fg-4: oklch(0.45 0.008 50);
+	--fg: light-dark(oklch(0.2 0.008 50), oklch(0.965 0.004 60));
+	--fg-2: light-dark(oklch(0.38 0.01 50), oklch(0.78 0.008 55));
+	--fg-3: light-dark(oklch(0.5 0.01 50), oklch(0.62 0.009 50));
+	--fg-4: light-dark(oklch(0.64 0.008 50), oklch(0.46 0.008 50));
 
+	--tint: light-dark(oklch(0.3 0.02 50 / 0.04), oklch(1 0 0 / 0.045));
+	--tint-2: light-dark(oklch(0.3 0.02 50 / 0.07), oklch(1 0 0 / 0.08));
+	--hair: light-dark(oklch(0.3 0.02 50 / 0.08), oklch(1 0 0 / 0.07));
+	--hair-2: light-dark(oklch(0.3 0.02 50 / 0.13), oklch(1 0 0 / 0.12));
+	--highlight: light-dark(oklch(1 0 0 / 0.9), oklch(1 0 0 / 0.07));
+	--shadow: light-dark(oklch(0.4 0.04 50 / 0.12), oklch(0 0 0 / 0.65));
+
+	--accent: light-dark(#c2410c, #fb923c);
 	--ember: #ea580c;
-	--ember-hi: #fb923c;
-	--ember-glow: oklch(0.7 0.19 45 / 0.35);
-	--ember-soft: oklch(0.7 0.19 45 / 0.12);
+	--glow: light-dark(oklch(0.78 0.14 55 / 0.35), oklch(0.66 0.2 42 / 0.45));
+	--wash: light-dark(oklch(0.75 0.15 50 / 0.1), oklch(0.7 0.19 45 / 0.12));
+	--ember-text: linear-gradient(
+		100deg,
+		light-dark(#ea580c, #fdba74) 0%,
+		light-dark(#c2410c, #fb923c) 40%,
+		light-dark(#9a3412, #ea580c) 100%
+	);
 
-	--green: oklch(0.82 0.13 150);
-	--blue: oklch(0.78 0.1 240);
-	--violet: oklch(0.78 0.11 300);
-
-	--hair: oklch(1 0 0 / 0.07);
-	--hair-2: oklch(1 0 0 / 0.12);
-	--sheen: inset 0 1px 0 oklch(1 0 0 / 0.07);
+	--syn-keyword: light-dark(#c2410c, #fb923c);
+	--syn-string: light-dark(oklch(0.5 0.13 150), oklch(0.82 0.13 150));
+	--syn-number: light-dark(oklch(0.5 0.14 250), oklch(0.78 0.1 240));
+	--syn-fn: light-dark(oklch(0.5 0.16 300), oklch(0.78 0.11 300));
+	--ok: light-dark(oklch(0.55 0.14 150), oklch(0.82 0.13 150));
 
 	--font-sans: "Lexend Variable", system-ui, sans-serif;
 	--font-mono: "Source Code Pro Variable", ui-monospace, Menlo, monospace;
@@ -38,16 +54,21 @@
 
 	--gutter: clamp(16px, 4vw, 40px);
 	--max: 1200px;
-	--section: clamp(96px, 14vw, 176px);
+	--section: clamp(96px, 13vw, 168px);
 
 	--r-xl: 28px;
-	--r-lg: 20px;
-	--r-md: 14px;
 	--bezel: 6px;
 
 	--z-nav: 10;
 	--z-menu: 20;
-	--z-grain: 30;
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
 }
 
 *,
@@ -64,7 +85,7 @@ html {
 
 body {
 	margin: 0;
-	background: var(--ink-0);
+	background: var(--bg);
 	color: var(--fg);
 	font-family: var(--font-sans);
 	font-weight: 300;
@@ -72,19 +93,10 @@ body {
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	text-rendering: optimizeLegibility;
 	overflow-x: clip;
-}
-
-/* Film grain over everything, fixed so it never repaints on scroll. */
-body::after {
-	content: "";
-	position: fixed;
-	inset: 0;
-	z-index: var(--z-grain);
-	pointer-events: none;
-	opacity: 0.05;
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+	transition:
+		background-color 500ms var(--ease),
+		color 500ms var(--ease);
 }
 
 ::selection {
@@ -119,7 +131,7 @@ pre {
 }
 
 :focus-visible {
-	outline: 2px solid var(--ember-hi);
+	outline: 2px solid var(--accent);
 	outline-offset: 3px;
 	border-radius: 6px;
 }
@@ -133,34 +145,20 @@ pre {
 
 .section {
 	padding-block: var(--section);
-	position: relative;
 }
 
-.eyebrow {
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
-	padding: 6px 14px 6px 10px;
-	border-radius: 999px;
-	background: oklch(1 0 0 / 0.035);
-	box-shadow:
-		inset 0 0 0 1px var(--hair),
-		var(--sheen);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 500;
-	letter-spacing: 0.18em;
-	text-transform: uppercase;
-	color: var(--fg-2);
+.section-head {
+	display: grid;
+	gap: 24px;
+	justify-items: start;
+	max-width: 720px;
+	margin-bottom: clamp(48px, 6vw, 80px);
 }
 
-.eyebrow::before {
-	content: "";
-	width: 6px;
-	height: 6px;
-	border-radius: 2px;
-	background: var(--ember);
-	box-shadow: 0 0 12px var(--ember);
+.section-head.center {
+	justify-items: center;
+	text-align: center;
+	margin-inline: auto;
 }
 
 .display {
@@ -175,8 +173,8 @@ pre {
 .h2 {
 	margin: 0;
 	font-weight: 500;
-	font-size: clamp(34px, 4.6vw, 60px);
-	line-height: 1.04;
+	font-size: clamp(32px, 4.4vw, 56px);
+	line-height: 1.05;
 	letter-spacing: -0.04em;
 	text-wrap: balance;
 }
@@ -189,7 +187,7 @@ pre {
 }
 
 .ember-text {
-	background: linear-gradient(100deg, #fdba74 0%, var(--ember-hi) 35%, var(--ember) 100%);
+	background: var(--ember-text);
 	-webkit-background-clip: text;
 	background-clip: text;
 	color: transparent;
@@ -197,55 +195,66 @@ pre {
 
 .lede {
 	margin: 0;
-	max-width: 56ch;
+	max-width: 58ch;
 	font-size: clamp(16px, 1.35vw, 19px);
-	line-height: 1.6;
 	color: var(--fg-2);
 	text-wrap: pretty;
 }
 
-.muted {
-	color: var(--fg-3);
+.lede code {
+	font-size: 0.9em;
+	color: var(--fg);
 }
 
-/* The double bezel: a tray with a hairline that holds a machined plate. */
+/* A tray with a hairline that holds a plate: the frame for every card. */
 .shell {
 	position: relative;
 	padding: var(--bezel);
 	border-radius: var(--r-xl);
-	background: linear-gradient(180deg, oklch(1 0 0 / 0.06), oklch(1 0 0 / 0.02));
+	background: linear-gradient(180deg, var(--tint-2), var(--tint));
 	box-shadow:
 		inset 0 0 0 1px var(--hair),
-		0 40px 80px -40px oklch(0 0 0 / 0.6);
+		0 40px 80px -40px var(--shadow);
 }
 
 .core {
 	position: relative;
 	height: 100%;
 	border-radius: calc(var(--r-xl) - var(--bezel));
-	background: linear-gradient(180deg, var(--ink-2), var(--ink-1));
+	background: linear-gradient(180deg, var(--surface-top), var(--surface-bottom));
 	box-shadow:
-		inset 0 1px 0 oklch(1 0 0 / 0.08),
-		inset 0 0 0 1px oklch(1 0 0 / 0.04);
+		inset 0 1px 0 var(--highlight),
+		inset 0 0 0 1px var(--hair);
 	overflow: hidden;
 }
 
-/* Pill buttons with the icon in its own island. */
+/* Window chrome shared by the screenshot frame and the terminal. */
+.dots {
+	display: flex;
+	gap: 7px;
+}
+
+.dots i {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--tint-2);
+	box-shadow: inset 0 0 0 1px var(--hair);
+}
+
+/* Pill buttons, with the icon in its own circle. */
 .btn {
-	--h: 52px;
 	display: inline-flex;
 	align-items: center;
 	gap: 14px;
-	height: var(--h);
+	height: 52px;
 	padding: 0 6px 0 22px;
 	border-radius: 999px;
 	font-size: 15px;
-	font-weight: 400;
 	white-space: nowrap;
 	transition:
 		transform 500ms var(--ease),
-		background-color 500ms var(--ease),
-		box-shadow 500ms var(--ease);
+		background-color 500ms var(--ease);
 }
 
 .btn:active {
@@ -267,76 +276,110 @@ pre {
 
 .btn-primary {
 	background: var(--fg);
-	color: var(--ink-0);
+	color: var(--bg);
 	font-weight: 500;
-	box-shadow:
-		0 0 0 1px oklch(1 0 0 / 0.2),
-		0 12px 40px -8px var(--ember-glow);
+	box-shadow: 0 12px 40px -10px var(--glow);
 }
 
 .btn-primary .knob {
-	background: var(--ink-0);
+	background: var(--bg);
 	color: var(--fg);
 }
 
 .btn-ghost {
-	background: oklch(1 0 0 / 0.04);
+	background: var(--tint);
 	box-shadow:
 		inset 0 0 0 1px var(--hair-2),
-		var(--sheen);
-	color: var(--fg);
+		inset 0 1px 0 var(--highlight);
 }
 
 .btn-ghost:hover {
-	background: oklch(1 0 0 / 0.07);
+	background: var(--tint-2);
 }
 
 .btn-ghost .knob {
-	background: oklch(1 0 0 / 0.08);
+	background: var(--tint-2);
 }
 
-/* Scroll reveal: a heavy fade up. JS adds .in when the element enters. */
+/* A copy button shows a check for a moment after it copies. */
+[data-copy] .i-check {
+	display: none;
+	color: var(--ok);
+}
+
+[data-copy][data-copied] .i-copy {
+	display: none;
+}
+
+[data-copy][data-copied] .i-check {
+	display: block;
+}
+
+/* The screenshots show the app in the opposite theme to the page. */
+.for-dark-page {
+	display: none;
+}
+
+:root[data-theme="dark"] .for-dark-page {
+	display: block;
+}
+
+:root[data-theme="dark"] .for-light-page {
+	display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .for-dark-page {
+		display: block;
+	}
+	:root:not([data-theme="light"]) .for-light-page {
+		display: none;
+	}
+}
+
+/* Scroll reveal: a slow fade up. The script adds .in when an element enters. */
 .reveal {
 	opacity: 0;
-	transform: translateY(40px);
-	filter: blur(8px);
+	transform: translateY(32px);
 	transition:
-		opacity 1100ms var(--ease-out),
-		transform 1100ms var(--ease-out),
-		filter 1100ms var(--ease-out);
+		opacity 1000ms var(--ease-out),
+		transform 1000ms var(--ease-out);
 	transition-delay: calc(var(--d, 0) * 90ms);
 }
 
-.reveal.in {
-	opacity: 1;
-	transform: none;
-	filter: none;
-}
-
+.reveal.in,
 .no-js .reveal {
 	opacity: 1;
 	transform: none;
-	filter: none;
 }
 
-/* Syntax colors shared by every code sample. */
 .tok-k {
-	color: var(--ember-hi);
+	color: var(--syn-keyword);
 }
 .tok-s {
-	color: var(--green);
+	color: var(--syn-string);
 }
 .tok-n {
-	color: var(--blue);
+	color: var(--syn-number);
 }
 .tok-f {
-	color: var(--violet);
-}
-.tok-c {
-	color: var(--fg-4);
+	color: var(--syn-fn);
 }
 .tok-p {
 	color: var(--fg-3);
+}
+
+@keyframes blink {
+	50% {
+		opacity: 0;
+	}
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -353,6 +396,5 @@ pre {
 	.reveal {
 		opacity: 1;
 		transform: none;
-		filter: none;
 	}
 }

@@ -14,7 +14,8 @@ const { title, description } = Astro.props;
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#0f0d0c" />
+		<meta name="theme-color" content="#faf8f6" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#0f0d0c" media="(prefers-color-scheme: dark)" />
 		<title>{title}</title>
 		<meta name="description" content={description} />
 		<meta property="og:title" content={title} />
@@ -23,6 +24,12 @@ const { title, description } = Astro.props;
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<script is:inline>
 			document.documentElement.classList.remove("no-js");
+			try {
+				const t = localStorage.getItem("zetta-site.theme");
+				if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+			} catch {
+				// Storage can be blocked; the page then follows the OS.
+			}
 		</script>
 	</head>
 	<body>
@@ -42,10 +49,10 @@ const { title, description } = Astro.props;
 
 			for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
 				btn.addEventListener("click", async () => {
-					const text = btn.dataset.copy ?? "";
 					try {
-						await navigator.clipboard.writeText(text);
+						await navigator.clipboard.writeText(btn.dataset.copy ?? "");
 					} catch {
+						// Clipboard access was refused; the button simply does not confirm.
 						return;
 					}
 					btn.dataset.copied = "";

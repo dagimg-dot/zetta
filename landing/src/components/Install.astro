@@ -40,14 +40,11 @@ const platforms = [
 
 <section class="section" id="install">
 	<div class="wrap">
-		<div class="head">
-			<span class="eyebrow reveal">Install</span>
-			<h2 class="h2 reveal" style="--d:1">
-				One command to <span class="serif ember-text">your first row.</span>
-			</h2>
+		<div class="section-head center">
+			<h2 class="h2 reveal">Install it in one line.</h2>
 		</div>
 
-		<div class="shell box reveal" style="--d:2">
+		<div class="shell box reveal" style="--d:1">
 			<div class="core">
 				<div class="tabs" role="tablist" aria-label="Install method">
 					{
@@ -87,8 +84,8 @@ const platforms = [
 			</div>
 		</div>
 
-		<div class="platforms reveal" style="--d:3">
-			<span class="muted">Prebuilt for</span>
+		<div class="platforms reveal" style="--d:2">
+			<span>Prebuilt for</span>
 			<ul>
 				{platforms.map((p) => <li>{p}</li>)}
 			</ul>
@@ -115,14 +112,6 @@ const platforms = [
 </script>
 
 <style>
-	.head {
-		display: grid;
-		justify-items: center;
-		text-align: center;
-		gap: 24px;
-		margin-bottom: 56px;
-	}
-
 	.box {
 		max-width: 920px;
 		margin-inline: auto;
@@ -153,7 +142,7 @@ const platforms = [
 	}
 
 	.tabs button[aria-selected="true"] {
-		background: oklch(1 0 0 / 0.08);
+		background: var(--tint-2);
 		box-shadow: inset 0 0 0 1px var(--hair-2);
 		color: var(--fg);
 	}
@@ -163,17 +152,12 @@ const platforms = [
 		animation: rise 600ms var(--ease-out);
 	}
 
-	@keyframes rise {
-		from {
-			opacity: 0;
-			transform: translateY(6px);
-		}
-	}
-
+	/* Commands read as a terminal, dark in either theme. */
 	.code {
 		position: relative;
+		color-scheme: dark;
 		border-radius: 14px;
-		background: var(--ink-0);
+		background: oklch(0.13 0.004 50);
 		box-shadow: inset 0 0 0 1px var(--hair);
 	}
 
@@ -196,7 +180,7 @@ const platforms = [
 		width: 38px;
 		height: 38px;
 		border-radius: 10px;
-		background: oklch(1 0 0 / 0.06);
+		background: var(--tint-2);
 		color: var(--fg-2);
 		transition:
 			background-color 400ms var(--ease),
@@ -204,25 +188,12 @@ const platforms = [
 	}
 
 	.copy:hover {
-		background: oklch(1 0 0 / 0.12);
+		background: var(--hair-2);
 		color: var(--fg);
 	}
 
 	.copy:active {
 		transform: scale(0.92);
-	}
-
-	.copy :global(.i-check) {
-		display: none;
-		color: var(--green);
-	}
-
-	.copy[data-copied] :global(.i-copy) {
-		display: none;
-	}
-
-	.copy[data-copied] :global(.i-check) {
-		display: block;
 	}
 
 	.panel p {
@@ -240,6 +211,7 @@ const platforms = [
 		gap: 12px 16px;
 		margin-top: 32px;
 		font-size: 14px;
+		color: var(--fg-3);
 	}
 
 	.platforms ul {
@@ -265,6 +237,6 @@ const platforms = [
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		color: var(--ember-hi);
+		color: var(--accent);
 	}
 </style>

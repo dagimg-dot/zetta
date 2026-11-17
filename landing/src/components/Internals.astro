@@ -24,12 +24,9 @@ const pgSupport = [
 
 <section class="section" id="internals">
 	<div class="wrap">
-		<div class="head">
-			<span class="eyebrow reveal">Internals</span>
-			<h2 class="h2 reveal" style="--d:1">
-				Written in Zig.<br /><span class="serif muted">Nothing borrowed at runtime.</span>
-			</h2>
-			<p class="lede reveal" style="--d:2">
+		<div class="section-head">
+			<h2 class="h2 reveal">Written in Zig, from the wire protocol up.</h2>
+			<p class="lede reveal" style="--d:1">
 				zetta speaks the Postgres wire protocol itself, with TLS from the Zig standard library, and
 				compiles the official SQLite amalgamation in. The binary links libc and nothing else.
 			</p>
@@ -73,17 +70,6 @@ const pgSupport = [
 			<div class="side">
 				<div class="shell reveal" style="--d:1">
 					<div class="core pad">
-						<p class="k">Not inside</p>
-						<ul class="nots">
-							<li><s>libpq</s></li>
-							<li><s>OpenSSL</s></li>
-							<li><s>Node or Electron</s></li>
-							<li><s>a runtime</s></li>
-						</ul>
-					</div>
-				</div>
-				<div class="shell reveal" style="--d:2">
-					<div class="core pad">
 						<p class="k">Postgres support</p>
 						<ul class="chips">
 							{pgSupport.map((s) => <li>{s}</li>)}
@@ -96,14 +82,6 @@ const pgSupport = [
 </section>
 
 <style>
-	.head {
-		display: grid;
-		gap: 24px;
-		justify-items: start;
-		max-width: 760px;
-		margin-bottom: clamp(56px, 7vw, 88px);
-	}
-
 	.grid {
 		display: grid;
 		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
@@ -113,8 +91,8 @@ const pgSupport = [
 	.anatomy .core {
 		padding: clamp(24px, 3vw, 40px);
 		background:
-			radial-gradient(600px 300px at 50% 0%, oklch(0.7 0.19 45 / 0.09), transparent 70%),
-			linear-gradient(180deg, var(--ink-2), var(--ink-1));
+			radial-gradient(600px 300px at 50% 0%, var(--wash), transparent 70%),
+			linear-gradient(180deg, var(--surface-top), var(--surface-bottom));
 	}
 
 	.label {
@@ -143,7 +121,7 @@ const pgSupport = [
 		gap: 8px;
 		padding: 8px;
 		border-radius: 18px;
-		background: oklch(0 0 0 / 0.25);
+		background: var(--sunken);
 		box-shadow: inset 0 0 0 1px var(--hair);
 	}
 
@@ -152,10 +130,11 @@ const pgSupport = [
 		gap: 2px;
 		padding: 16px 18px;
 		border-radius: 12px;
-		background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+		background: var(--raised);
 		box-shadow:
 			inset 0 0 0 1px var(--hair),
-			inset 0 1px 0 oklch(1 0 0 / 0.06);
+			inset 0 1px 0 var(--highlight),
+			0 1px 3px var(--shadow);
 		opacity: 0;
 		transform: translateY(14px) scale(0.98);
 		transition:
@@ -187,14 +166,14 @@ const pgSupport = [
 	}
 
 	.adapter {
-		background: linear-gradient(180deg, oklch(0.32 0.08 42), oklch(0.25 0.05 42));
+		background: light-dark(oklch(0.97 0.03 60), oklch(0.29 0.07 42));
 		box-shadow:
-			inset 0 0 0 1px oklch(0.7 0.19 45 / 0.35),
-			inset 0 1px 0 oklch(1 0 0 / 0.1);
+			inset 0 0 0 1px light-dark(oklch(0.7 0.15 50 / 0.35), oklch(0.7 0.19 45 / 0.35)),
+			inset 0 1px 0 var(--highlight);
 	}
 
 	.adapter span {
-		color: oklch(0.85 0.05 55);
+		color: light-dark(oklch(0.5 0.08 45), oklch(0.85 0.05 55));
 	}
 
 	.libc {
@@ -226,24 +205,7 @@ const pgSupport = [
 		font-size: 12px;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: var(--ember-hi);
-	}
-
-	.nots {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 10px 20px;
-		margin: 0;
-		padding: 0;
-		list-style: none;
-		font-size: 20px;
-		letter-spacing: -0.03em;
-	}
-
-	.nots s {
-		color: var(--fg-3);
-		text-decoration-color: var(--ember);
-		text-decoration-thickness: 1.5px;
+		color: var(--accent);
 	}
 
 	.chips {
@@ -258,7 +220,7 @@ const pgSupport = [
 	.chips li {
 		padding: 5px 12px;
 		border-radius: 999px;
-		background: oklch(1 0 0 / 0.04);
+		background: var(--tint);
 		box-shadow: inset 0 0 0 1px var(--hair);
 		font-family: var(--font-mono);
 		font-size: 12px;

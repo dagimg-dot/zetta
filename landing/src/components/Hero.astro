@@ -1,18 +1,19 @@
 ---
-import { Image } from "astro:assets";
-import shot from "../../../assets/screenshot-postgres.png";
 import Icon from "./Icon.astro";
+import Screenshot from "./Screenshot.astro";
 import { installCmd, links, version } from "../site";
+import { screens } from "../screens";
 ---
 
 <section class="hero" id="top">
-	<div class="backdrop" aria-hidden="true">
-		<div class="grid"></div>
-		<div class="glow"></div>
-	</div>
+	<div class="backdrop" aria-hidden="true"></div>
 
 	<div class="wrap intro">
-		<span class="eyebrow reveal">v{version} &middot; Postgres + SQLite &middot; MIT</span>
+		<a class="release reveal" href={links.releases} target="_blank" rel="noopener">
+			<span class="tag">v{version}</span>
+			Postgres and SQLite, MIT licensed
+			<Icon name="arrow" size={14} />
+		</a>
 
 		<h1 class="display reveal" style="--d:1">
 			A database explorer<br />
@@ -20,64 +21,38 @@ import { installCmd, links, version } from "../site";
 		</h1>
 
 		<p class="lede reveal" style="--d:2">
-			Point zetta at Postgres or SQLite. Browse and query in your browser, or script it from the
-			shell. One static binary with its own Postgres client, TLS and SQLite inside. No libpq, no
-			OpenSSL, no runtime.
+			Point zetta at Postgres or SQLite. Browse and query in your browser, or run SQL from the
+			shell. It is one binary with its own Postgres client, TLS and SQLite inside.
 		</p>
 
 		<div class="actions reveal" style="--d:3">
 			<div class="cmd">
 				<span class="prompt">$</span>
-				<code>curl -fsSL <span class="muted">…/zetta/main/</span>install.sh | sh</code>
-				<button class="copy" data-copy={installCmd} aria-label="Copy install command">
+				<code>curl -fsSL <span class="dim">…/zetta/main/</span>install.sh | sh</code>
+				<button class="copy" data-copy={installCmd} aria-label="Copy the install command">
 					<Icon name="copy" size={16} class="i-copy" />
 					<Icon name="check" size={16} class="i-check" />
 				</button>
 			</div>
 			<a class="btn btn-ghost" href={links.repo} target="_blank" rel="noopener">
-				Star on GitHub
+				View on GitHub
 				<span class="knob"><Icon name="arrow" size={16} /></span>
 			</a>
 		</div>
 	</div>
 
-	<div class="wrap stage-wrap">
-		<div class="stage reveal" style="--d:4">
-			<div class="window shell">
-				<div class="core">
-					<div class="chrome">
-						<span class="dots"><i></i><i></i><i></i></span>
-						<span class="url">
-							<Icon name="lock" size={12} />
-							127.0.0.1:1993<span class="muted">/?table=public.orders&amp;where=status…</span>
-						</span>
-						<span class="spacer"></span>
-					</div>
-					<Image
-						src={shot}
-						alt="zetta browsing a Postgres table, filtered and sorted, with the inspector following a foreign key"
-						widths={[720, 1200, 1800, 2400]}
-						sizes="(max-width: 1240px) 100vw, 1200px"
-						loading="eager"
-						fetchpriority="high"
-						class="shot"
-					/>
+	<div class="wrap stage">
+		<div class="window shell reveal" style="--d:4">
+			<div class="core">
+				<div class="chrome">
+					<span class="dots"><i></i><i></i><i></i></span>
+					<span class="url">
+						<Icon name="lock" size={12} />
+						127.0.0.1:1993
+					</span>
+					<span class="dots spacer" aria-hidden="true"></span>
 				</div>
-			</div>
-
-			<div class="chip chip-a" aria-hidden="true">
-				<span class="chip-icon"><Icon name="link" size={14} /></span>
-				<span>
-					<b>customer_id 951</b>
-					<small>followed to customers</small>
-				</span>
-			</div>
-			<div class="chip chip-b" aria-hidden="true">
-				<span class="pulse"></span>
-				<span>
-					<b>2,285 rows</b>
-					<small>matched in 1.7 ms</small>
-				</span>
+				<Screenshot {...screens.postgres} eager class="shot" />
 			</div>
 		</div>
 	</div>
@@ -86,8 +61,7 @@ import { installCmd, links, version } from "../site";
 <style>
 	.hero {
 		position: relative;
-		padding-top: clamp(140px, 18vw, 200px);
-		padding-bottom: clamp(64px, 8vw, 120px);
+		padding-top: clamp(140px, 17vw, 196px);
 		isolation: isolate;
 	}
 
@@ -97,31 +71,24 @@ import { installCmd, links, version } from "../site";
 		z-index: -1;
 		overflow: hidden;
 		pointer-events: none;
-	}
-
-	.grid {
-		position: absolute;
-		inset: -2px;
 		background-image:
-			linear-gradient(to right, oklch(1 0 0 / 0.045) 1px, transparent 1px),
-			linear-gradient(to bottom, oklch(1 0 0 / 0.045) 1px, transparent 1px);
+			linear-gradient(to right, var(--hair) 1px, transparent 1px),
+			linear-gradient(to bottom, var(--hair) 1px, transparent 1px);
 		background-size: 64px 64px;
 		background-position: center top;
-		mask-image: radial-gradient(ellipse 70% 55% at 50% 22%, #000 10%, transparent 75%);
+		mask-image: radial-gradient(ellipse 70% 50% at 50% 20%, #000 10%, transparent 75%);
 	}
 
-	.glow {
+	.backdrop::after {
+		content: "";
 		position: absolute;
 		left: 50%;
-		top: 46%;
+		top: 52%;
 		width: min(1400px, 140vw);
 		aspect-ratio: 2.2;
 		transform: translateX(-50%);
-		background:
-			radial-gradient(closest-side, oklch(0.66 0.2 42 / 0.5), transparent 70%),
-			radial-gradient(closest-side at 30% 60%, oklch(0.6 0.17 30 / 0.3), transparent 70%);
+		background: radial-gradient(closest-side, var(--glow), transparent 70%);
 		filter: blur(40px);
-		opacity: 0.7;
 	}
 
 	.intro {
@@ -132,8 +99,33 @@ import { installCmd, links, version } from "../site";
 		gap: 28px;
 	}
 
-	.intro .lede {
-		max-width: 60ch;
+	.release {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		padding: 4px 14px 4px 4px;
+		border-radius: 999px;
+		background: var(--tint);
+		box-shadow:
+			inset 0 0 0 1px var(--hair),
+			inset 0 1px 0 var(--highlight);
+		font-size: 13px;
+		color: var(--fg-2);
+		transition: background-color 400ms var(--ease);
+	}
+
+	.release:hover {
+		background: var(--tint-2);
+	}
+
+	.tag {
+		padding: 3px 10px;
+		border-radius: 999px;
+		background: var(--ember);
+		color: #fff;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		font-weight: 500;
 	}
 
 	.actions {
@@ -148,28 +140,30 @@ import { installCmd, links, version } from "../site";
 		display: flex;
 		align-items: center;
 		gap: 12px;
+		min-width: 0;
 		height: 52px;
 		padding: 0 6px 0 20px;
 		border-radius: 999px;
-		background: oklch(0.11 0.004 50 / 0.7);
+		background: var(--surface-top);
 		box-shadow:
 			inset 0 0 0 1px var(--hair-2),
-			var(--sheen),
-			0 12px 40px -12px oklch(0 0 0 / 0.6);
+			0 12px 40px -16px var(--shadow);
 		font-size: 14px;
-		min-width: 0;
 	}
 
 	.cmd code {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		color: var(--fg);
 	}
 
 	.prompt {
 		font-family: var(--font-mono);
-		color: var(--ember-hi);
+		color: var(--accent);
+	}
+
+	.dim {
+		color: var(--fg-3);
 	}
 
 	.copy {
@@ -179,16 +173,15 @@ import { installCmd, links, version } from "../site";
 		width: 40px;
 		height: 40px;
 		border-radius: 999px;
-		background: oklch(1 0 0 / 0.07);
+		background: var(--tint);
 		color: var(--fg-2);
 		transition:
 			background-color 400ms var(--ease),
-			color 400ms var(--ease),
 			transform 400ms var(--ease);
 	}
 
 	.copy:hover {
-		background: oklch(1 0 0 / 0.12);
+		background: var(--tint-2);
 		color: var(--fg);
 	}
 
@@ -196,44 +189,26 @@ import { installCmd, links, version } from "../site";
 		transform: scale(0.92);
 	}
 
-	.copy :global(.i-check) {
-		display: none;
-		color: var(--green);
-	}
-
-	.copy[data-copied] :global(.i-copy) {
-		display: none;
-	}
-
-	.copy[data-copied] :global(.i-check) {
-		display: block;
-	}
-
-	.stage-wrap {
+	.stage {
 		margin-top: clamp(56px, 7vw, 96px);
 		perspective: 2000px;
-	}
-
-	.stage {
-		position: relative;
-		max-width: 1200px;
-		margin-inline: auto;
 	}
 
 	.window {
 		--r-xl: 22px;
 		--bezel: 7px;
+		max-width: 1200px;
+		margin-inline: auto;
 		box-shadow:
 			inset 0 0 0 1px var(--hair-2),
-			0 0 0 1px oklch(0 0 0 / 0.4),
-			0 60px 120px -40px oklch(0 0 0 / 0.9),
-			0 0 120px -20px var(--ember-soft);
+			0 60px 120px -40px var(--shadow),
+			0 0 120px -20px var(--wash);
 		transform-origin: 50% 0%;
 	}
 
 	@supports (animation-timeline: view()) {
 		@media (prefers-reduced-motion: no-preference) {
-			.window {
+			.window.in {
 				animation: tilt linear both;
 				animation-timeline: view();
 				animation-range: entry 0% cover 45%;
@@ -243,7 +218,7 @@ import { installCmd, links, version } from "../site";
 
 	@keyframes tilt {
 		from {
-			transform: rotateX(22deg) scale(0.92) translateY(30px);
+			transform: rotateX(20deg) scale(0.93) translateY(24px);
 		}
 		to {
 			transform: none;
@@ -253,164 +228,42 @@ import { installCmd, links, version } from "../site";
 	.chrome {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 12px;
 		height: 42px;
 		padding: 0 14px;
-		background: var(--ink-1);
 		border-bottom: 1px solid var(--hair);
 	}
 
-	.dots {
-		display: flex;
-		gap: 7px;
-		flex: 1;
-	}
-
-	.dots i {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: oklch(1 0 0 / 0.12);
+	.spacer {
+		width: 44px;
 	}
 
 	.url {
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
-		max-width: 60%;
-		padding: 5px 14px;
+		padding: 4px 14px;
 		border-radius: 8px;
-		background: oklch(1 0 0 / 0.04);
+		background: var(--tint);
 		font-family: var(--font-mono);
 		font-size: 12px;
-		color: var(--fg-2);
-		white-space: nowrap;
-		overflow: hidden;
+		color: var(--fg-3);
 	}
 
-	.url .muted {
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.spacer {
-		flex: 1;
-	}
-
-	.shot {
+	.window :global(.shot) {
 		width: 100%;
 		height: auto;
-		display: block;
-	}
-
-	.chip {
-		position: absolute;
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 12px 18px 12px 12px;
-		border-radius: 18px;
-		background: oklch(0.2 0.005 50 / 0.94);
-		box-shadow:
-			inset 0 0 0 1px var(--hair-2),
-			var(--sheen),
-			0 30px 60px -20px oklch(0 0 0 / 0.8);
-		font-size: 13px;
-		line-height: 1.3;
-		animation: float 7s var(--ease) infinite alternate;
-	}
-
-	.chip b {
-		display: block;
-		font-weight: 500;
-		font-family: var(--font-mono);
-		font-size: 13px;
-	}
-
-	.chip small {
-		color: var(--fg-3);
-		font-size: 12px;
-	}
-
-	.chip-icon {
-		display: grid;
-		place-items: center;
-		width: 32px;
-		height: 32px;
-		border-radius: 10px;
-		background: var(--ember);
-		color: #fff;
-	}
-
-	.chip-a {
-		right: -28px;
-		top: 30%;
-	}
-
-	.chip-b {
-		left: -32px;
-		bottom: 14%;
-		animation-delay: -3s;
-	}
-
-	.pulse {
-		position: relative;
-		width: 32px;
-		height: 32px;
-		border-radius: 10px;
-		background: oklch(0.82 0.13 150 / 0.14);
-	}
-
-	.pulse::after {
-		content: "";
-		position: absolute;
-		inset: 12px;
-		border-radius: 50%;
-		background: var(--green);
-		box-shadow: 0 0 0 0 oklch(0.82 0.13 150 / 0.6);
-		animation: ping 2.4s var(--ease-out) infinite;
-	}
-
-	@keyframes ping {
-		to {
-			box-shadow: 0 0 0 10px oklch(0.82 0.13 150 / 0);
-		}
-	}
-
-	@keyframes float {
-		from {
-			transform: translateY(-6px);
-		}
-		to {
-			transform: translateY(6px);
-		}
-	}
-
-	@media (max-width: 1280px) {
-		.chip-a {
-			right: 12px;
-		}
-		.chip-b {
-			left: 12px;
-		}
 	}
 
 	@media (max-width: 760px) {
-		.chip {
-			display: none;
-		}
 		.window {
 			--r-xl: 16px;
 			--bezel: 4px;
 		}
-		.actions {
-			width: 100%;
-		}
+		.actions,
 		.cmd {
 			width: 100%;
-		}
-		.url .muted {
-			display: none;
 		}
 	}
 </style>

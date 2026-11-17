@@ -1,9 +1,9 @@
 ---
 const stats = [
-	{ value: "1.4", unit: "MB", label: "Download, under 3 MB unpacked" },
-	{ value: "0", unit: "deps", label: "Links libc and nothing else" },
-	{ value: "2", unit: "engines", label: "Postgres and SQLite, natively" },
-	{ value: "5", unit: "targets", label: "macOS, Linux and Windows builds" },
+	{ value: "1.4", unit: "MB", label: "To download, under 3 MB unpacked" },
+	{ value: "0", unit: "deps", label: "Beyond libc, nothing is linked" },
+	{ value: "2", unit: "engines", label: "Postgres and SQLite, both native" },
+	{ value: "5", unit: "builds", label: "For macOS, Linux and Windows" },
 ];
 ---
 
@@ -62,13 +62,11 @@ const stats = [
 	}
 
 	.unit {
-		margin-left: 6px;
-		font-family: var(--font-mono);
-		font-size: 13px;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--ember-hi);
-		vertical-align: top;
+		margin-left: 8px;
+		font-size: 18px;
+		font-weight: 400;
+		letter-spacing: -0.01em;
+		color: var(--accent);
 	}
 
 	.label {
