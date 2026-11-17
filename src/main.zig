@@ -6,6 +6,7 @@ const build_options = @import("build_options");
 const cli = @import("cli");
 const commands = @import("commands/root.zig");
 const log = @import("log.zig");
+const signals = @import("signals.zig");
 
 const Cli = commands.Cli;
 const File = std.Io.File;
@@ -23,6 +24,7 @@ const version = build_options.version;
 const long_version = version ++ " (" ++ build_options.git_commit ++ ")";
 
 pub fn main(init: std.process.Init) u8 {
+    signals.exitOnStopAsInit();
     const io = init.io;
     const arena = init.arena.allocator();
 
@@ -108,4 +110,5 @@ fn useColor(io: std.Io, env: *const std.process.Environ.Map, when: commands.Colo
 
 test {
     _ = commands;
+    _ = signals;
 }
