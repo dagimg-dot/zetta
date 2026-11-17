@@ -1,11 +1,7 @@
-# The landing page in landing/ and its in-browser demo. The demo compiles zetta to wasm, so the
-# build runs from the repository root; landing/scripts/netlify-build.sh fetches Zig and Bun.
+# tryzetta.netlify.app takes manual deploys only: Netlify has no Zig, which the demo's zetta.wasm
+# needs, so `bun run deploy` in landing/ builds here and uploads landing/dist. Git builds are off.
 [build]
-  command = "bash landing/scripts/netlify-build.sh"
   publish = "landing/dist"
-
-[build.environment]
-  NODE_VERSION = "24"
 
 # Astro fingerprints these file names, so they can be cached for good.
 [[headers]]

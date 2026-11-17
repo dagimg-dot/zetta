@@ -6,7 +6,8 @@
     "dev": "astro dev",
     "demo": "bun scripts/demo.ts",
     "build": "bun run demo && astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "deploy": "bun run build && netlify deploy --prod --dir dist --site 5008df9a-8c84-48a0-bb62-7c71a86ddb6e"
   },
   "dependencies": {
     "@fontsource-variable/lexend": "^5.3.0",
