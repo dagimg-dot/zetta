@@ -111,6 +111,28 @@ Then open `http://localhost:1993/?token=$ZETTA_TOKEN`. Inside the container zett
 
 The image is a static binary on `scratch` for amd64 and arm64, also published as `ghcr.io/dagimg-dot/zetta`. `latest` is the newest release and `edge` follows `main`.
 
+### Docker Compose
+
+Add zetta beside the database your project already runs:
+
+```yaml
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+  zetta:
+    image: workflowjd/zetta
+    ports: ["127.0.0.1:1993:1993"]
+    environment:
+      ZETTA_TOKEN: ${ZETTA_TOKEN:?set ZETTA_TOKEN in .env}
+      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+    depends_on: [db]
+```
+
+Put `ZETTA_TOKEN=` and the output of `openssl rand -hex 16` in `.env`, run `docker compose up`, and open the link `docker compose logs zetta` prints. In the image zetta keeps trying the database for 30 seconds while it starts, so it needs no health check; `ZETTA_WAIT` changes how long. Add `ZETTA_READ_ONLY: "true"` to browse a shared database without writes. For SQLite, mount the file's folder and pass `command: ["serve", "/data/app.db"]`, with `user:` set to your own uid and gid.
+
 <details>
 <summary><strong>Postgres support</strong></summary>
 
