@@ -1,0 +1,276 @@
+---
+import Icon from "./Icon.astro";
+
+const facts = ["1,200 customers", "4,000 orders", "9,000 order items", "180 products", "Read-only"];
+
+const starts = [
+	{ href: "/demo/?schema=main&table=orders", title: "Browse the orders", note: "4,000 rows to filter and sort" },
+	{ href: "/demo/?schema=main&table=order_items", title: "Follow a foreign key", note: "Each item points at an order and a product" },
+	{ href: "/demo/?schema=main&table=top_customers", title: "Open a view", note: "Top customers, joined from two tables" },
+	{ href: "/demo/?tab=sql", title: "Write your own SQL", note: "With highlighting and completion" },
+];
+
+const flow = [
+	{ name: "This browser tab", note: "The same UI the zetta binary serves" },
+	{ name: "A service worker", note: "Catches the UI's /api/ calls before they reach the network" },
+	{ name: "zetta.wasm", note: "zetta's own handlers and SQLite, compiled to WebAssembly" },
+	{ name: "demo.db", note: "A sample shop, held in memory" },
+];
+---
+
+<section class="section demo" id="demo">
+	<div class="wrap split">
+		<div class="text">
+			<h2 class="h2 reveal">Try it right here, with nothing to install.</h2>
+			<p class="lede reveal" style="--d:1">
+				The live demo is zetta itself, compiled to WebAssembly and running in this browser tab against
+				a sample shop database. Nothing you do leaves the page.
+			</p>
+			<ul class="facts reveal" style="--d:2" aria-label="What is in the sample database">
+				{facts.map((f) => <li>{f}</li>)}
+			</ul>
+			<div class="cta reveal" style="--d:3">
+				<a class="btn btn-primary" href="/demo/">
+					Open the live demo
+					<span class="knob"><Icon name="arrow" size={16} /></span>
+				</a>
+				<p class="dim">A one-time download of about 2.6 MB.</p>
+			</div>
+		</div>
+
+		<div class="side">
+			<nav class="starts reveal" style="--d:2" aria-label="Places to start in the demo">
+				<p class="k">Start somewhere</p>
+				<ul>
+					{
+						starts.map((s) => (
+							<li>
+								<a href={s.href}>
+									<span>
+										<b>{s.title}</b>
+										<small>{s.note}</small>
+									</span>
+									<Icon name="arrow" size={16} />
+								</a>
+							</li>
+						))
+					}
+				</ul>
+			</nav>
+
+			<div class="shell reveal" style="--d:3">
+				<div class="core how">
+					<p class="k">How it runs</p>
+					<ol class="flow">
+						{
+							flow.map((f) => (
+								<li>
+									<b>{f.name}</b>
+									<span>{f.note}</span>
+								</li>
+							))
+						}
+					</ol>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<style>
+	.demo {
+		padding-top: clamp(48px, 6vw, 80px);
+	}
+
+	.split {
+		display: grid;
+		grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+		gap: clamp(40px, 7vw, 104px);
+		align-items: start;
+	}
+
+	.text {
+		position: sticky;
+		top: 140px;
+		display: grid;
+		gap: 24px;
+		justify-items: start;
+	}
+
+	.facts {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.facts li {
+		padding: 5px 12px;
+		border-radius: 999px;
+		background: var(--tint);
+		box-shadow: inset 0 0 0 1px var(--hair);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--fg-2);
+	}
+
+	.facts li:last-child {
+		color: var(--accent);
+	}
+
+	.cta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 12px 20px;
+		margin-top: 8px;
+	}
+
+	.dim {
+		margin: 0;
+		font-size: 13.5px;
+		color: var(--fg-3);
+	}
+
+	.side {
+		display: grid;
+		gap: 16px;
+	}
+
+	.k {
+		margin: 0 0 14px;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+
+	.starts ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		border-top: 1px solid var(--hair);
+	}
+
+	.starts li {
+		border-bottom: 1px solid var(--hair);
+	}
+
+	.starts a {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 18px 4px;
+		transition:
+			padding 500ms var(--ease),
+			color 500ms var(--ease);
+	}
+
+	.starts a > span {
+		display: grid;
+		gap: 2px;
+	}
+
+	.starts b {
+		font-size: 17px;
+		font-weight: 500;
+		letter-spacing: -0.02em;
+	}
+
+	.starts small {
+		font-size: 13.5px;
+		color: var(--fg-3);
+	}
+
+	.starts a :global(svg) {
+		flex: none;
+		color: var(--fg-3);
+		transition:
+			transform 500ms var(--ease),
+			color 500ms var(--ease);
+	}
+
+	.starts a:hover {
+		padding-inline: 12px 8px;
+	}
+
+	.starts a:hover :global(svg) {
+		color: var(--accent);
+		transform: translate(2px, -2px);
+	}
+
+	.how {
+		padding: 24px;
+	}
+
+	.flow {
+		position: relative;
+		display: grid;
+		gap: 10px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	/* The line the request travels down, behind the steps. */
+	.flow::before {
+		content: "";
+		position: absolute;
+		left: 21px;
+		top: 18px;
+		bottom: 18px;
+		width: 1px;
+		background: repeating-linear-gradient(180deg, var(--accent) 0 4px, transparent 4px 9px);
+		opacity: 0.6;
+	}
+
+	.flow li {
+		position: relative;
+		display: grid;
+		gap: 2px;
+		padding: 12px 16px 12px 44px;
+		border-radius: 12px;
+		background: var(--raised);
+		box-shadow:
+			inset 0 0 0 1px var(--hair),
+			inset 0 1px 0 var(--highlight),
+			0 1px 3px var(--shadow);
+	}
+
+	.flow li::before {
+		content: "";
+		position: absolute;
+		left: 17px;
+		top: 50%;
+		width: 9px;
+		height: 9px;
+		margin-top: -4.5px;
+		border-radius: 3px;
+		background: var(--ember);
+		box-shadow: 0 0 10px var(--glow);
+	}
+
+	.flow b {
+		font-family: var(--font-mono);
+		font-size: 13.5px;
+		font-weight: 500;
+	}
+
+	.flow span {
+		font-size: 13.5px;
+		color: var(--fg-3);
+	}
+
+	@media (max-width: 960px) {
+		.split {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.text {
+			position: static;
+		}
+	}
+</style>
