@@ -1,0 +1,27 @@
+# Maintainer: Dagim G. Astatkie
+
+pkgname=zetta-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Database explorer for Postgres and SQLite in a single binary'
+arch=('x86_64' 'aarch64')
+url='https://github.com/dagimg-dot/zetta'
+license=('MIT')
+provides=('zetta')
+conflicts=('zetta')
+options=('!strip' '!debug')
+source_x86_64=("zetta-$pkgver-linux-x86_64.tar.gz::$url/releases/download/v$pkgver/zetta-$pkgver-linux-x86_64.tar.gz")
+source_aarch64=("zetta-$pkgver-linux-aarch64.tar.gz::$url/releases/download/v$pkgver/zetta-$pkgver-linux-aarch64.tar.gz")
+sha256sums_x86_64=('3939de7cbbd735fb1ae776dd252af558ef01dff9f05e7ff372c18783410f63d7')
+sha256sums_aarch64=('03d4626e62dd701995a0dec4524770fd025e6591123d291bb7e12fa47b88b06c')
+
+package() {
+	cd "zetta-$pkgver-linux-$CARCH"
+	install -Dm755 zetta "$pkgdir/usr/bin/zetta"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+
+	./zetta completion bash | install -Dm644 /dev/stdin "$pkgdir/usr/share/bash-completion/completions/zetta"
+	./zetta completion zsh | install -Dm644 /dev/stdin "$pkgdir/usr/share/zsh/site-functions/_zetta"
+	./zetta completion fish | install -Dm644 /dev/stdin "$pkgdir/usr/share/fish/vendor_completions.d/zetta.fish"
+}

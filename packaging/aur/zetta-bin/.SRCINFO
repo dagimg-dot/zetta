@@ -1,0 +1,18 @@
+pkgbase = zetta-bin
+	pkgdesc = Database explorer for Postgres and SQLite in a single binary
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/dagimg-dot/zetta
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	provides = zetta
+	conflicts = zetta
+	options = !strip
+	options = !debug
+	source_x86_64 = zetta-0.1.0-linux-x86_64.tar.gz::https://github.com/dagimg-dot/zetta/releases/download/v0.1.0/zetta-0.1.0-linux-x86_64.tar.gz
+	sha256sums_x86_64 = 3939de7cbbd735fb1ae776dd252af558ef01dff9f05e7ff372c18783410f63d7
+	source_aarch64 = zetta-0.1.0-linux-aarch64.tar.gz::https://github.com/dagimg-dot/zetta/releases/download/v0.1.0/zetta-0.1.0-linux-aarch64.tar.gz
+	sha256sums_aarch64 = 03d4626e62dd701995a0dec4524770fd025e6591123d291bb7e12fa47b88b06c
+
+pkgname = zetta-bin
