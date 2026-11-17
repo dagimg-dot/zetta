@@ -1,5 +1,3 @@
-export const version = "0.1.1";
-
 export const links = {
 	repo: "https://github.com/dagimg-dot/zetta",
 	releases: "https://github.com/dagimg-dot/zetta/releases/latest",

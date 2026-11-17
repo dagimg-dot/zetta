@@ -2,7 +2,8 @@
 import Icon from "./Icon.astro";
 import Screenshot from "./Screenshot.astro";
 import Tilt from "./Tilt.astro";
-import { installCmd, links, version } from "../site";
+import Version from "./Version.astro";
+import { installCmd, links } from "../site";
 import { screens } from "../screens";
 ---
 
@@ -11,8 +12,8 @@ import { screens } from "../screens";
 
 	<div class="wrap intro">
 		<a class="release reveal" href={links.releases} target="_blank" rel="noopener">
-			<span class="tag">v{version}</span>
-			Postgres and SQLite, MIT licensed
+			<Version class="tag" />
+			Try the latest release
 			<Icon name="arrow" size={14} />
 		</a>
 
@@ -117,11 +118,15 @@ import { screens } from "../screens";
 		transition: background-color 400ms var(--ease);
 	}
 
+	.release:has(.tag[hidden]) {
+		padding-left: 14px;
+	}
+
 	.release:hover {
 		background: var(--tint-2);
 	}
 
-	.tag {
+	.release :global(.tag) {
 		padding: 3px 10px;
 		border-radius: 999px;
 		background: var(--ember);

@@ -1,7 +1,8 @@
 ---
 import Icon from "./Icon.astro";
 import Logo from "./Logo.astro";
-import { installCmd, links, version } from "../site";
+import Version from "./Version.astro";
+import { installCmd, links } from "../site";
 
 const year = new Date().getFullYear();
 ---
@@ -42,7 +43,7 @@ const year = new Date().getFullYear();
 		<div class="brand">
 			<Logo size={22} />
 			<span>zetta</span>
-			<code>v{version}</code>
+			<Version class="ver" />
 		</div>
 		<nav aria-label="Footer">
 			<a href={links.repo} target="_blank" rel="noopener">GitHub</a>
@@ -143,7 +144,8 @@ const year = new Date().getFullYear();
 		font-weight: 500;
 	}
 
-	.brand code {
+	.brand :global(.ver) {
+		font-family: var(--font-mono);
 		font-size: 12px;
 		color: var(--fg-4);
 	}

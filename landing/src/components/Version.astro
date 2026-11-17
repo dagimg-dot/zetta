@@ -1,0 +1,73 @@
+---
+interface Props {
+	class?: string;
+}
+
+const { class: cls } = Astro.props;
+---
+
+<span class:list={["version", cls]} data-version hidden></span>
+
+<script>
+	/*
+	 * Fills every [data-version] with the latest release tag from GitHub. They stay
+	 * hidden until it arrives, so the page never shows a stale or made-up number.
+	 * The tag is kept for an hour to stay well inside GitHub's anonymous rate limit.
+	 */
+	const API = "https://api.github.com/repos/dagimg-dot/zetta/releases/latest";
+	const KEY = "zetta-site.release";
+	const TTL_MS = 60 * 60 * 1000;
+
+	function cached(): string | null {
+		try {
+			const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as { tag?: unknown; at?: unknown } | null;
+			if (typeof raw?.tag === "string" && typeof raw.at === "number" && Date.now() - raw.at < TTL_MS) {
+				return raw.tag;
+			}
+		} catch {
+			// Unreadable or blocked storage; fetch instead.
+		}
+		return null;
+	}
+
+	async function fetchTag(): Promise<string | null> {
+		const res = await fetch(API, { headers: { Accept: "application/vnd.github+json" } });
+		if (!res.ok) return null;
+		const body = (await res.json()) as { tag_name?: unknown };
+		if (typeof body.tag_name !== "string") return null;
+		try {
+			localStorage.setItem(KEY, JSON.stringify({ tag: body.tag_name, at: Date.now() }));
+		} catch {
+			// Storage can be blocked; the next visit fetches again.
+		}
+		return body.tag_name;
+	}
+
+	async function fill() {
+		const slots = document.querySelectorAll<HTMLElement>("[data-version]");
+		if (slots.length === 0) return;
+		let tag = cached();
+		if (!tag) {
+			try {
+				tag = await fetchTag();
+			} catch {
+				// Offline or blocked; the version simply stays hidden.
+				return;
+			}
+		}
+		if (!tag) return;
+		const label = `v${tag.replace(/^v/, "")}`;
+		for (const el of slots) {
+			el.textContent = label;
+			el.hidden = false;
+		}
+	}
+
+	void fill();
+</script>
+
+<style>
+	.version:not([hidden]) {
+		animation: rise 500ms var(--ease-out);
+	}
+</style>
