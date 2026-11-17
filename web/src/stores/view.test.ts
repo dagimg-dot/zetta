@@ -1,12 +1,15 @@
 import { expect, test } from "bun:test";
 
-// url.ts reads the address and wires history when it loads.
+// view.ts reads the address and wires history when it loads. The real addEventListener goes
+// back afterwards: a module loaded later in this process, such as layout.ts, needs it.
+const realAddEventListener = globalThis.addEventListener;
 Object.assign(globalThis, {
 	location: { search: "", pathname: "/" },
 	history: { replaceState() {}, pushState() {} },
 	addEventListener() {},
 });
 const { parse, serialize } = await import("./view");
+globalThis.addEventListener = realAddEventListener;
 
 test("hidden columns round-trip through the URL, whatever their names hold", () => {
 	const names = ["a,b", 'say "hi"', "naïve ✓", "a&b=c", " spaced "];
