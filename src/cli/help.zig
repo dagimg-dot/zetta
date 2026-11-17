@@ -207,6 +207,9 @@ pub fn renderFailure(f: parse.Failure, w: *Writer, style: Style) Writer.Error!vo
         .invalid_value => try w.print(" invalid value '{s}'; expected {s}\n", .{ f.token, f.expected }),
         .invalid_env_value => try w.print(" invalid value in environment variable '{s}'; expected {s}\n", .{ f.token, f.expected }),
         .missing_required => try w.print(" the following required arguments were not provided:\n  {s}\n", .{f.token}),
+        .unexpected_value => try w.print(" unexpected value '{s}' for '{s}' found; no more were expected\n", .{ f.expected, f.token }),
+        .repeated => try w.print(" the argument '{s}' cannot be used multiple times\n", .{f.token}),
+        .conflict => try w.print(" the argument '{s}' cannot be used with '{s}'\n", .{ f.token, f.expected }),
     }
     if (f.suggestion) |s| try w.print("\n  tip: a similar {s} exists: '{s}'\n", .{ if (f.kind == .unknown_command) "subcommand" else "argument", s });
     try w.writeByte('\n');

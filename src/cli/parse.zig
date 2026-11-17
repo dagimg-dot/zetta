@@ -25,6 +25,9 @@ pub const Failure = struct {
         invalid_env_value,
         missing_required,
         unexpected_argument,
+        unexpected_value,
+        repeated,
+        conflict,
     };
 };
 
@@ -72,7 +75,7 @@ pub fn parse(comptime Root: type, argv: []const []const u8, env: anytype) Outcom
         if (isFlag(tok)) {
             if (mem.eql(u8, tok, "-h") or mem.eql(u8, tok, "--help")) return .{ .help = .{ .command = null, .long = tok.len > 2 } };
             if (mem.eql(u8, tok, "-V") or mem.eql(u8, tok, "--version")) return .version;
-            switch (matchOption(Root, &root, spec.options(Root), &root_seen, argv, &i, &failure)) {
+            switch (matchFlag(Root, &root, spec.options(Root), &root_seen, Root, &root, &.{}, &root_seen, argv, &i, &failure)) {
                 .matched => continue,
                 .failed => return fail(Out, failure, root_usage),
                 .not_found => return fail(Out, unknownArgument(Root, void, tok), root_usage),
@@ -86,6 +89,7 @@ pub fn parse(comptime Root: type, argv: []const []const u8, env: anytype) Outcom
             if (mem.eql(u8, tok, "help")) {
                 const target = if (i + 1 < argv.len) argv[i + 1] else null;
                 if (target) |name| {
+                    if (i + 2 < argv.len) return fail(Out, .{ .kind = .unexpected_argument, .token = argv[i + 2] }, Root.name ++ " help [COMMAND]");
                     inline for (comptime spec.commandFields(Root)) |f| {
                         if (commandMatches(f, name)) return .{ .help = .{ .command = f.name, .long = true } };
                     }
@@ -101,6 +105,7 @@ pub fn parse(comptime Root: type, argv: []const []const u8, env: anytype) Outcom
                 const name = if (i + 1 < argv.len) argv[i + 1] else return fail(Out, .{ .kind = .missing_required, .token = "<SHELL>" }, Root.name ++ " completion <SHELL>");
                 const shell = std.meta.stringToEnum(Shell, name) orelse
                     return fail(Out, .{ .kind = .invalid_value, .token = name, .expected = "bash, zsh, fish" }, Root.name ++ " completion <SHELL>");
+                if (i + 2 < argv.len) return fail(Out, .{ .kind = .unexpected_argument, .token = argv[i + 2] }, Root.name ++ " completion <SHELL>");
                 return .{ .completion_script = shell };
             }
             if (comptime spec.defaultCommand(Root)) |default| {
@@ -121,6 +126,7 @@ pub fn parse(comptime Root: type, argv: []const []const u8, env: anytype) Outcom
     if (comptime spec.defaultCommand(Root)) |default| {
         return parseCommand(Root, default, &root, &root_seen, &.{}, env);
     }
+    if (conflict(Root, spec.options(Root), &root_seen)) |f| return fail(Out, f, root_usage);
     if (finish(Root, &root, spec.options(Root), &root_seen, env)) |f| return fail(Out, f, root_usage);
     return .{ .run = root };
 }
@@ -154,12 +160,7 @@ fn parseCommand(
         }
         if (!only_positional and isFlag(tok)) {
             if (mem.eql(u8, tok, "-h") or mem.eql(u8, tok, "--help")) return .{ .help = .{ .command = name, .long = tok.len > 2 } };
-            switch (matchOption(Cmd, &cmd, opts, &seen, argv, &i, &failure)) {
-                .matched => continue,
-                .failed => return fail(Out, failure, usage),
-                .not_found => {},
-            }
-            switch (matchOption(Root, root, comptime spec.globals(Root), root_seen, argv, &i, &failure)) {
+            switch (matchFlag(Cmd, &cmd, opts, &seen, Root, root, comptime spec.globals(Root), root_seen, argv, &i, &failure)) {
                 .matched => continue,
                 .failed => return fail(Out, failure, usage),
                 .not_found => return fail(Out, unknownArgument(Root, Cmd, tok), usage),
@@ -171,6 +172,8 @@ fn parseCommand(
         }
     }
 
+    if (conflict(Cmd, opts, &seen)) |f| return fail(Out, f, usage);
+    if (conflict(Root, comptime spec.options(Root), root_seen)) |f| return fail(Out, f, usage);
     if (finish(Cmd, &cmd, opts, &seen, env)) |f| return fail(Out, f, usage);
     if (finish(Root, root, comptime spec.options(Root), root_seen, env)) |f| return fail(Out, f, usage);
     root.command = @unionInit(Root.Command, name, cmd);
@@ -205,7 +208,49 @@ fn defaults(comptime T: type) T {
     return value;
 }
 
-fn matchOption(
+/// A flag against the command's own options, then the root's globals (none
+/// at the root itself). A cluster of shorts may mix the two, as in clap.
+fn matchFlag(
+    comptime A: type,
+    a: *A,
+    comptime a_opts: []const Option,
+    a_seen: anytype,
+    comptime B: type,
+    b: *B,
+    comptime b_opts: []const Option,
+    b_seen: anytype,
+    argv: []const []const u8,
+    i: *usize,
+    failure: *Failure,
+) Match {
+    const tok = argv[i.*];
+    if (mem.startsWith(u8, tok, "--")) {
+        const m = matchLong(A, a, a_opts, a_seen, argv, i, failure);
+        if (m != .not_found) return m;
+        return matchLong(B, b, b_opts, b_seen, argv, i, failure);
+    }
+
+    // A cluster of shorts: -vvq, -p7777, -p=7777, -p 7777.
+    var j: usize = 1;
+    while (j < tok.len) : (j += 1) {
+        var took_rest = false;
+        var m = matchShort(A, a, a_opts, a_seen, tok, j, argv, i, failure, &took_rest);
+        if (m == .not_found) m = matchShort(B, b, b_opts, b_seen, tok, j, argv, i, failure, &took_rest);
+        switch (m) {
+            .failed => return .failed,
+            .not_found => {
+                if (tok.len == 2) return .not_found;
+                failure.* = .{ .kind = .unknown_argument, .token = shortFlag(tok[j]) };
+                return .failed;
+            },
+            .matched => if (took_rest) return .matched,
+        }
+    }
+    return .matched;
+}
+
+/// `--name`, `--name=value`, `--no-name`.
+fn matchLong(
     comptime T: type,
     target: *T,
     comptime opts: []const Option,
@@ -215,66 +260,118 @@ fn matchOption(
     failure: *Failure,
 ) Match {
     const tok = argv[i.*];
-    if (mem.startsWith(u8, tok, "--")) {
-        const body = tok[2..];
-        const eq = mem.indexOfScalar(u8, body, '=');
-        const name = body[0 .. eq orelse body.len];
-        const inline_value: ?[]const u8 = if (eq) |e| body[e + 1 ..] else null;
-        inline for (opts, 0..) |o, k| {
-            if (o.positional) continue;
-            const long = comptime spec.longName(o);
-            if (mem.eql(u8, name, long)) {
-                seen[comptime optionIndex(T, o)] = true;
-                _ = k;
-                return apply(T, target, o, tok, inline_value, false, argv, i, failure);
-            }
-            if (o.negatable and mem.startsWith(u8, name, "no-") and mem.eql(u8, name[3..], long)) {
-                seen[comptime optionIndex(T, o)] = true;
-                return apply(T, target, o, tok, null, true, argv, i, failure);
-            }
+    const body = tok[2..];
+    const eq = mem.indexOfScalar(u8, body, '=');
+    const name = body[0 .. eq orelse body.len];
+    const flag = tok[0 .. 2 + name.len];
+    const inline_value: ?[]const u8 = if (eq) |e| body[e + 1 ..] else null;
+    inline for (opts) |o| {
+        if (o.positional) continue;
+        const long = comptime spec.longName(o);
+        const negated = o.negatable and mem.startsWith(u8, name, "no-") and mem.eql(u8, name[3..], long);
+        if (negated or mem.eql(u8, name, long)) {
+            if (negated) if (inline_value) |v| {
+                failure.* = .{ .kind = .unexpected_value, .token = flag, .expected = v };
+                return .failed;
+            };
+            if (!claim(T, o, seen, failure)) return .failed;
+            return apply(T, target, o, flag, inline_value, negated, argv, i, failure);
         }
-        return .not_found;
     }
+    return .not_found;
+}
 
-    // A cluster of shorts: -vvq, -p7777, -p 7777.
-    var j: usize = 1;
-    while (j < tok.len) : (j += 1) {
-        const ch = tok[j];
-        const matched = inline for (opts) |o| {
-            if (o.short != null and !o.positional and o.short.? == ch) {
-                seen[comptime optionIndex(T, o)] = true;
-                if (comptime spec.takesValue(T, o)) {
-                    const rest = tok[j + 1 ..];
-                    return apply(T, target, o, tok, if (rest.len > 0) rest else null, false, argv, i, failure);
-                }
-                if (apply(T, target, o, tok, null, false, argv, i, failure) == .failed) return .failed;
-                break true;
+/// The short at `tok[j]`. Sets `took_rest` when it takes the rest of the token as its value.
+fn matchShort(
+    comptime T: type,
+    target: *T,
+    comptime opts: []const Option,
+    seen: anytype,
+    tok: []const u8,
+    j: usize,
+    argv: []const []const u8,
+    i: *usize,
+    failure: *Failure,
+    took_rest: *bool,
+) Match {
+    inline for (opts) |o| {
+        if (o.short != null and !o.positional and o.short.? == tok[j]) {
+            const flag = shortFlag(tok[j]);
+            const rest = tok[j + 1 ..];
+            if (!claim(T, o, seen, failure)) return .failed;
+            if (comptime spec.takesValue(T, o)) {
+                took_rest.* = true;
+                const value = if (mem.startsWith(u8, rest, "=")) rest[1..] else rest;
+                return apply(T, target, o, flag, if (rest.len > 0) value else null, false, argv, i, failure);
             }
-        } else false;
-        if (!matched) {
-            if (j == 1) return .not_found;
-            failure.* = .{ .kind = .unknown_argument, .token = tok };
-            return .failed;
+            if (mem.startsWith(u8, rest, "=")) {
+                failure.* = .{ .kind = .unexpected_value, .token = flag, .expected = rest[1..] };
+                return .failed;
+            }
+            return apply(T, target, o, flag, null, false, argv, i, failure);
         }
     }
-    return .matched;
+    return .not_found;
+}
+
+/// Marks `o` as given on the command line. An option that takes a value may be given once;
+/// counts repeat, and switches take the last of `--x` and `--no-x`.
+fn claim(comptime T: type, comptime o: Option, seen: anytype, failure: *Failure) bool {
+    const k = comptime optionIndex(T, o);
+    if (seen[k] and comptime spec.takesValue(T, o)) {
+        failure.* = .{ .kind = .repeated, .token = "--" ++ comptime spec.longName(o) };
+        return false;
+    }
+    seen[k] = true;
+    return true;
+}
+
+const short_flags = blk: {
+    var table: [256][2]u8 = undefined;
+    for (&table, 0..) |*entry, ch| entry.* = .{ '-', ch };
+    break :blk table;
+};
+
+/// `-c` for one short of a cluster, so a failure can name it without allocating.
+fn shortFlag(ch: u8) []const u8 {
+    return &short_flags[ch];
 }
 
 /// Index of `o` in its own type's option list, for the seen table.
 fn optionIndex(comptime T: type, comptime o: Option) usize {
+    return fieldIndex(T, o.field);
+}
+
+fn fieldIndex(comptime T: type, comptime field: []const u8) usize {
     comptime {
         for (spec.options(T), 0..) |candidate, k| {
-            if (mem.eql(u8, candidate.field, o.field)) return k;
+            if (mem.eql(u8, candidate.field, field)) return k;
         }
         unreachable;
     }
 }
 
+/// The first two options given together on the command line that `conflicts` forbids.
+fn conflict(comptime T: type, comptime opts: []const Option, seen: anytype) ?Failure {
+    inline for (opts) |o| {
+        inline for (o.conflicts) |other| {
+            const k = comptime fieldIndex(T, other);
+            if (seen[comptime optionIndex(T, o)] and seen[k]) return .{
+                .kind = .conflict,
+                .token = "--" ++ comptime spec.longName(o),
+                .expected = "--" ++ comptime spec.longName(spec.options(T)[k]),
+            };
+        }
+    }
+    return null;
+}
+
+/// Writes one option's value. `flag` is how the option was named, for messages.
 fn apply(
     comptime T: type,
     target: *T,
     comptime o: Option,
-    tok: []const u8,
+    flag: []const u8,
     inline_value: ?[]const u8,
     negate: bool,
     argv: []const []const u8,
@@ -283,6 +380,10 @@ fn apply(
 ) Match {
     const V = comptime spec.ValueType(T, o);
     if (o.count) {
+        if (inline_value) |v| {
+            failure.* = .{ .kind = .unexpected_value, .token = flag, .expected = v };
+            return .failed;
+        }
         @field(target, o.field) +|= 1;
         return .matched;
     }
@@ -294,9 +395,10 @@ fn apply(
         @field(target, o.field) = if (negate) !on else on;
         return .matched;
     }
+    // The next argument is the value unless it is a flag itself; `--x=-v` passes one that looks like a flag.
     const text = inline_value orelse blk: {
-        if (i.* + 1 >= argv.len) {
-            failure.* = .{ .kind = .missing_value, .token = tok, .expected = comptime spec.valueName(o) };
+        if (i.* + 1 >= argv.len or isFlag(argv[i.* + 1])) {
+            failure.* = .{ .kind = .missing_value, .token = flag, .expected = comptime spec.valueName(o) };
             return .failed;
         }
         i.* += 1;
@@ -398,7 +500,8 @@ fn unknownArgument(comptime Root: type, comptime Cmd: type, tok: []const u8) Fai
         for (own) |o| {
             if (!o.positional and !o.hide) list = list ++ .{spec.longName(o)};
         }
-        break :blk list ++ .{ "help", "version" };
+        // -V is a root flag, so a subcommand never offers it.
+        break :blk if (Cmd == void) list ++ .{ "help", "version" } else list ++ .{"help"};
     };
     inline for (candidates) |candidate| {
         const d = distance(bare, candidate);
@@ -487,6 +590,7 @@ const Query = struct {
 
 const TestCli = struct {
     verbose: u8 = 0,
+    quiet: bool = false,
     color: Color = .auto,
     command: Command = undefined,
 
@@ -495,6 +599,7 @@ const TestCli = struct {
     pub const Command = union(enum) { serve: Serve, query: Query };
     pub const options = [_]Option{
         .{ .field = "verbose", .short = 'v', .count = true, .global = true, .help = "More logging" },
+        .{ .field = "quiet", .short = 'q', .global = true, .conflicts = &.{"verbose"}, .help = "Less logging" },
         .{ .field = "color", .global = true, .value_name = "WHEN", .help = "Color" },
     };
 };
@@ -601,6 +706,73 @@ test "completion --help asks for help instead of naming a shell" {
         try testing.expectEqualStrings("completion", parseTest(argv, .{}).help.command.?);
     }
     try testing.expectEqual(false, parseTest(&.{ "completion", "-h" }, .{}).help.long);
+}
+
+test "a flag that takes a value never swallows the next flag" {
+    const f = parseTest(&.{ "serve", "a.db", "--host", "--read-only" }, .{}).failure;
+    try testing.expectEqual(Failure.Kind.missing_value, f.kind);
+    try testing.expectEqualStrings("--host", f.token);
+    try testing.expectEqual(Failure.Kind.missing_value, parseTest(&.{ "serve", "a.db", "-p", "-v" }, .{}).failure.kind);
+    try testing.expectEqualStrings("-x", parseTest(&.{ "serve", "a.db", "--host=-x" }, .{}).run.command.serve.host);
+    try testing.expectEqualStrings("-", parseTest(&.{ "serve", "a.db", "--host", "-" }, .{}).run.command.serve.host);
+}
+
+test "a value flag given twice is refused, counts and switches may repeat" {
+    const f = parseTest(&.{ "q", "a.db", "-f", "csv", "--format", "json" }, .{}).failure;
+    try testing.expectEqual(Failure.Kind.repeated, f.kind);
+    try testing.expectEqualStrings("--format", f.token);
+    try testing.expectEqual(Failure.Kind.repeated, parseTest(&.{ "--color", "never", "serve", "a.db", "--color", "always" }, .{}).failure.kind);
+    try testing.expectEqual(3, parseTest(&.{ "serve", "a.db", "-v", "-vv" }, .{}).run.verbose);
+    try testing.expectEqual(false, parseTest(&.{ "serve", "a.db", "--open", "--no-open" }, .{}).run.command.serve.open.?);
+    const env: TestEnv = .{ .pairs = &.{.{ "ZETTA_PORT", "8000" }} };
+    try testing.expectEqual(9000, parseTest(&.{ "serve", "a.db", "-p", "9000" }, env).run.command.serve.port);
+}
+
+test "a flag that takes no value refuses one" {
+    for ([_][]const []const u8{
+        &.{ "serve", "a.db", "--no-open=false" },
+        &.{ "serve", "a.db", "--verbose=3" },
+        &.{ "serve", "a.db", "-v=3" },
+    }) |argv| {
+        try testing.expectEqual(Failure.Kind.unexpected_value, parseTest(argv, .{}).failure.kind);
+    }
+    const f = parseTest(&.{ "serve", "a.db", "--no-open=false" }, .{}).failure;
+    try testing.expectEqualStrings("--no-open", f.token);
+    try testing.expectEqualStrings("false", f.expected);
+    try testing.expect(!parseTest(&.{ "serve", "a.db", "--read-only=false" }, .{}).run.command.serve.read_only);
+}
+
+test "a short value may follow =" {
+    try testing.expectEqual(1999, parseTest(&.{ "serve", "a.db", "-p=1999" }, .{}).run.command.serve.port);
+    try testing.expectEqual(1999, parseTest(&.{ "serve", "a.db", "-vp=1999" }, .{}).run.command.serve.port);
+}
+
+test "conflicting flags are refused wherever they appear" {
+    const f = parseTest(&.{ "-v", "serve", "a.db", "-q" }, .{}).failure;
+    try testing.expectEqual(Failure.Kind.conflict, f.kind);
+    try testing.expectEqualStrings("--quiet", f.token);
+    try testing.expectEqualStrings("--verbose", f.expected);
+    try testing.expectEqual(Failure.Kind.conflict, parseTest(&.{ "-qv", "a.db" }, .{}).failure.kind);
+    try testing.expect(parseTest(&.{ "-q", "serve", "a.db" }, .{}).run.quiet);
+}
+
+test "builtins refuse extra arguments" {
+    const f = parseTest(&.{ "completion", "bash", "extra" }, .{}).failure;
+    try testing.expectEqual(Failure.Kind.unexpected_argument, f.kind);
+    try testing.expectEqualStrings("extra", f.token);
+    try testing.expectEqual(Failure.Kind.unexpected_argument, parseTest(&.{ "help", "query", "extra" }, .{}).failure.kind);
+}
+
+test "an unknown short in a cluster is named on its own" {
+    const f = parseTest(&.{ "serve", "a.db", "-vx" }, .{}).failure;
+    try testing.expectEqual(Failure.Kind.unknown_argument, f.kind);
+    try testing.expectEqualStrings("-x", f.token);
+}
+
+test "a subcommand never suggests the flag it just refused" {
+    const f = parseTest(&.{ "serve", "a.db", "--version" }, .{}).failure;
+    try testing.expectEqual(Failure.Kind.unknown_argument, f.kind);
+    try testing.expectEqual(null, f.suggestion);
 }
 
 test "edit distance" {

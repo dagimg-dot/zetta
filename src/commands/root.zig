@@ -30,7 +30,7 @@ pub const Cli = struct {
     };
     pub const options = [_]cli.Option{
         .{ .field = "verbose", .short = 'v', .count = true, .global = true, .help = "More logging (-v requests, -vv debug)" },
-        .{ .field = "quiet", .short = 'q', .global = true, .help = "Only log errors" },
+        .{ .field = "quiet", .short = 'q', .global = true, .conflicts = &.{"verbose"}, .help = "Only log errors" },
         .{ .field = "color", .global = true, .value_name = "WHEN", .env = &.{"ZETTA_COLOR"}, .help = "When to use color (NO_COLOR is also honoured)" },
     };
 };

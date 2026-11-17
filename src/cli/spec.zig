@@ -33,6 +33,8 @@ pub const Option = struct {
     /// Root options only: accepted before and after the subcommand.
     global: bool = false,
     hide: bool = false,
+    /// Fields of the same struct that may not be given together with this one on the command line.
+    conflicts: []const []const u8 = &.{},
 };
 
 pub const Example = struct {
@@ -181,6 +183,11 @@ pub fn validate(comptime T: type) void {
             }
             if (o.negatable and V != bool) @compileError(o.field ++ ": negatable needs a bool");
             if (o.count and @typeInfo(V) != .int) @compileError(o.field ++ ": count needs an integer");
+            for (o.conflicts) |other| {
+                for (options(T)) |c| {
+                    if (std.mem.eql(u8, c.field, other)) break;
+                } else @compileError(o.field ++ ": conflicts names '" ++ other ++ "', which is not an option");
+            }
         }
     }
 }
