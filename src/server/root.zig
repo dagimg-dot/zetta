@@ -5,6 +5,10 @@ pub const Server = @import("Server.zig");
 pub const auth = @import("auth.zig");
 pub const net = @import("net.zig");
 
+const handlers = @import("handlers.zig");
+pub const Context = handlers.Context;
+pub const serveBytes = handlers.serveBytes;
+
 test {
     _ = @import("http.zig");
     _ = @import("auth.zig");

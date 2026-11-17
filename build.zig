@@ -25,18 +25,11 @@ pub fn build(b: *std.Build) void {
     options.addOption([]const u8, "git_commit", commit orelse gitShortHash(b));
     const options_mod = options.createModule();
 
-    const sqlite = addSqlite(b, target, optimize, unwind);
-
-    const db = b.createModule(.{
-        .root_source_file = b.path("src/db/root.zig"),
-        .target = target,
-        .optimize = optimize,
-        .unwind_tables = unwind,
-        .strip = strip,
-        .link_libc = true,
-    });
-    db.addIncludePath(b.path("vendor/sqlite3"));
-    db.linkLibrary(sqlite);
+    const mods = addModules(b, target, optimize, unwind, strip);
+    const sqlite = mods.sqlite;
+    const db = mods.db;
+    const render = mods.render;
+    const server = mods.server;
 
     const cli = b.createModule(.{
         .root_source_file = b.path("src/cli/root.zig"),
@@ -45,29 +38,6 @@ pub fn build(b: *std.Build) void {
         .unwind_tables = unwind,
         .strip = strip,
     });
-
-    const render = b.createModule(.{
-        .root_source_file = b.path("src/render/root.zig"),
-        .target = target,
-        .optimize = optimize,
-        .unwind_tables = unwind,
-        .strip = strip,
-        .imports = &.{.{ .name = "db", .module = db }},
-    });
-
-    const server = b.createModule(.{
-        .root_source_file = b.path("src/server/root.zig"),
-        .target = target,
-        .optimize = optimize,
-        .unwind_tables = unwind,
-        .strip = strip,
-        .imports = &.{
-            .{ .name = "db", .module = db },
-            .{ .name = "render", .module = render },
-        },
-    });
-    server.addAnonymousImport("ui_index", .{ .root_source_file = b.path("web/dist/index.html.gz") });
-    server.addAnonymousImport("ui_csp", .{ .root_source_file = b.path("web/dist/csp.txt") });
 
     const exe = b.addExecutable(.{
         .name = "zetta",
@@ -96,6 +66,31 @@ pub fn build(b: *std.Build) void {
         web_build = &bun.step;
         exe.step.dependOn(&bun.step);
     }
+
+    // The in-browser demo: the same db and server modules as a WASI reactor that a page drives
+    // through its exports. ReleaseSmall, because every visitor downloads it.
+    const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const wasm_mods = addModules(b, wasm_target, .ReleaseSmall, null, true);
+    const wasm = b.addExecutable(.{
+        .name = "zetta",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wasm.zig"),
+            .target = wasm_target,
+            .optimize = .ReleaseSmall,
+            .strip = true,
+            .imports = &.{
+                .{ .name = "build_options", .module = options_mod },
+                .{ .name = "db", .module = wasm_mods.db },
+                .{ .name = "server", .module = wasm_mods.server },
+            },
+        }),
+    });
+    wasm.entry = .disabled;
+    wasm.rdynamic = true;
+    wasm.wasi_exec_model = .reactor;
+    if (web_build) |step| wasm.step.dependOn(step);
+    const install_wasm = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .{ .custom = "wasm" } } });
+    b.step("wasm", "Build zig-out/wasm/zetta.wasm for the in-browser demo").dependOn(&install_wasm.step);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -136,6 +131,61 @@ pub fn build(b: *std.Build) void {
     const check = b.step("check", "zig fmt --check + full build");
     check.dependOn(&b.addFmt(.{ .paths = &.{ "build.zig", "build.zig.zon", "src" }, .check = true }).step);
     check.dependOn(b.getInstallStep());
+    check.dependOn(&wasm.step);
+}
+
+const Modules = struct {
+    sqlite: *std.Build.Step.Compile,
+    db: *std.Build.Module,
+    render: *std.Build.Module,
+    server: *std.Build.Module,
+};
+
+/// The modules that know about databases and HTTP, built for one target.
+fn addModules(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    unwind: ?std.builtin.UnwindTables,
+    strip: bool,
+) Modules {
+    const sqlite = addSqlite(b, target, optimize, unwind);
+
+    const db = b.createModule(.{
+        .root_source_file = b.path("src/db/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
+        .link_libc = true,
+    });
+    db.addIncludePath(b.path("vendor/sqlite3"));
+    db.linkLibrary(sqlite);
+
+    const render = b.createModule(.{
+        .root_source_file = b.path("src/render/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
+        .imports = &.{.{ .name = "db", .module = db }},
+    });
+
+    const server = b.createModule(.{
+        .root_source_file = b.path("src/server/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .unwind_tables = unwind,
+        .strip = strip,
+        .imports = &.{
+            .{ .name = "db", .module = db },
+            .{ .name = "render", .module = render },
+        },
+    });
+    server.addAnonymousImport("ui_index", .{ .root_source_file = b.path("web/dist/index.html.gz") });
+    server.addAnonymousImport("ui_csp", .{ .root_source_file = b.path("web/dist/csp.txt") });
+
+    return .{ .sqlite = sqlite, .db = db, .render = render, .server = server };
 }
 
 fn addSqlite(

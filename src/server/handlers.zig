@@ -29,6 +29,17 @@ pub const Context = struct {
     version: []const u8,
 };
 
+/// Answers the bytes of one whole HTTP/1.1 request, writing the whole response to `out`. It is
+/// `handle` without a socket, for a host that has none, such as a browser running the wasm build.
+pub fn serveBytes(ctx: *const Context, arena: Allocator, raw: []const u8, out: *std.Io.Writer) !std.http.Status {
+    var in: std.Io.Reader = .fixed(raw);
+    var server: std.http.Server = .init(&in, out);
+    var req = try server.receiveHead();
+    const status = try handle(ctx, arena, &req);
+    try out.flush();
+    return status;
+}
+
 const Route = enum { index, meta, catalog, functions, columns, table, function, count, compile, browse, query, not_found };
 
 fn route(method: std.http.Method, path: []const u8) Route {
@@ -388,14 +399,9 @@ fn testRequest(ctx: *const Context, arena: Allocator, method: []const u8, target
     }));
 }
 
-/// Runs the bytes of one whole request through `handle` over in-memory streams.
 fn testSend(ctx: *const Context, arena: Allocator, raw: []const u8) !Response {
-    var in: std.Io.Reader = .fixed(raw);
     var out: std.Io.Writer.Allocating = .init(arena);
-    var server: std.http.Server = .init(&in, &out.writer);
-    var req = try server.receiveHead();
-    const status = try handle(ctx, arena, &req);
-    try out.writer.flush();
+    const status = try serveBytes(ctx, arena, raw, &out.writer);
     const interim = "HTTP/1.1 100 Continue\r\n\r\n";
     const all = out.written();
     const written = if (std.mem.startsWith(u8, all, interim)) all[interim.len..] else all;
