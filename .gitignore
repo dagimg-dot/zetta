@@ -22,3 +22,7 @@ web/dist/
 
 # Local sample data
 /dev/*.db
+
+# Landing page
+landing/dist/
+landing/.astro/

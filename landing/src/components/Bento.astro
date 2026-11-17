@@ -1,0 +1,655 @@
+---
+import Icon from "./Icon.astro";
+
+const rows = [
+	[430, 611, "shipped", "1,685.96"],
+	[650, 951, "shipped", "1,678.76"],
+	[1090, 431, "shipped", "1,664.36"],
+	[1530, 1111, "shipped", "1,649.96"],
+	[1970, 591, "shipped", "1,635.56"],
+	[2190, 931, "shipped", "1,628.36"],
+];
+
+const keys = [
+	{ k: ["/"], label: "search tables" },
+	{ k: ["Ctrl", "↵"], label: "run at the caret" },
+	{ k: ["↑", "↓", "←", "→"], label: "move between cells" },
+	{ k: ["O"], label: "open a foreign key" },
+	{ k: ["Esc"], label: "close the inspector" },
+];
+---
+
+<section class="section" id="features">
+	<div class="wrap">
+		<div class="head">
+			<span class="eyebrow reveal">Features</span>
+			<h2 class="h2 reveal" style="--d:1">
+				Everything you reach for.<br /><span class="serif muted">Nothing you wait for.</span>
+			</h2>
+			<p class="lede reveal" style="--d:2">
+				Every schema, table, view and function, a grid that pages through any table, and a SQL editor
+				that knows your columns. It opens in the browser you already have.
+			</p>
+		</div>
+
+		<div class="bento">
+			<article class="card span-7 shell reveal">
+				<div class="core">
+					<div class="copy-block">
+						<span class="tag"><Icon name="table" size={16} /> Browse</span>
+						<h3>Filter and sort without writing SQL. Or write it.</h3>
+						<p>
+							Build a filter and a sort from the column list, or type your own <code>WHERE</code> and
+							<code>ORDER BY</code>. The grid pages through any table.
+						</p>
+					</div>
+					<div class="viz grid-viz" aria-hidden="true">
+						<div class="filters">
+							<span class="pill"><b>status</b> = shipped</span>
+							<span class="pill"><b>total_cents</b> ↓</span>
+							<span class="sql">WHERE "status" = 'shipped' ORDER BY "total_cents" desc</span>
+						</div>
+						<table>
+							<thead>
+								<tr>
+									<th>#</th>
+									<th>id <i>bigint</i></th>
+									<th>customer_id <i>bigint</i></th>
+									<th>status <i>text</i></th>
+									<th>total <i>numeric</i></th>
+								</tr>
+							</thead>
+							<tbody>
+								{
+									rows.map((r, i) => (
+										<tr style={`--r:${i}`}>
+											<td>{i + 1}</td>
+											<td>{r[0]}</td>
+											<td class={i === 1 ? "hit" : ""}>
+												{r[1]}
+												{i === 1 && <span class="fk">↗</span>}
+											</td>
+											<td>{r[2]}</td>
+											<td>{r[3]}</td>
+										</tr>
+									))
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</article>
+
+			<article class="card span-5 shell reveal" style="--d:1">
+				<div class="core">
+					<div class="copy-block">
+						<span class="tag"><Icon name="inspect" size={16} /> Inspect</span>
+						<h3>Every row, formatted. Every key, followable.</h3>
+						<p>
+							JSON pretty-printed, foreign keys one keystroke away, and each table's structure,
+							indexes, triggers, DDL and relationships.
+						</p>
+					</div>
+					<div class="viz json" aria-hidden="true">
+						<div class="json-head">
+							<span>history <i>jsonb</i></span>
+							<span class="seg"><b>Formatted</b><span>Raw</span></span>
+						</div>
+						<pre><span class="tok-p">[</span>
+  <span class="tok-p">{"{"}</span>
+    <span class="tok-n">"order"</span><span class="tok-p">:</span> <span class="tok-k">130</span><span class="tok-p">,</span>
+    <span class="tok-n">"status"</span><span class="tok-p">:</span> <span class="tok-s">"shipped"</span><span class="tok-p">,</span>
+    <span class="tok-n">"total"</span><span class="tok-p">:</span> <span class="tok-k">1433.96</span>
+  <span class="tok-p">{"}"}</span>
+<span class="tok-p">]</span></pre>
+						<div class="points">
+							<Icon name="arrow" size={14} />
+							Points to <b>customers</b> <span class="muted">id = 951</span>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="card span-5 shell reveal">
+				<div class="core">
+					<div class="copy-block">
+						<span class="tag"><Icon name="query" size={16} /> Query</span>
+						<h3>An editor that knows your schema.</h3>
+						<p>
+							Highlighting and completion. Run the statement at the caret, the selection or the whole
+							script. It asks before anything that destroys data.
+						</p>
+					</div>
+					<div class="viz editor" aria-hidden="true">
+						<pre><span class="ln">1</span><span class="tok-k">select</span> c.name, <span class="tok-f">count</span>(*) <span class="tok-k">as</span> orders
+<span class="ln">2</span><span class="tok-k">from</span> customers c
+<span class="ln">3</span><span class="tok-k">join</span> orders o <span class="tok-k">on</span> o.cu<span class="caret"></span></pre>
+						<ul class="complete">
+							<li class="on"><span><b>cu</b>stomer_id</span> <i>bigint</i></li>
+							<li><span><b>cu</b>rrency</span> <i>text</i></li>
+							<li><span><b>cu</b>rrent_date</span> <i>fn</i></li>
+						</ul>
+						<div class="guard">
+							<span class="dot"></span>
+							<span>Destroys data: <b>DELETE</b> with no <b>WHERE</b></span>
+						</div>
+					</div>
+				</div>
+			</article>
+
+			<article class="card span-7 shell reveal" style="--d:1">
+				<div class="core">
+					<div class="copy-block">
+						<span class="tag"><Icon name="link" size={16} /> Share</span>
+						<h3>Every view lives in the URL.</h3>
+						<p>
+							Send a link and the other person lands on the same table, filter and row. Copy cells and
+							rows as CSV, TSV, JSON or Markdown, or save them as a file.
+						</p>
+					</div>
+					<div class="viz share" aria-hidden="true">
+						<div class="urlbar">
+							<span class="host">127.0.0.1:1993</span>/?<span class="p">table</span>=public.orders&amp;<span class="p">where</span>=status%3D'shipped'&amp;<span class="p">sort</span>=total_cents.desc&amp;<span class="p">row</span>=2
+						</div>
+						<div class="formats">
+							{
+								["CSV", "TSV", "JSON", "Markdown"].map((f, i) => (
+									<span class={`fmt ${i === 3 ? "on" : ""}`}>{f}</span>
+								))
+							}
+						</div>
+						<pre class="md"><span class="tok-p">|</span> id   <span class="tok-p">|</span> customer_id <span class="tok-p">|</span> status  <span class="tok-p">|</span>
+<span class="tok-p">|------|-------------|---------|</span>
+<span class="tok-p">|</span> 430  <span class="tok-p">|</span> 611         <span class="tok-p">|</span> shipped <span class="tok-p">|</span>
+<span class="tok-p">|</span> 650  <span class="tok-p">|</span> 951         <span class="tok-p">|</span> shipped <span class="tok-p">|</span></pre>
+					</div>
+				</div>
+			</article>
+
+			<article class="card span-12 shell reveal">
+				<div class="core keys-card">
+					<div class="copy-block">
+						<span class="tag"><Icon name="terminal" size={16} /> Keyboard</span>
+						<h3>Hands stay on the keys.</h3>
+					</div>
+					<ul class="keys">
+						{
+							keys.map((k) => (
+								<li>
+									<span class="kbds">
+										{k.k.map((x) => (
+											<kbd>{x}</kbd>
+										))}
+									</span>
+									<span class="muted">{k.label}</span>
+								</li>
+							))
+						}
+					</ul>
+				</div>
+			</article>
+		</div>
+	</div>
+</section>
+
+<style>
+	.head {
+		display: grid;
+		gap: 24px;
+		justify-items: start;
+		max-width: 760px;
+		margin-bottom: clamp(56px, 7vw, 88px);
+	}
+
+	.bento {
+		display: grid;
+		grid-template-columns: repeat(12, 1fr);
+		gap: 16px;
+	}
+
+	.span-7 {
+		grid-column: span 7;
+	}
+	.span-5 {
+		grid-column: span 5;
+	}
+	.span-12 {
+		grid-column: span 12;
+	}
+
+	.card .core {
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+		padding: clamp(24px, 3vw, 36px);
+	}
+
+	.card .core::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background: radial-gradient(600px circle at 0% 0%, var(--ember-soft), transparent 45%);
+		opacity: 0;
+		transition: opacity 900ms var(--ease);
+		pointer-events: none;
+	}
+
+	.card:hover .core::before {
+		opacity: 1;
+	}
+
+	.copy-block {
+		display: grid;
+		gap: 12px;
+		max-width: 46ch;
+	}
+
+	.tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--ember-hi);
+	}
+
+	h3 {
+		margin: 4px 0 0;
+		font-size: clamp(21px, 1.9vw, 26px);
+		font-weight: 500;
+		line-height: 1.2;
+		letter-spacing: -0.03em;
+		text-wrap: balance;
+	}
+
+	.copy-block p {
+		margin: 0;
+		font-size: 15px;
+		color: var(--fg-3);
+		text-wrap: pretty;
+	}
+
+	.copy-block code {
+		font-size: 13px;
+		color: var(--fg-2);
+	}
+
+	.viz {
+		margin-top: auto;
+		border-radius: 14px;
+		background: var(--ink-0);
+		box-shadow:
+			inset 0 0 0 1px var(--hair),
+			inset 0 1px 0 oklch(1 0 0 / 0.03);
+		font-family: var(--font-mono);
+		font-size: 12.5px;
+		overflow: hidden;
+	}
+
+	pre {
+		margin: 0;
+		line-height: 1.75;
+		white-space: pre;
+		overflow: hidden;
+	}
+
+	/* Browse */
+
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		padding: 14px;
+		border-bottom: 1px solid var(--hair);
+	}
+
+	.pill {
+		padding: 4px 10px;
+		border-radius: 8px;
+		background: oklch(1 0 0 / 0.05);
+		box-shadow: inset 0 0 0 1px var(--hair);
+		color: var(--fg-2);
+	}
+
+	.pill b {
+		font-weight: 500;
+		color: var(--fg);
+	}
+
+	.sql {
+		flex-basis: 100%;
+		color: var(--fg-4);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	th,
+	td {
+		padding: 9px 14px;
+		text-align: right;
+		white-space: nowrap;
+		border-bottom: 1px solid var(--hair);
+	}
+
+	th:nth-child(4),
+	td:nth-child(4) {
+		text-align: left;
+	}
+
+	th {
+		font-weight: 500;
+		color: var(--fg);
+		text-align: left;
+	}
+
+	th i,
+	.json-head i,
+	.complete i {
+		font-style: normal;
+		color: var(--fg-4);
+		font-weight: 400;
+	}
+
+	td {
+		color: var(--fg-2);
+	}
+
+	td:first-child,
+	th:first-child {
+		color: var(--fg-4);
+		width: 1%;
+	}
+
+	tbody tr:last-child td {
+		border-bottom: 0;
+	}
+
+	td.hit {
+		background: oklch(0.7 0.19 45 / 0.14);
+		box-shadow: inset 0 0 0 1px oklch(0.7 0.19 45 / 0.6);
+		color: var(--fg);
+	}
+
+	.fk {
+		margin-left: 6px;
+		color: var(--ember-hi);
+	}
+
+	tbody tr {
+		opacity: 0;
+		transform: translateY(8px);
+		transition:
+			opacity 700ms var(--ease-out),
+			transform 700ms var(--ease-out);
+		transition-delay: calc(var(--r) * 70ms + 300ms);
+	}
+
+	:global(.in) tbody tr {
+		opacity: 1;
+		transform: none;
+	}
+
+	/* Inspect */
+
+	.json {
+		padding-bottom: 0;
+	}
+
+	.json-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 12px 14px;
+		border-bottom: 1px solid var(--hair);
+		color: var(--fg);
+	}
+
+	.seg {
+		display: inline-flex;
+		padding: 2px;
+		border-radius: 8px;
+		background: oklch(1 0 0 / 0.05);
+		font-size: 11.5px;
+	}
+
+	.seg > * {
+		padding: 2px 8px;
+		border-radius: 6px;
+		color: var(--fg-3);
+	}
+
+	.seg b {
+		font-weight: 500;
+		background: var(--ink-3);
+		color: var(--ember-hi);
+	}
+
+	.json pre {
+		padding: 14px;
+	}
+
+	.points {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 12px 14px;
+		border-top: 1px solid var(--hair);
+		color: var(--fg-2);
+	}
+
+	.points :global(svg) {
+		color: var(--ember-hi);
+	}
+
+	.points b {
+		color: var(--fg);
+		font-weight: 500;
+	}
+
+	/* Query */
+
+	.editor {
+		position: relative;
+		padding: 14px 14px 0;
+	}
+
+	.ln {
+		display: inline-block;
+		width: 22px;
+		color: var(--fg-4);
+	}
+
+	.caret {
+		display: inline-block;
+		width: 1.5px;
+		height: 1.1em;
+		margin-left: 1px;
+		vertical-align: -0.2em;
+		background: var(--ember-hi);
+		animation: blink 1.1s steps(1) infinite;
+	}
+
+	@keyframes blink {
+		50% {
+			opacity: 0;
+		}
+	}
+
+	.complete {
+		margin: 6px 0 14px 160px;
+		padding: 4px;
+		width: max-content;
+		list-style: none;
+		border-radius: 10px;
+		background: var(--ink-2);
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			0 20px 40px -10px oklch(0 0 0 / 0.7);
+	}
+
+	.complete li {
+		display: flex;
+		gap: 18px;
+		justify-content: space-between;
+		padding: 5px 10px;
+		border-radius: 6px;
+		color: var(--fg-2);
+	}
+
+	.complete li.on {
+		background: oklch(0.7 0.19 45 / 0.16);
+		color: var(--fg);
+	}
+
+	.complete b {
+		color: var(--ember-hi);
+		font-weight: 500;
+	}
+
+	.guard {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 0 -14px;
+		padding: 12px 14px;
+		border-top: 1px solid var(--hair);
+		color: var(--fg-2);
+	}
+
+	.guard b {
+		font-weight: 500;
+		color: var(--fg);
+	}
+
+	.guard .dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #fbbf24;
+		box-shadow: 0 0 10px #fbbf24;
+	}
+
+	/* Share */
+
+	.urlbar {
+		padding: 14px;
+		border-bottom: 1px solid var(--hair);
+		color: var(--fg-3);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.urlbar .host {
+		color: var(--fg);
+	}
+
+	.urlbar .p {
+		color: var(--ember-hi);
+	}
+
+	.formats {
+		display: flex;
+		gap: 6px;
+		padding: 14px 14px 0;
+	}
+
+	.fmt {
+		padding: 4px 12px;
+		border-radius: 999px;
+		color: var(--fg-3);
+		box-shadow: inset 0 0 0 1px var(--hair);
+	}
+
+	.fmt.on {
+		color: var(--ink-0);
+		background: var(--fg);
+		box-shadow: none;
+	}
+
+	.md {
+		padding: 14px;
+		color: var(--fg-2);
+	}
+
+	/* Keyboard */
+
+	.keys-card {
+		flex-direction: row !important;
+		align-items: center;
+		justify-content: space-between;
+		gap: 40px !important;
+	}
+
+	.keys {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px 28px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		justify-content: flex-end;
+	}
+
+	.keys li {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 14px;
+	}
+
+	.kbds {
+		display: inline-flex;
+		gap: 4px;
+	}
+
+	kbd {
+		display: inline-grid;
+		place-items: center;
+		min-width: 28px;
+		height: 28px;
+		padding: 0 8px;
+		border-radius: 8px;
+		background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			inset 0 -2px 0 oklch(0 0 0 / 0.35),
+			inset 0 1px 0 oklch(1 0 0 / 0.08);
+		font-size: 12px;
+		color: var(--fg);
+	}
+
+	@media (max-width: 960px) {
+		.span-7,
+		.span-5,
+		.span-12 {
+			grid-column: span 12;
+		}
+		.keys-card {
+			flex-direction: column !important;
+			align-items: flex-start;
+		}
+		.keys {
+			justify-content: flex-start;
+		}
+	}
+
+	@media (max-width: 560px) {
+		th:nth-child(5),
+		td:nth-child(5) {
+			display: none;
+		}
+		.complete {
+			margin-left: 40px;
+		}
+	}
+</style>

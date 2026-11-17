@@ -1,0 +1,27 @@
+---
+interface Props {
+	size?: number;
+	class?: string;
+}
+
+const { size = 28, class: cls } = Astro.props;
+const on = [0, 1, 2, 3, 6, 9, 12, 13, 14, 15];
+const cells = Array.from({ length: 16 }, (_, i) => ({
+	x: 10 + (i % 4) * 12,
+	y: 10 + Math.floor(i / 4) * 12,
+	on: on.includes(i),
+}));
+---
+
+<svg class={cls} width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+	<rect width="64" height="64" rx="14" fill="#EA580C"></rect>
+	{
+		cells.map((c) =>
+			c.on ? (
+				<rect x={c.x} y={c.y} width="8" height="8" rx="2" fill="#fff" />
+			) : (
+				<rect x={c.x + 0.8} y={c.y + 0.8} width="6.4" height="6.4" rx="1.6" fill="#fff" opacity=".22" />
+			),
+		)
+	}
+</svg>

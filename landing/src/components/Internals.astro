@@ -1,0 +1,279 @@
+---
+const layers = [
+	{ name: "Web UI", note: "Solid, built into one page and embedded in the binary" },
+	{ name: "HTTP server", note: "Host and origin guard, hashed CSP, one token per run" },
+	{ name: "CLI", note: "One comptime spec makes the parser, help and completions" },
+];
+
+const pgSupport = [
+	"SCRAM-SHA-256",
+	"MD5",
+	"cleartext",
+	"trust",
+	"sslmode disable to verify-full",
+	"sslrootcert",
+	"system trust store",
+	"TCP",
+	"IPv6",
+	"Unix sockets",
+	"PG* variables",
+	"~/.pgpass",
+	"libpq URLs and keyword strings",
+];
+---
+
+<section class="section" id="internals">
+	<div class="wrap">
+		<div class="head">
+			<span class="eyebrow reveal">Internals</span>
+			<h2 class="h2 reveal" style="--d:1">
+				Written in Zig.<br /><span class="serif muted">Nothing borrowed at runtime.</span>
+			</h2>
+			<p class="lede reveal" style="--d:2">
+				zetta speaks the Postgres wire protocol itself, with TLS from the Zig standard library, and
+				compiles the official SQLite amalgamation in. The binary links libc and nothing else.
+			</p>
+		</div>
+
+		<div class="grid">
+			<div class="anatomy shell reveal">
+				<div class="core">
+					<div class="label">
+						<span>zetta</span>
+						<code>one static binary</code>
+					</div>
+					<div class="stack">
+						{
+							layers.map((l, i) => (
+								<div class="layer" style={`--i:${i}`}>
+									<b>{l.name}</b>
+									<span>{l.note}</span>
+								</div>
+							))
+						}
+						<div class="adapters">
+							<div class="layer adapter" style="--i:3">
+								<b>Postgres</b>
+								<span>Native wire protocol, TLS from std.crypto.tls</span>
+							</div>
+							<div class="layer adapter" style="--i:4">
+								<b>SQLite</b>
+								<span>Official amalgamation, compiled in</span>
+							</div>
+						</div>
+					</div>
+					<div class="libc">
+						<span class="line"></span>
+						<code>links: libc</code>
+						<span class="line"></span>
+					</div>
+				</div>
+			</div>
+
+			<div class="side">
+				<div class="shell reveal" style="--d:1">
+					<div class="core pad">
+						<p class="k">Not inside</p>
+						<ul class="nots">
+							<li><s>libpq</s></li>
+							<li><s>OpenSSL</s></li>
+							<li><s>Node or Electron</s></li>
+							<li><s>a runtime</s></li>
+						</ul>
+					</div>
+				</div>
+				<div class="shell reveal" style="--d:2">
+					<div class="core pad">
+						<p class="k">Postgres support</p>
+						<ul class="chips">
+							{pgSupport.map((s) => <li>{s}</li>)}
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<style>
+	.head {
+		display: grid;
+		gap: 24px;
+		justify-items: start;
+		max-width: 760px;
+		margin-bottom: clamp(56px, 7vw, 88px);
+	}
+
+	.grid {
+		display: grid;
+		grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+		gap: 16px;
+	}
+
+	.anatomy .core {
+		padding: clamp(24px, 3vw, 40px);
+		background:
+			radial-gradient(600px 300px at 50% 0%, oklch(0.7 0.19 45 / 0.09), transparent 70%),
+			linear-gradient(180deg, var(--ink-2), var(--ink-1));
+	}
+
+	.label {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		margin-bottom: 24px;
+	}
+
+	.label span {
+		font-size: 28px;
+		font-weight: 500;
+		letter-spacing: -0.04em;
+	}
+
+	.label code,
+	.libc code {
+		font-size: 12px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--fg-3);
+	}
+
+	.stack {
+		display: grid;
+		gap: 8px;
+		padding: 8px;
+		border-radius: 18px;
+		background: oklch(0 0 0 / 0.25);
+		box-shadow: inset 0 0 0 1px var(--hair);
+	}
+
+	.layer {
+		display: grid;
+		gap: 2px;
+		padding: 16px 18px;
+		border-radius: 12px;
+		background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+		box-shadow:
+			inset 0 0 0 1px var(--hair),
+			inset 0 1px 0 oklch(1 0 0 / 0.06);
+		opacity: 0;
+		transform: translateY(14px) scale(0.98);
+		transition:
+			opacity 800ms var(--ease-out),
+			transform 800ms var(--ease-out);
+		transition-delay: calc(var(--i) * 110ms + 250ms);
+	}
+
+	:global(.in) .layer {
+		opacity: 1;
+		transform: none;
+	}
+
+	.layer b {
+		font-weight: 500;
+		font-size: 16px;
+		letter-spacing: -0.02em;
+	}
+
+	.layer span {
+		font-size: 13.5px;
+		color: var(--fg-3);
+	}
+
+	.adapters {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+
+	.adapter {
+		background: linear-gradient(180deg, oklch(0.32 0.08 42), oklch(0.25 0.05 42));
+		box-shadow:
+			inset 0 0 0 1px oklch(0.7 0.19 45 / 0.35),
+			inset 0 1px 0 oklch(1 0 0 / 0.1);
+	}
+
+	.adapter span {
+		color: oklch(0.85 0.05 55);
+	}
+
+	.libc {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		margin-top: 24px;
+	}
+
+	.libc .line {
+		flex: 1;
+		height: 1px;
+		background: repeating-linear-gradient(90deg, var(--hair-2) 0 6px, transparent 6px 12px);
+	}
+
+	.side {
+		display: grid;
+		gap: 16px;
+		align-content: start;
+	}
+
+	.pad {
+		padding: 28px;
+	}
+
+	.k {
+		margin: 0 0 18px;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--ember-hi);
+	}
+
+	.nots {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px 20px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 20px;
+		letter-spacing: -0.03em;
+	}
+
+	.nots s {
+		color: var(--fg-3);
+		text-decoration-color: var(--ember);
+		text-decoration-thickness: 1.5px;
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.chips li {
+		padding: 5px 12px;
+		border-radius: 999px;
+		background: oklch(1 0 0 / 0.04);
+		box-shadow: inset 0 0 0 1px var(--hair);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--fg-2);
+	}
+
+	@media (max-width: 960px) {
+		.grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 560px) {
+		.adapters {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>

@@ -1,0 +1,195 @@
+---
+import { Image } from "astro:assets";
+import pg from "../../../assets/screenshot-postgres.png";
+import lite from "../../../assets/screenshot-sqlite.png";
+
+const engines = [
+	{
+		id: "sqlite",
+		name: "SQLite",
+		src: lite,
+		alt: "zetta on SQLite: a query in the SQL editor, its results, and a JSON value formatted in the inspector",
+		caption: "A query in the SQL editor, its results, and a JSON value formatted in the inspector.",
+	},
+	{
+		id: "postgres",
+		name: "Postgres",
+		src: pg,
+		alt: "zetta on Postgres: a filtered table, with the inspector following a foreign key",
+		caption: "Schemas, views and functions, a filtered and sorted table, and a foreign key followed.",
+	},
+];
+---
+
+<section class="section engines" id="engines">
+	<div class="wrap">
+		<div class="head">
+			<span class="eyebrow reveal">Two engines</span>
+			<h2 class="h2 reveal" style="--d:1">
+				Postgres or SQLite.<br /><span class="serif muted">Same hands, same keys.</span>
+			</h2>
+			<div class="seg reveal" style="--d:2" role="tablist" aria-label="Database engine">
+				<span class="thumb" aria-hidden="true"></span>
+				{
+					engines.map((e, i) => (
+						<button role="tab" data-engine={e.id} aria-selected={i === 0 ? "true" : "false"}>
+							{e.name}
+						</button>
+					))
+				}
+			</div>
+		</div>
+
+		<figure class="frame reveal" style="--d:2">
+			<div class="shell">
+				<div class="core">
+					{
+						engines.map((e, i) => (
+							<Image
+								src={e.src}
+								alt={e.alt}
+								widths={[720, 1200, 1800, 2400]}
+								sizes="(max-width: 1240px) 100vw, 1200px"
+								class:list={["shot", { on: i === 0 }]}
+								data-engine={e.id}
+							/>
+						))
+					}
+				</div>
+			</div>
+			<figcaption>
+				{
+					engines.map((e, i) => (
+						<span data-engine={e.id} class:list={[{ on: i === 0 }]}>
+							{e.caption}
+						</span>
+					))
+				}
+			</figcaption>
+		</figure>
+	</div>
+</section>
+
+<script>
+	const root = document.querySelector<HTMLElement>("#engines");
+	const seg = root?.querySelector<HTMLElement>(".seg");
+	const tabs = [...(root?.querySelectorAll<HTMLButtonElement>("[role=tab]") ?? [])];
+	const parts = [...(root?.querySelectorAll<HTMLElement>(".shot, figcaption span") ?? [])];
+
+	function pick(id: string) {
+		tabs.forEach((t, i) => {
+			const on = t.dataset.engine === id;
+			t.setAttribute("aria-selected", String(on));
+			if (on) seg?.style.setProperty("--x", String(i));
+		});
+		for (const p of parts) p.classList.toggle("on", p.dataset.engine === id);
+	}
+
+	for (const t of tabs) t.addEventListener("click", () => pick(t.dataset.engine ?? "sqlite"));
+</script>
+
+<style>
+	.engines {
+		padding-top: 0;
+	}
+
+	.head {
+		display: grid;
+		justify-items: center;
+		text-align: center;
+		gap: 24px;
+		margin-bottom: 56px;
+	}
+
+	.seg {
+		--x: 0;
+		position: relative;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		padding: 5px;
+		border-radius: 999px;
+		background: oklch(1 0 0 / 0.04);
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			var(--sheen);
+		margin-top: 8px;
+	}
+
+	.thumb {
+		position: absolute;
+		top: 5px;
+		bottom: 5px;
+		left: 5px;
+		width: calc(50% - 5px);
+		border-radius: 999px;
+		background: var(--fg);
+		transform: translateX(calc(var(--x) * 100%));
+		transition: transform 700ms var(--ease);
+	}
+
+	.seg button {
+		position: relative;
+		min-width: 130px;
+		padding: 10px 24px;
+		border-radius: 999px;
+		font-size: 15px;
+		color: var(--fg-2);
+		transition: color 600ms var(--ease);
+	}
+
+	.seg button[aria-selected="true"] {
+		color: var(--ink-0);
+		font-weight: 500;
+	}
+
+	.frame {
+		margin: 0 auto;
+		max-width: 1200px;
+	}
+
+	.frame .shell {
+		--r-xl: 22px;
+		--bezel: 7px;
+	}
+
+	.frame .core {
+		display: grid;
+	}
+
+	.shot {
+		grid-area: 1 / 1;
+		width: 100%;
+		height: auto;
+		opacity: 0;
+		transform: scale(1.015);
+		filter: blur(6px);
+		transition:
+			opacity 800ms var(--ease),
+			transform 1000ms var(--ease),
+			filter 800ms var(--ease);
+	}
+
+	.shot.on {
+		opacity: 1;
+		transform: none;
+		filter: none;
+	}
+
+	figcaption {
+		display: grid;
+		margin-top: 20px;
+		text-align: center;
+		font-size: 14px;
+		color: var(--fg-3);
+	}
+
+	figcaption span {
+		grid-area: 1 / 1;
+		opacity: 0;
+		transition: opacity 600ms var(--ease);
+	}
+
+	figcaption span.on {
+		opacity: 1;
+	}
+</style>

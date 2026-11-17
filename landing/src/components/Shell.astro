@@ -1,0 +1,329 @@
+---
+const cmd = `zetta query shop.db "select name, city, round(balance, 2) as balance from customers order by balance desc limit 4"`;
+
+const outputs = {
+	table: `       name        |    city     | balance
+-------------------+-------------+---------
+ Sara Tesfaye 1081 | Adama       | 1265.67
+ Abebe Kebede 135  | Hawassa     |  1265.0
+ Abebe Kebede 270  | Addis Ababa | 1263.33
+ Abebe Kebede 405  | Hawassa     | 1261.67
+(4 rows)`,
+	csv: `name,city,balance
+Sara Tesfaye 1081,Adama,1265.67
+Abebe Kebede 135,Hawassa,1265.0
+Abebe Kebede 270,Addis Ababa,1263.33
+Abebe Kebede 405,Hawassa,1261.67`,
+	json: `{"columns":[{"name":"name","type":"text"},{"name":"city","type":"text"},{"name":"balance","type":"real"}],"rows":[["Sara Tesfaye 1081","Adama","1265.67"],["Abebe Kebede 135","Hawassa","1265.0"],["Abebe Kebede 270","Addis Ababa","1263.33"],["Abebe Kebede 405","Hawassa","1261.67"]],"rowCount":4,"rowCountExact":true,"truncated":false}`,
+};
+
+const examples = [
+	{ c: "zetta ./app.db", d: "Browse a SQLite file" },
+	{ c: "zetta postgres://me@localhost/app --read-only", d: "Browse Postgres without writes" },
+	{ c: "zetta query app.db -f csv < report.sql > report.csv", d: "Script a report" },
+	{ c: "zetta tables app.db", d: "List schemas and tables" },
+	{ c: "zetta completion fish", d: "Completions for bash, zsh and fish" },
+];
+---
+
+<section class="section" id="shell">
+	<div class="wrap split">
+		<div class="text">
+			<span class="eyebrow reveal">Shell</span>
+			<h2 class="h2 reveal" style="--d:1">
+				Script it from<br />the <span class="serif ember-text">shell, too.</span>
+			</h2>
+			<p class="lede reveal" style="--d:2">
+				<code>zetta query</code> prints a table, CSV or JSON. Results go to stdout and diagnostics to
+				stderr, so it pipes cleanly. Every flag has an environment variable, and <code
+					>DATABASE_URL</code
+				> keeps a password out of the process list.
+			</p>
+			<ul class="examples">
+				{
+					examples.map((e, i) => (
+						<li class="reveal" style={`--d:${i + 3}`}>
+							<code>{e.c}</code>
+							<span>{e.d}</span>
+						</li>
+					))
+				}
+			</ul>
+		</div>
+
+		<div class="term-wrap reveal" style="--d:2">
+			<div class="shell term">
+				<div class="core">
+					<div class="bar">
+						<span class="dots"><i></i><i></i><i></i></span>
+						<div class="tabs" role="tablist" aria-label="Output format">
+							{
+								Object.keys(outputs).map((k, i) => (
+									<button
+										role="tab"
+										aria-selected={i === 0 ? "true" : "false"}
+										data-fmt={k}
+										class="tab"
+									>
+										{k}
+									</button>
+								))
+							}
+						</div>
+					</div>
+					<div class="screen">
+						<p class="line">
+							<span class="ps">~/shop</span><span class="arrow">❯</span>
+							<span class="typed" data-cmd={cmd}>{cmd}</span><span class="flag"></span><span
+								class="cursor"></span>
+						</p>
+						{
+							Object.entries(outputs).map(([k, v], i) => (
+								<pre class="out" data-out={k} hidden={i !== 0} set:text={v} />
+							))
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<script>
+	const root = document.querySelector<HTMLElement>("#shell");
+	const typed = root?.querySelector<HTMLElement>(".typed");
+	const flag = root?.querySelector<HTMLElement>(".flag");
+	const tabs = [...(root?.querySelectorAll<HTMLButtonElement>(".tab") ?? [])];
+	const outs = [...(root?.querySelectorAll<HTMLElement>(".out") ?? [])];
+	const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+	function show(fmt: string) {
+		for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.fmt === fmt));
+		for (const o of outs) {
+			const on = o.dataset.out === fmt;
+			o.hidden = !on;
+			if (on) {
+				o.classList.remove("fresh");
+				void o.offsetWidth;
+				o.classList.add("fresh");
+			}
+		}
+		if (flag) flag.textContent = fmt === "table" ? "" : ` -f ${fmt}`;
+	}
+
+	for (const t of tabs) t.addEventListener("click", () => show(t.dataset.fmt ?? "table"));
+
+	if (typed && !reduce) {
+		const full = typed.dataset.cmd ?? "";
+		typed.textContent = "";
+		for (const o of outs) o.classList.add("waiting");
+		const io = new IntersectionObserver(([e]) => {
+			if (!e.isIntersecting) return;
+			io.disconnect();
+			let n = 0;
+			const tick = () => {
+				n += 1 + Math.floor(Math.random() * 2);
+				typed.textContent = full.slice(0, n);
+				if (n < full.length) setTimeout(tick, 18 + Math.random() * 40);
+				else
+					setTimeout(() => {
+						for (const o of outs) o.classList.remove("waiting");
+						show("table");
+					}, 380);
+			};
+			setTimeout(tick, 500);
+		}, { threshold: 0.5 });
+		io.observe(typed);
+	}
+</script>
+
+<style>
+	.split {
+		display: grid;
+		grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+		gap: clamp(40px, 6vw, 96px);
+		align-items: center;
+	}
+
+	.text {
+		display: grid;
+		gap: 24px;
+		justify-items: start;
+	}
+
+	.lede code {
+		font-size: 0.9em;
+		color: var(--fg);
+	}
+
+	.examples {
+		width: 100%;
+		margin: 16px 0 0;
+		padding: 0;
+		list-style: none;
+		border-top: 1px solid var(--hair);
+	}
+
+	.examples li {
+		display: grid;
+		gap: 4px;
+		padding: 14px 0;
+		border-bottom: 1px solid var(--hair);
+	}
+
+	.examples code {
+		font-size: 13px;
+		color: var(--fg);
+		overflow-wrap: anywhere;
+	}
+
+	.examples span {
+		font-size: 13px;
+		color: var(--fg-3);
+	}
+
+	.term {
+		--r-xl: 22px;
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			0 60px 120px -40px oklch(0 0 0 / 0.9),
+			0 0 140px -30px var(--ember-soft);
+	}
+
+	.term .core {
+		background: oklch(0.12 0.004 50);
+	}
+
+	.bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		height: 48px;
+		padding: 0 10px 0 16px;
+		border-bottom: 1px solid var(--hair);
+	}
+
+	.dots {
+		display: flex;
+		gap: 7px;
+	}
+
+	.dots i {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: oklch(1 0 0 / 0.12);
+	}
+
+	.tabs {
+		display: flex;
+		gap: 2px;
+		padding: 3px;
+		border-radius: 999px;
+		background: oklch(1 0 0 / 0.04);
+		box-shadow: inset 0 0 0 1px var(--hair);
+	}
+
+	.tab {
+		padding: 5px 14px;
+		border-radius: 999px;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--fg-3);
+		transition:
+			background-color 400ms var(--ease),
+			color 400ms var(--ease);
+	}
+
+	.tab:hover {
+		color: var(--fg);
+	}
+
+	.tab[aria-selected="true"] {
+		background: var(--fg);
+		color: var(--ink-0);
+	}
+
+	.screen {
+		min-height: 340px;
+		padding: 22px 22px 26px;
+		font-family: var(--font-mono);
+		font-size: 13px;
+		line-height: 1.7;
+	}
+
+	.line {
+		margin: 0 0 14px;
+		color: var(--fg);
+		overflow-wrap: anywhere;
+	}
+
+	.ps {
+		color: var(--blue);
+	}
+
+	.arrow {
+		margin: 0 10px 0 8px;
+		color: var(--ember-hi);
+	}
+
+	.flag {
+		color: var(--ember-hi);
+	}
+
+	.cursor {
+		display: inline-block;
+		width: 8px;
+		height: 1.15em;
+		margin-left: 2px;
+		vertical-align: -0.2em;
+		background: var(--ember-hi);
+		animation: blink 1.1s steps(1) infinite;
+	}
+
+	@keyframes blink {
+		50% {
+			opacity: 0;
+		}
+	}
+
+	.out {
+		margin: 0;
+		color: var(--fg-2);
+		white-space: pre;
+		overflow-x: auto;
+	}
+
+	.out[data-out="json"] {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	.out.waiting {
+		visibility: hidden;
+	}
+
+	.out.fresh {
+		animation: rise 600ms var(--ease-out);
+	}
+
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(6px);
+		}
+	}
+
+	@media (max-width: 960px) {
+		.split {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (max-width: 560px) {
+		.screen {
+			font-size: 11.5px;
+			padding: 18px 16px;
+		}
+	}
+</style>

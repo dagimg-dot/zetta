@@ -1,0 +1,95 @@
+---
+const stats = [
+	{ value: "1.4", unit: "MB", label: "Download, under 3 MB unpacked" },
+	{ value: "0", unit: "deps", label: "Links libc and nothing else" },
+	{ value: "2", unit: "engines", label: "Postgres and SQLite, natively" },
+	{ value: "5", unit: "targets", label: "macOS, Linux and Windows builds" },
+];
+---
+
+<section class="stats" aria-label="At a glance">
+	<div class="wrap">
+		<ul>
+			{
+				stats.map((s, i) => (
+					<li class="reveal" style={`--d:${i}`}>
+						<p class="value">
+							{s.value}
+							<span class="unit">{s.unit}</span>
+						</p>
+						<p class="label">{s.label}</p>
+					</li>
+				))
+			}
+		</ul>
+	</div>
+</section>
+
+<style>
+	.stats {
+		padding-block: 24px clamp(48px, 6vw, 80px);
+	}
+
+	ul {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		border-top: 1px solid var(--hair);
+	}
+
+	li {
+		padding: 32px 28px 0;
+		border-left: 1px solid var(--hair);
+	}
+
+	li:first-child {
+		border-left: 0;
+		padding-left: 0;
+	}
+
+	p {
+		margin: 0;
+	}
+
+	.value {
+		font-size: clamp(40px, 4.5vw, 56px);
+		font-weight: 400;
+		letter-spacing: -0.05em;
+		line-height: 1;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.unit {
+		margin-left: 6px;
+		font-family: var(--font-mono);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--ember-hi);
+		vertical-align: top;
+	}
+
+	.label {
+		margin-top: 14px;
+		font-size: 14px;
+		color: var(--fg-3);
+	}
+
+	@media (max-width: 860px) {
+		ul {
+			grid-template-columns: 1fr 1fr;
+		}
+		li:nth-child(3) {
+			border-left: 0;
+			padding-left: 0;
+		}
+		li {
+			padding-bottom: 28px;
+		}
+		li:nth-child(n + 3) {
+			border-top: 1px solid var(--hair);
+		}
+	}
+</style>

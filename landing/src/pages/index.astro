@@ -1,0 +1,31 @@
+---
+import Base from "../layouts/Base.astro";
+import Bento from "../components/Bento.astro";
+import Engines from "../components/Engines.astro";
+import Finale from "../components/Finale.astro";
+import Hero from "../components/Hero.astro";
+import Install from "../components/Install.astro";
+import Internals from "../components/Internals.astro";
+import Nav from "../components/Nav.astro";
+import Security from "../components/Security.astro";
+import Shell from "../components/Shell.astro";
+import Stats from "../components/Stats.astro";
+---
+
+<Base
+	title="zetta · A database explorer in one tiny binary"
+	description="Browse and query Postgres and SQLite in your browser, or run SQL from the shell. One static binary under 3 MB with its own Postgres client, TLS and SQLite inside."
+>
+	<Nav />
+	<main>
+		<Hero />
+		<Stats />
+		<Bento />
+		<Engines />
+		<Shell />
+		<Security />
+		<Internals />
+		<Install />
+	</main>
+	<Finale />
+</Base>

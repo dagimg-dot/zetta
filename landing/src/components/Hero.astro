@@ -1,0 +1,416 @@
+---
+import { Image } from "astro:assets";
+import shot from "../../../assets/screenshot-postgres.png";
+import Icon from "./Icon.astro";
+import { installCmd, links, version } from "../site";
+---
+
+<section class="hero" id="top">
+	<div class="backdrop" aria-hidden="true">
+		<div class="grid"></div>
+		<div class="glow"></div>
+	</div>
+
+	<div class="wrap intro">
+		<span class="eyebrow reveal">v{version} &middot; Postgres + SQLite &middot; MIT</span>
+
+		<h1 class="display reveal" style="--d:1">
+			A database explorer<br />
+			that fits in <span class="serif ember-text">three&nbsp;megabytes.</span>
+		</h1>
+
+		<p class="lede reveal" style="--d:2">
+			Point zetta at Postgres or SQLite. Browse and query in your browser, or script it from the
+			shell. One static binary with its own Postgres client, TLS and SQLite inside. No libpq, no
+			OpenSSL, no runtime.
+		</p>
+
+		<div class="actions reveal" style="--d:3">
+			<div class="cmd">
+				<span class="prompt">$</span>
+				<code>curl -fsSL <span class="muted">…/zetta/main/</span>install.sh | sh</code>
+				<button class="copy" data-copy={installCmd} aria-label="Copy install command">
+					<Icon name="copy" size={16} class="i-copy" />
+					<Icon name="check" size={16} class="i-check" />
+				</button>
+			</div>
+			<a class="btn btn-ghost" href={links.repo} target="_blank" rel="noopener">
+				Star on GitHub
+				<span class="knob"><Icon name="arrow" size={16} /></span>
+			</a>
+		</div>
+	</div>
+
+	<div class="wrap stage-wrap">
+		<div class="stage reveal" style="--d:4">
+			<div class="window shell">
+				<div class="core">
+					<div class="chrome">
+						<span class="dots"><i></i><i></i><i></i></span>
+						<span class="url">
+							<Icon name="lock" size={12} />
+							127.0.0.1:1993<span class="muted">/?table=public.orders&amp;where=status…</span>
+						</span>
+						<span class="spacer"></span>
+					</div>
+					<Image
+						src={shot}
+						alt="zetta browsing a Postgres table, filtered and sorted, with the inspector following a foreign key"
+						widths={[720, 1200, 1800, 2400]}
+						sizes="(max-width: 1240px) 100vw, 1200px"
+						loading="eager"
+						fetchpriority="high"
+						class="shot"
+					/>
+				</div>
+			</div>
+
+			<div class="chip chip-a" aria-hidden="true">
+				<span class="chip-icon"><Icon name="link" size={14} /></span>
+				<span>
+					<b>customer_id 951</b>
+					<small>followed to customers</small>
+				</span>
+			</div>
+			<div class="chip chip-b" aria-hidden="true">
+				<span class="pulse"></span>
+				<span>
+					<b>2,285 rows</b>
+					<small>matched in 1.7 ms</small>
+				</span>
+			</div>
+		</div>
+	</div>
+</section>
+
+<style>
+	.hero {
+		position: relative;
+		padding-top: clamp(140px, 18vw, 200px);
+		padding-bottom: clamp(64px, 8vw, 120px);
+		isolation: isolate;
+	}
+
+	.backdrop {
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		overflow: hidden;
+		pointer-events: none;
+	}
+
+	.grid {
+		position: absolute;
+		inset: -2px;
+		background-image:
+			linear-gradient(to right, oklch(1 0 0 / 0.045) 1px, transparent 1px),
+			linear-gradient(to bottom, oklch(1 0 0 / 0.045) 1px, transparent 1px);
+		background-size: 64px 64px;
+		background-position: center top;
+		mask-image: radial-gradient(ellipse 70% 55% at 50% 22%, #000 10%, transparent 75%);
+	}
+
+	.glow {
+		position: absolute;
+		left: 50%;
+		top: 46%;
+		width: min(1400px, 140vw);
+		aspect-ratio: 2.2;
+		transform: translateX(-50%);
+		background:
+			radial-gradient(closest-side, oklch(0.66 0.2 42 / 0.5), transparent 70%),
+			radial-gradient(closest-side at 30% 60%, oklch(0.6 0.17 30 / 0.3), transparent 70%);
+		filter: blur(40px);
+		opacity: 0.7;
+	}
+
+	.intro {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 28px;
+	}
+
+	.intro .lede {
+		max-width: 60ch;
+	}
+
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 12px;
+		margin-top: 8px;
+	}
+
+	.cmd {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		height: 52px;
+		padding: 0 6px 0 20px;
+		border-radius: 999px;
+		background: oklch(0.11 0.004 50 / 0.7);
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			var(--sheen),
+			0 12px 40px -12px oklch(0 0 0 / 0.6);
+		font-size: 14px;
+		min-width: 0;
+	}
+
+	.cmd code {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		color: var(--fg);
+	}
+
+	.prompt {
+		font-family: var(--font-mono);
+		color: var(--ember-hi);
+	}
+
+	.copy {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 999px;
+		background: oklch(1 0 0 / 0.07);
+		color: var(--fg-2);
+		transition:
+			background-color 400ms var(--ease),
+			color 400ms var(--ease),
+			transform 400ms var(--ease);
+	}
+
+	.copy:hover {
+		background: oklch(1 0 0 / 0.12);
+		color: var(--fg);
+	}
+
+	.copy:active {
+		transform: scale(0.92);
+	}
+
+	.copy :global(.i-check) {
+		display: none;
+		color: var(--green);
+	}
+
+	.copy[data-copied] :global(.i-copy) {
+		display: none;
+	}
+
+	.copy[data-copied] :global(.i-check) {
+		display: block;
+	}
+
+	.stage-wrap {
+		margin-top: clamp(56px, 7vw, 96px);
+		perspective: 2000px;
+	}
+
+	.stage {
+		position: relative;
+		max-width: 1200px;
+		margin-inline: auto;
+	}
+
+	.window {
+		--r-xl: 22px;
+		--bezel: 7px;
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			0 0 0 1px oklch(0 0 0 / 0.4),
+			0 60px 120px -40px oklch(0 0 0 / 0.9),
+			0 0 120px -20px var(--ember-soft);
+		transform-origin: 50% 0%;
+	}
+
+	@supports (animation-timeline: view()) {
+		@media (prefers-reduced-motion: no-preference) {
+			.window {
+				animation: tilt linear both;
+				animation-timeline: view();
+				animation-range: entry 0% cover 45%;
+			}
+		}
+	}
+
+	@keyframes tilt {
+		from {
+			transform: rotateX(22deg) scale(0.92) translateY(30px);
+		}
+		to {
+			transform: none;
+		}
+	}
+
+	.chrome {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		height: 42px;
+		padding: 0 14px;
+		background: var(--ink-1);
+		border-bottom: 1px solid var(--hair);
+	}
+
+	.dots {
+		display: flex;
+		gap: 7px;
+		flex: 1;
+	}
+
+	.dots i {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: oklch(1 0 0 / 0.12);
+	}
+
+	.url {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		max-width: 60%;
+		padding: 5px 14px;
+		border-radius: 8px;
+		background: oklch(1 0 0 / 0.04);
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--fg-2);
+		white-space: nowrap;
+		overflow: hidden;
+	}
+
+	.url .muted {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.spacer {
+		flex: 1;
+	}
+
+	.shot {
+		width: 100%;
+		height: auto;
+		display: block;
+	}
+
+	.chip {
+		position: absolute;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 12px 18px 12px 12px;
+		border-radius: 18px;
+		background: oklch(0.2 0.005 50 / 0.94);
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			var(--sheen),
+			0 30px 60px -20px oklch(0 0 0 / 0.8);
+		font-size: 13px;
+		line-height: 1.3;
+		animation: float 7s var(--ease) infinite alternate;
+	}
+
+	.chip b {
+		display: block;
+		font-weight: 500;
+		font-family: var(--font-mono);
+		font-size: 13px;
+	}
+
+	.chip small {
+		color: var(--fg-3);
+		font-size: 12px;
+	}
+
+	.chip-icon {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 10px;
+		background: var(--ember);
+		color: #fff;
+	}
+
+	.chip-a {
+		right: -28px;
+		top: 30%;
+	}
+
+	.chip-b {
+		left: -32px;
+		bottom: 14%;
+		animation-delay: -3s;
+	}
+
+	.pulse {
+		position: relative;
+		width: 32px;
+		height: 32px;
+		border-radius: 10px;
+		background: oklch(0.82 0.13 150 / 0.14);
+	}
+
+	.pulse::after {
+		content: "";
+		position: absolute;
+		inset: 12px;
+		border-radius: 50%;
+		background: var(--green);
+		box-shadow: 0 0 0 0 oklch(0.82 0.13 150 / 0.6);
+		animation: ping 2.4s var(--ease-out) infinite;
+	}
+
+	@keyframes ping {
+		to {
+			box-shadow: 0 0 0 10px oklch(0.82 0.13 150 / 0);
+		}
+	}
+
+	@keyframes float {
+		from {
+			transform: translateY(-6px);
+		}
+		to {
+			transform: translateY(6px);
+		}
+	}
+
+	@media (max-width: 1280px) {
+		.chip-a {
+			right: 12px;
+		}
+		.chip-b {
+			left: 12px;
+		}
+	}
+
+	@media (max-width: 760px) {
+		.chip {
+			display: none;
+		}
+		.window {
+			--r-xl: 16px;
+			--bezel: 4px;
+		}
+		.actions {
+			width: 100%;
+		}
+		.cmd {
+			width: 100%;
+		}
+		.url .muted {
+			display: none;
+		}
+	}
+</style>

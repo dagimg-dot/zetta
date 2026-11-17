@@ -1,0 +1,57 @@
+---
+import "../styles/global.css";
+
+interface Props {
+	title: string;
+	description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="no-js">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#0f0d0c" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:type" content="website" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<script is:inline>
+			document.documentElement.classList.remove("no-js");
+		</script>
+	</head>
+	<body>
+		<slot />
+		<script>
+			const io = new IntersectionObserver(
+				(entries) => {
+					for (const e of entries) {
+						if (!e.isIntersecting) continue;
+						e.target.classList.add("in");
+						io.unobserve(e.target);
+					}
+				},
+				{ rootMargin: "0px 0px -8% 0px", threshold: 0.12 },
+			);
+			for (const el of document.querySelectorAll(".reveal")) io.observe(el);
+
+			for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-copy]")) {
+				btn.addEventListener("click", async () => {
+					const text = btn.dataset.copy ?? "";
+					try {
+						await navigator.clipboard.writeText(text);
+					} catch {
+						return;
+					}
+					btn.dataset.copied = "";
+					setTimeout(() => delete btn.dataset.copied, 1600);
+				});
+			}
+		</script>
+	</body>
+</html>

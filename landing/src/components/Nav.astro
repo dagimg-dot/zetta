@@ -1,0 +1,300 @@
+---
+import Icon from "./Icon.astro";
+import Logo from "./Logo.astro";
+import { links } from "../site";
+
+const items = [
+	{ href: "#features", label: "Features" },
+	{ href: "#shell", label: "Shell" },
+	{ href: "#security", label: "Security" },
+	{ href: "#internals", label: "Internals" },
+	{ href: "#install", label: "Install" },
+];
+---
+
+<header class="nav-wrap">
+	<nav class="nav" aria-label="Main">
+		<a href="#top" class="brand" aria-label="zetta home">
+			<Logo size={26} />
+			<span>zetta</span>
+		</a>
+		<ul class="links">
+			{
+				items.map((i) => (
+					<li>
+						<a href={i.href}>{i.label}</a>
+					</li>
+				))
+			}
+		</ul>
+		<a href={links.repo} class="gh" target="_blank" rel="noopener">
+			<Icon name="github" size={16} />
+			<span>GitHub</span>
+		</a>
+		<button class="burger" aria-label="Open menu" aria-expanded="false" aria-controls="menu">
+			<span></span><span></span>
+		</button>
+	</nav>
+</header>
+
+<div class="menu" id="menu" aria-hidden="true">
+	<ul>
+		{
+			items.map((i, n) => (
+				<li style={`--i:${n}`}>
+					<a href={i.href}>
+						<span class="num">0{n + 1}</span>
+						{i.label}
+					</a>
+				</li>
+			))
+		}
+		<li style={`--i:${items.length}`}>
+			<a href={links.repo} target="_blank" rel="noopener">
+				<span class="num">0{items.length + 1}</span>
+				GitHub
+			</a>
+		</li>
+	</ul>
+</div>
+
+<script>
+	const burger = document.querySelector<HTMLButtonElement>(".burger");
+	const menu = document.querySelector<HTMLElement>(".menu");
+	const header = document.querySelector<HTMLElement>(".nav-wrap");
+
+	function setOpen(open: boolean) {
+		if (!burger || !menu) return;
+		document.body.classList.toggle("menu-open", open);
+		burger.setAttribute("aria-expanded", String(open));
+		burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+		menu.setAttribute("aria-hidden", String(!open));
+	}
+
+	burger?.addEventListener("click", () => setOpen(!document.body.classList.contains("menu-open")));
+	for (const a of menu?.querySelectorAll("a") ?? []) a.addEventListener("click", () => setOpen(false));
+	addEventListener("keydown", (e) => {
+		if (e.key === "Escape") setOpen(false);
+	});
+
+	const sentinel = document.querySelector("#top");
+	if (sentinel && header) {
+		new IntersectionObserver(([e]) => header.classList.toggle("scrolled", !e.isIntersecting), {
+			rootMargin: "-80px 0px 0px 0px",
+		}).observe(sentinel);
+	}
+</script>
+
+<style>
+	.nav-wrap {
+		position: fixed;
+		inset: 20px 0 auto;
+		z-index: var(--z-nav);
+		display: flex;
+		justify-content: center;
+		padding-inline: 16px;
+		pointer-events: none;
+	}
+
+	.nav {
+		pointer-events: auto;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 6px 6px 14px;
+		border-radius: 999px;
+		background: oklch(0.17 0.004 50 / 0.55);
+		backdrop-filter: blur(20px) saturate(160%);
+		-webkit-backdrop-filter: blur(20px) saturate(160%);
+		box-shadow:
+			inset 0 0 0 1px var(--hair),
+			var(--sheen),
+			0 20px 40px -20px oklch(0 0 0 / 0.6);
+		transition:
+			background-color 600ms var(--ease),
+			box-shadow 600ms var(--ease);
+	}
+
+	.nav-wrap:global(.scrolled) .nav {
+		background: oklch(0.17 0.004 50 / 0.8);
+		box-shadow:
+			inset 0 0 0 1px var(--hair-2),
+			var(--sheen),
+			0 24px 48px -16px oklch(0 0 0 / 0.8);
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-right: 18px;
+		font-weight: 500;
+		font-size: 16px;
+		letter-spacing: -0.02em;
+	}
+
+	.links {
+		display: flex;
+		gap: 2px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.links a {
+		display: block;
+		padding: 8px 14px;
+		border-radius: 999px;
+		font-size: 14px;
+		color: var(--fg-2);
+		transition:
+			color 400ms var(--ease),
+			background-color 400ms var(--ease);
+	}
+
+	.links a:hover {
+		color: var(--fg);
+		background: oklch(1 0 0 / 0.05);
+	}
+
+	.gh {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: 10px;
+		height: 38px;
+		padding: 0 16px;
+		border-radius: 999px;
+		font-size: 14px;
+		font-weight: 400;
+		background: var(--fg);
+		color: var(--ink-0);
+		transition: transform 500ms var(--ease);
+	}
+
+	.gh:active {
+		transform: scale(0.96);
+	}
+
+	.burger {
+		display: none;
+		position: relative;
+		width: 42px;
+		height: 42px;
+		border-radius: 999px;
+		background: oklch(1 0 0 / 0.06);
+	}
+
+	.burger span {
+		position: absolute;
+		left: 13px;
+		width: 16px;
+		height: 1.5px;
+		border-radius: 2px;
+		background: var(--fg);
+		transition: transform 600ms var(--ease);
+	}
+
+	.burger span:first-child {
+		transform: translateY(-3.5px);
+	}
+
+	.burger span:last-child {
+		transform: translateY(3.5px);
+	}
+
+	:global(.menu-open) .burger span:first-child {
+		transform: rotate(45deg);
+	}
+
+	:global(.menu-open) .burger span:last-child {
+		transform: rotate(-45deg);
+	}
+
+	.menu {
+		position: fixed;
+		inset: 0;
+		z-index: var(--z-menu);
+		display: flex;
+		align-items: center;
+		padding: 120px 28px 60px;
+		background: oklch(0.12 0.004 50 / 0.82);
+		backdrop-filter: blur(40px);
+		-webkit-backdrop-filter: blur(40px);
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			opacity 600ms var(--ease),
+			visibility 0s linear 600ms;
+	}
+
+	:global(.menu-open) .menu {
+		opacity: 1;
+		visibility: visible;
+		transition:
+			opacity 600ms var(--ease),
+			visibility 0s;
+	}
+
+	:global(.menu-open) .nav-wrap {
+		z-index: calc(var(--z-menu) + 1);
+	}
+
+	.menu ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: grid;
+		gap: 6px;
+	}
+
+	.menu li {
+		overflow: hidden;
+	}
+
+	.menu a {
+		display: flex;
+		align-items: baseline;
+		gap: 16px;
+		font-size: clamp(36px, 10vw, 56px);
+		font-weight: 500;
+		letter-spacing: -0.04em;
+		line-height: 1.15;
+		transform: translateY(100%);
+		opacity: 0;
+		transition:
+			transform 800ms var(--ease),
+			opacity 800ms var(--ease);
+		transition-delay: calc(var(--i) * 55ms + 80ms);
+	}
+
+	:global(.menu-open) .menu a {
+		transform: none;
+		opacity: 1;
+	}
+
+	.num {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		letter-spacing: 0.1em;
+		color: var(--ember-hi);
+	}
+
+	@media (max-width: 860px) {
+		.links,
+		.gh {
+			display: none;
+		}
+		.burger {
+			display: block;
+		}
+		.brand {
+			margin-right: 0;
+		}
+		.nav {
+			width: 100%;
+			max-width: 440px;
+			justify-content: space-between;
+		}
+	}
+</style>
