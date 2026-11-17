@@ -231,7 +231,7 @@ fn openSocket(io: Io, s: *const Settings, diag: *Diagnostic) Error!Io.net.Stream
             return addr.connect(io, .{ .mode = .stream, .timeout = timeout }) catch |err|
                 return connectFailed(diag, host, s.port, err);
         } else |_| {}
-        const name = Io.net.HostName.init(host) catch {
+        const name = hostName(host) catch {
             diag.print("could not translate host name \"{s}\" to address: invalid host name", .{host});
             return error.ConnectFailed;
         };
@@ -262,6 +262,21 @@ fn openSocket(io: Io, s: *const Settings, diag: *Diagnostic) Error!Io.net.Stream
     }
     diag.print("connection to server on socket \"{s}\" failed: {t}", .{ last_path[0..last_len], last_err });
     return error.ConnectFailed;
+}
+
+/// Like `Io.net.HostName.init`, but lets '_' through as getaddrinfo does: Docker and Compose
+/// name containers `project_service`. The length limits stay, since the resolver relies on them.
+fn hostName(host: []const u8) error{InvalidHostName}!Io.net.HostName {
+    const name = if (mem.endsWith(u8, host, ".")) host[0 .. host.len - 1] else host;
+    if (name.len == 0 or name.len > 253) return error.InvalidHostName;
+    var labels = mem.splitScalar(u8, name, '.');
+    while (labels.next()) |label| {
+        if (label.len == 0 or label.len > 63) return error.InvalidHostName;
+        for (label) |c| {
+            if (!std.ascii.isAlphanumeric(c) and c != '-' and c != '_') return error.InvalidHostName;
+        }
+    }
+    return .{ .bytes = host };
 }
 
 fn connectFailed(diag: *Diagnostic, host: []const u8, port: u16, err: anyerror) Error {
@@ -720,4 +735,11 @@ test "a large message's buffer is freed after the request, a small one's is kept
     try big.ensureTotalCapacity(std.testing.allocator, 2 * keep_big);
     trimBig(&big, std.testing.allocator);
     try std.testing.expectEqual(0, big.capacity);
+}
+
+test "container names with underscores are looked up, as libpq does" {
+    for ([_][]const u8{ "klik_postgres", "project_db_1", "db", "my_app.internal.", "a-b.example.com" }) |host|
+        try std.testing.expectEqualStrings(host, (try hostName(host)).bytes);
+    for ([_][]const u8{ "", ".", "a..b", ".db", "has space", "semi;colon", "a" ** 64, ("a" ** 63 ++ ".") ** 4 }) |host|
+        try std.testing.expectError(error.InvalidHostName, hostName(host));
 }
