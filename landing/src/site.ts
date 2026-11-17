@@ -8,3 +8,10 @@ export const links = {
 
 export const installCmd =
 	"curl -fsSL https://raw.githubusercontent.com/dagimg-dot/zetta/main/install.sh | sh";
+
+/**
+ * One line, so pasting it does not run it before the URL is edited. Inside the
+ * container zetta needs a token; it prints a localhost link that carries it.
+ */
+export const dockerCmd =
+	"docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN=$(openssl rand -hex 16) -e DATABASE_URL=postgres://user:password@host:5432/app workflowjd/zetta";

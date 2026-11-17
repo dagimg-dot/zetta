@@ -3,7 +3,7 @@ import Icon from "./Icon.astro";
 import Screenshot from "./Screenshot.astro";
 import Tilt from "./Tilt.astro";
 import Version from "./Version.astro";
-import { installCmd, links } from "../site";
+import { dockerCmd, installCmd, links } from "../site";
 import { screens } from "../screens";
 ---
 
@@ -18,28 +18,54 @@ import { screens } from "../screens";
 		</a>
 
 		<h1 class="display reveal" style="--d:1">
-			A database explorer<br />
-			that fits in <span class="serif ember-text">three&nbsp;megabytes.</span>
+			Your database,<br />
+			in a <span class="serif ember-text">browser&nbsp;tab.</span>
 		</h1>
 
 		<p class="lede reveal" style="--d:2">
-			Point zetta at Postgres or SQLite. Browse and query in your browser, or run SQL from the
-			shell. It is one binary with its own Postgres client, TLS and SQLite inside.
+			One <code>docker run</code> or one binary under 3&nbsp;MB. Postgres and SQLite, nothing else to
+			install.
 		</p>
 
-		<div class="actions reveal" style="--d:3">
-			<div class="cmd">
-				<span class="prompt">$</span>
-				<code>curl -fsSL <span class="dim">…/zetta/main/</span>install.sh | sh</code>
-				<button class="copy" data-copy={installCmd} aria-label="Copy the install command">
-					<Icon name="copy" size={16} class="i-copy" />
-					<Icon name="check" size={16} class="i-check" />
+		<div class="try reveal" style="--d:3">
+			<div class="switch" role="tablist" aria-label="How to run zetta">
+				<button role="tab" id="try-tab-docker" aria-controls="try-docker" aria-selected="true">
+					Docker
+				</button>
+				<button role="tab" id="try-tab-script" aria-controls="try-script" aria-selected="false">
+					Install script
 				</button>
 			</div>
-			<a class="btn btn-ghost" href={links.repo} target="_blank" rel="noopener">
-				View on GitHub
-				<span class="knob"><Icon name="arrow" size={16} /></span>
-			</a>
+
+			<div class="actions">
+				<div class="cmd" role="tabpanel" id="try-docker" aria-labelledby="try-tab-docker">
+					<span class="prompt">$</span>
+					<code>docker run <span class="dim">…</span> -e DATABASE_URL=<span class="dim">…</span> workflowjd/zetta</code>
+					<button class="copy" data-copy={dockerCmd} aria-label="Copy the docker run command">
+						<Icon name="copy" size={16} class="i-copy" />
+						<Icon name="check" size={16} class="i-check" />
+					</button>
+				</div>
+				<div class="cmd" role="tabpanel" id="try-script" aria-labelledby="try-tab-script" hidden>
+					<span class="prompt">$</span>
+					<code>curl -fsSL <span class="dim">…/zetta/main/</span>install.sh | sh</code>
+					<button class="copy" data-copy={installCmd} aria-label="Copy the install command">
+						<Icon name="copy" size={16} class="i-copy" />
+						<Icon name="check" size={16} class="i-check" />
+					</button>
+				</div>
+				<a class="btn btn-ghost" href={links.repo} target="_blank" rel="noopener">
+					View on GitHub
+					<span class="knob"><Icon name="arrow" size={16} /></span>
+				</a>
+			</div>
+
+			<p class="hint" data-for="try-docker">
+				Set your database URL, run it, then open the localhost link it prints.
+			</p>
+			<p class="hint" data-for="try-script" hidden>
+				Then open any database with <code>zetta app.db</code> or a <code>postgres://</code> URL.
+			</p>
 		</div>
 	</div>
 
@@ -61,6 +87,22 @@ import { screens } from "../screens";
 		</Tilt>
 	</div>
 </section>
+
+<script>
+	const tabs = [...document.querySelectorAll<HTMLButtonElement>(".try [role=tab]")];
+	for (const tab of tabs) {
+		tab.addEventListener("click", () => {
+			for (const t of tabs) {
+				const on = t === tab;
+				const id = t.getAttribute("aria-controls") ?? "";
+				t.setAttribute("aria-selected", String(on));
+				for (const el of document.querySelectorAll<HTMLElement>(`#${id}, .hint[data-for="${id}"]`)) {
+					el.hidden = !on;
+				}
+			}
+		});
+	}
+</script>
 
 <style>
 	.hero {
@@ -93,6 +135,10 @@ import { screens } from "../screens";
 		transform: translateX(-50%);
 		background: radial-gradient(closest-side, var(--glow), transparent 70%);
 		filter: blur(40px);
+	}
+
+	.intro .lede {
+		text-wrap: balance;
 	}
 
 	.intro {
@@ -136,15 +182,79 @@ import { screens } from "../screens";
 		font-weight: 500;
 	}
 
+	.try {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+		max-width: 100%;
+		margin-top: 8px;
+	}
+
+	.try > * {
+		max-width: 100%;
+	}
+
+	.switch {
+		display: flex;
+		gap: 2px;
+		padding: 3px;
+		border-radius: 999px;
+		background: var(--tint);
+		box-shadow: inset 0 0 0 1px var(--hair);
+	}
+
+	.switch button {
+		padding: 5px 14px;
+		border-radius: 999px;
+		font-size: 13px;
+		color: var(--fg-3);
+		transition:
+			background-color 400ms var(--ease),
+			color 400ms var(--ease);
+	}
+
+	.switch button:hover {
+		color: var(--fg);
+	}
+
+	.switch button[aria-selected="true"] {
+		background: var(--raised);
+		box-shadow:
+			inset 0 0 0 1px var(--hair),
+			0 1px 3px var(--shadow);
+		color: var(--fg);
+	}
+
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: center;
 		gap: 12px;
-		margin-top: 8px;
+	}
+
+	.cmd[hidden] {
+		display: none;
+	}
+
+	.cmd:not([hidden]) {
+		animation: rise 400ms var(--ease-out);
+	}
+
+	.hint {
+		margin: 0;
+		font-size: 13.5px;
+		color: var(--fg-3);
+	}
+
+	.hint code {
+		font-size: 0.92em;
+		color: var(--fg-2);
 	}
 
 	.cmd {
+		width: 530px;
+		max-width: 100%;
 		display: flex;
 		align-items: center;
 		gap: 12px;
@@ -160,6 +270,9 @@ import { screens } from "../screens";
 	}
 
 	.cmd code {
+		flex: 1;
+		min-width: 0;
+		text-align: left;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -268,6 +381,7 @@ import { screens } from "../screens";
 			--r-xl: 16px;
 			--bezel: 4px;
 		}
+		.try,
 		.actions,
 		.cmd {
 			width: 100%;
