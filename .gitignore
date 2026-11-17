@@ -29,3 +29,5 @@ landing/.astro/
 landing/public/demo/zetta.wasm
 landing/public/demo/demo.db
 
+# Build tools fetched by landing/scripts/netlify-build.sh
+/.tools/

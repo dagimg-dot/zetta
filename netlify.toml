@@ -1,0 +1,14 @@
+# The landing page in landing/ and its in-browser demo. The demo compiles zetta to wasm, so the
+# build runs from the repository root; landing/scripts/netlify-build.sh fetches Zig and Bun.
+[build]
+  command = "bash landing/scripts/netlify-build.sh"
+  publish = "landing/dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+# Astro fingerprints these file names, so they can be cached for good.
+[[headers]]
+  for = "/_astro/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
