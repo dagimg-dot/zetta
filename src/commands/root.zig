@@ -44,5 +44,6 @@ pub fn run(ctx: *Context, command: Cli.Command) !cli.ExitCode {
 }
 
 test {
+    _ = @import("Context.zig");
     _ = @import("serve.zig");
 }

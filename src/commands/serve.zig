@@ -13,6 +13,7 @@ pub const Args = struct {
     allowed_hosts: ?[]const u8 = null,
     read_only: bool = false,
     statement_timeout: u32 = 30_000,
+    wait: u32 = 0,
     open: ?bool = null,
 
     pub const about =
@@ -63,6 +64,12 @@ pub const Args = struct {
         \\A query that times out can be run again from the SQL tab with up to ten times this,
         \\at most ten minutes.
         },
+        .{ .field = "wait", .value_name = "SECONDS", .env = &.{"ZETTA_WAIT"}, .help =
+        \\Keep trying to reach the database for this many seconds at startup
+        \\
+        \\For a database that starts alongside zetta, as in Docker Compose, and refuses
+        \\connections for its first moments. 0 tries once. The Docker image sets 30.
+        },
         .{ .field = "open", .negatable = true, .help = "Open the UI in a browser (default: when stdout is a terminal)" },
     };
     pub const examples = [_]cli.Example{
@@ -82,7 +89,7 @@ pub fn run(ctx: *Context, args: Args) !cli.ExitCode {
         .needs_plain_http_consent => return ctx.usageError("--host {s} would send the token and every row unencrypted, since zetta speaks only HTTP; use an SSH tunnel to 127.0.0.1, or set --allow-plain-http (or ZETTA_ALLOW_PLAIN_HTTP) to accept that", .{args.host}),
     }
 
-    const adapter = switch (ctx.openDatabase(args.dsn.?, .{ .read_only = args.read_only })) {
+    const adapter = switch (ctx.openDatabaseWaiting(args.dsn.?, .{ .read_only = args.read_only }, args.wait)) {
         .ok => |a| a,
         .exit => |code| return code,
     };
