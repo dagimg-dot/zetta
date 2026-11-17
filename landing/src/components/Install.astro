@@ -1,6 +1,6 @@
 ---
 import Icon from "./Icon.astro";
-import { installCmd, links } from "../site";
+import { composeYaml, installCmd, links } from "../site";
 
 const methods = [
 	{
@@ -20,6 +20,12 @@ const methods = [
 		label: "Docker",
 		code: 'export ZETTA_TOKEN=$(openssl rand -hex 16)\ndocker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN \\\n  -e DATABASE_URL=postgres://user:password@db:5432/app workflowjd/zetta',
 		note: "A static binary on scratch for amd64 and arm64, also on ghcr.io/dagimg-dot/zetta. Open http://localhost:1993/?token=$ZETTA_TOKEN.",
+	},
+	{
+		id: "compose",
+		label: "Docker Compose",
+		code: composeYaml.trimEnd(),
+		note: "Put ZETTA_TOKEN in .env, run docker compose up, and open the link docker compose logs zetta prints. zetta waits up to 30 seconds for the database to start.",
 	},
 	{
 		id: "source",
