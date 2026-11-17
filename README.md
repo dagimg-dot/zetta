@@ -16,10 +16,10 @@ Browse and query in your browser, or run SQL from the shell.</p>
 </p>
 
 <p>
+<a href="#features">Features</a> ·
 <a href="#install">Install</a> ·
 <a href="#usage">Usage</a> ·
 <a href="#docker">Docker</a> ·
-<a href="#features">Features</a> ·
 <a href="#development">Development</a>
 </p>
 
@@ -30,6 +30,18 @@ Browse and query in your browser, or run SQL from the shell.</p>
 <br><sub>SQLite: a query in the SQL editor, its results, and a JSON value formatted in the inspector</sub>
 
 </div>
+
+## Features
+
+| | |
+|---|---|
+| **Browse** | Every schema, table, view and function. A grid that pages through any table, with filters and sorting from a builder or your own `WHERE` and `ORDER BY`. |
+| **Inspect** | Each row formatted, JSON included, with foreign keys you can follow. Each table's structure, indexes, triggers, DDL and relationships. |
+| **Query** | A SQL editor with highlighting and completion. It runs the statement at the caret, the selection or the whole script, and asks before anything that destroys data. |
+| **Share** | Every view lives in the URL. Copy cells and rows as CSV, TSV, JSON or Markdown, or save them as a file. |
+| **Shell** | `zetta query` prints a table, CSV or JSON, and `zetta tables` lists what is there. Completions for bash, zsh and fish. |
+| **Safe** | Listens on `127.0.0.1` with a fresh token each run, and refuses other hosts and origins. `--read-only` is enforced in the database adapter, not the UI. Passwords never reach a log. |
+| **Small** | One binary with the UI embedded, its own Postgres client with TLS, and SQLite compiled in. No libpq, no OpenSSL. |
 
 ## Install
 
@@ -98,18 +110,6 @@ docker run --rm -p 127.0.0.1:1993:1993 -e ZETTA_TOKEN \
 Then open `http://localhost:1993/?token=$ZETTA_TOKEN`. Inside the container zetta listens on all interfaces, so it needs `ZETTA_TOKEN` (16 to 64 letters and digits). It serves plain HTTP, so keep the port on `127.0.0.1` unless a TLS proxy is in front. `--user` lets the container open a file you own.
 
 The image is a static binary on `scratch` for amd64 and arm64, also published as `ghcr.io/dagimg-dot/zetta`. `latest` is the newest release and `edge` follows `main`.
-
-## Features
-
-| | |
-|---|---|
-| **Browse** | Every schema, table, view and function. A grid that pages through any table, with filters and sorting from a builder or your own `WHERE` and `ORDER BY`. |
-| **Inspect** | Each row formatted, JSON included, with foreign keys you can follow. Each table's structure, indexes, triggers, DDL and relationships. |
-| **Query** | A SQL editor with highlighting and completion. It runs the statement at the caret, the selection or the whole script, and asks before anything that destroys data. |
-| **Share** | Every view lives in the URL. Copy cells and rows as CSV, TSV, JSON or Markdown, or save them as a file. |
-| **Shell** | `zetta query` prints a table, CSV or JSON, and `zetta tables` lists what is there. Completions for bash, zsh and fish. |
-| **Safe** | Listens on `127.0.0.1` with a fresh token each run, and refuses other hosts and origins. `--read-only` is enforced in the database adapter, not the UI. Passwords never reach a log. |
-| **Small** | One binary with the UI embedded, its own Postgres client with TLS, and SQLite compiled in. No libpq, no OpenSSL. |
 
 <details>
 <summary><strong>Postgres support</strong></summary>
