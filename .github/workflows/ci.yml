@@ -137,19 +137,7 @@ jobs:
 
   binaries:
     needs: [web, zig]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { target: x86_64-linux-musl, name: linux-x86_64, runner: ubuntu-latest }
-          - { target: aarch64-linux-musl, name: linux-aarch64, runner: ubuntu-24.04-arm }
-          - { target: aarch64-macos, name: macos-aarch64, runner: macos-latest }
-          - { target: x86_64-windows, name: windows-x86_64, runner: windows-latest, exe: .exe }
-          - { target: aarch64-windows, name: windows-aarch64, runner: windows-11-arm, exe: .exe }
-    runs-on: ${{ matrix.runner }}
-    defaults:
-      run:
-        shell: bash
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
@@ -160,62 +148,87 @@ jobs:
           name: web-dist
           path: web/dist
 
-      - id: names
+      - name: Cross-compile and package every platform
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else version="${GITHUB_SHA::7}"; fi
-          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "package=zetta-$version-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+          mkdir -p pkg dist
+          for spec in \
+            x86_64-linux-musl:linux-x86_64 \
+            aarch64-linux-musl:linux-aarch64 \
+            aarch64-macos:macos-aarch64 \
+            x86_64-windows:windows-x86_64 \
+            aarch64-windows:windows-aarch64
+          do
+            target="${spec%%:*}" name="${spec#*:}" pkg="zetta-$version-${spec#*:}"
+            zig build -Doptimize=ReleaseSafe -Dtarget="$target" -Dcpu=baseline -Dui=prebuilt \
+              -Dcommit="${GITHUB_SHA::7}" --prefix "out/$name"
+            mkdir "pkg/$pkg"
+            cp out/"$name"/bin/* LICENSE README.md "pkg/$pkg/"
+            case "$name" in
+              windows-*) (cd pkg && zip -qr "../dist/$pkg.zip" "$pkg") ;;
+              *) tar -czf "dist/$pkg.tar.gz" -C pkg "$pkg" ;;
+            esac
+          done
+          ls -l dist
 
-      - run: >-
-          zig build
-          -Doptimize=ReleaseSafe
-          -Dtarget=${{ matrix.target }}
-          -Dcpu=baseline
-          -Dui=prebuilt
-          -Dcommit=${{ steps.names.outputs.commit }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binaries
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Smoke-test on the target's own OS and architecture
+  smoke:
+    needs: binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, runner: ubuntu-latest }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm }
+          - { name: macos-aarch64, runner: macos-latest }
+          - { name: windows-x86_64, runner: windows-latest }
+          - { name: windows-aarch64, runner: windows-11-arm }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: binaries
+          path: dist
+
+      - name: Unpack the archive and run it on its own platform
+        working-directory: dist
         run: |
-          bin="zig-out/bin/zetta${{ matrix.exe }}"
+          archive=$(ls zetta-*-${{ matrix.name }}.*)
+          dir="${archive%.tar.gz}" dir="${dir%.zip}"
+          case "$archive" in
+            *.zip) pwsh -NoProfile -Command "Expand-Archive -Path '$archive' -DestinationPath ." ;;
+            *) tar -xzf "$archive" ;;
+          esac
+          bin="$dir/zetta"
+          if [[ -f "$bin.exe" ]]; then bin="$bin.exe"; fi
           "$bin" --version
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            "$bin" --version | grep -q "^zetta ${{ steps.names.outputs.version }} " \
+            "$bin" --version | grep -q "^zetta ${GITHUB_REF_NAME#v} " \
               || { echo "tag $GITHUB_REF_NAME does not match the version in build.zig.zon" >&2; exit 1; }
           fi
           : > smoke.db
           "$bin" query smoke.db "create table t (x); insert into t values (42); select x from t" | grep -q 42
 
-      - name: Package
-        run: |
-          pkg="${{ steps.names.outputs.package }}"
-          mkdir "$pkg"
-          cp "zig-out/bin/zetta${{ matrix.exe }}" LICENSE README.md "$pkg/"
-          if [[ -n "${{ matrix.exe }}" ]]; then
-            pwsh -NoProfile -Command "Compress-Archive -Path '$pkg' -DestinationPath '$pkg.zip'"
-          else
-            tar -czf "$pkg.tar.gz" "$pkg"
-          fi
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.names.outputs.package }}
-          path: ${{ steps.names.outputs.package }}.*
-          if-no-files-found: error
-          retention-days: 7
-
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [binaries, image]
+    needs: [smoke, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: zetta-*
+          name: binaries
           path: dist
-          merge-multiple: true
       - run: sha256sum * > SHA256SUMS && cat SHA256SUMS
         working-directory: dist
       - run: >-
