@@ -1,6 +1,7 @@
 ---
 import Icon from "./Icon.astro";
 import Screenshot from "./Screenshot.astro";
+import Tilt from "./Tilt.astro";
 import { installCmd, links, version } from "../site";
 import { screens } from "../screens";
 ---
@@ -42,19 +43,21 @@ import { screens } from "../screens";
 	</div>
 
 	<div class="wrap stage">
-		<div class="window shell reveal" style="--d:4">
-			<div class="core">
-				<div class="chrome">
-					<span class="dots"><i></i><i></i><i></i></span>
-					<span class="url">
-						<Icon name="lock" size={12} />
-						127.0.0.1:1993
-					</span>
-					<span class="dots spacer" aria-hidden="true"></span>
+		<Tilt>
+			<div class="window shell reveal" style="--d:4">
+				<div class="core">
+					<div class="chrome">
+						<span class="dots"><i></i><i></i><i></i></span>
+						<span class="url">
+							<Icon name="lock" size={12} />
+							127.0.0.1:1993
+						</span>
+						<span class="dots spacer" aria-hidden="true"></span>
+					</div>
+					<Screenshot {...screens.postgres} eager class="shot" />
 				</div>
-				<Screenshot {...screens.postgres} eager class="shot" />
 			</div>
-		</div>
+		</Tilt>
 	</div>
 </section>
 
@@ -191,7 +194,6 @@ import { screens } from "../screens";
 
 	.stage {
 		margin-top: clamp(56px, 7vw, 96px);
-		perspective: 2000px;
 	}
 
 	.window {

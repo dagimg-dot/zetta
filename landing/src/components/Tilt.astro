@@ -1,0 +1,94 @@
+---
+interface Props {
+	/** Corner radius of the framed content, so the glare follows its shape. */
+	radius?: number;
+	class?: string;
+}
+
+const { radius = 22, class: cls } = Astro.props;
+---
+
+<div class:list={["scene", cls]} data-tilt>
+	<div class="tilt" style={`--radius:${radius}px`}>
+		<slot />
+		<span class="glare" aria-hidden="true"></span>
+	</div>
+</div>
+
+<script>
+	/*
+	 * The frame leans toward the mouse on a spring. Underdamping makes it overshoot
+	 * and settle, so it wobbles back to rest when the mouse leaves.
+	 */
+	const MAX_DEG = 6;
+	const STIFFNESS = 0.07;
+	const DAMPING = 0.8;
+
+	const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+	for (const scene of still ? [] : document.querySelectorAll<HTMLElement>("[data-tilt]")) {
+		const tilt = scene.firstElementChild as HTMLElement;
+		let target = { x: 0, y: 0 };
+		const pos = { x: 0, y: 0 };
+		const vel = { x: 0, y: 0 };
+		let frame = 0;
+
+		const step = () => {
+			for (const k of ["x", "y"] as const) {
+				vel[k] = (vel[k] + (target[k] - pos[k]) * STIFFNESS) * DAMPING;
+				pos[k] += vel[k];
+			}
+			tilt.style.setProperty("--ry", `${pos.x.toFixed(3)}deg`);
+			tilt.style.setProperty("--rx", `${pos.y.toFixed(3)}deg`);
+			const moving = Math.abs(vel.x) + Math.abs(vel.y) > 0.002;
+			const away = Math.abs(target.x - pos.x) + Math.abs(target.y - pos.y) > 0.002;
+			frame = moving || away ? requestAnimationFrame(step) : 0;
+		};
+
+		scene.addEventListener("pointermove", (e) => {
+			if (e.pointerType !== "mouse") return;
+			const r = scene.getBoundingClientRect();
+			const px = (e.clientX - r.left) / r.width - 0.5;
+			const py = (e.clientY - r.top) / r.height - 0.5;
+			target = { x: px * MAX_DEG * 2, y: -py * MAX_DEG * 2 };
+			tilt.style.setProperty("--gx", `${(px + 0.5) * 100}%`);
+			tilt.style.setProperty("--gy", `${(py + 0.5) * 100}%`);
+			if (!frame) frame = requestAnimationFrame(step);
+		});
+
+		scene.addEventListener("pointerleave", () => {
+			target = { x: 0, y: 0 };
+			if (!frame) frame = requestAnimationFrame(step);
+		});
+	}
+</script>
+
+<style>
+	.scene {
+		perspective: 1800px;
+	}
+
+	.tilt {
+		position: relative;
+		transform-style: preserve-3d;
+		transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+	}
+
+	.glare {
+		position: absolute;
+		inset: 0;
+		border-radius: var(--radius);
+		pointer-events: none;
+		background: radial-gradient(
+			700px circle at var(--gx, 50%) var(--gy, 50%),
+			light-dark(oklch(1 0 0 / 0.14), oklch(1 0 0 / 0.1)),
+			transparent 45%
+		);
+		opacity: 0;
+		transition: opacity 600ms var(--ease);
+	}
+
+	.scene:hover .glare {
+		opacity: 1;
+	}
+</style>

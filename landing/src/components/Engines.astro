@@ -1,5 +1,6 @@
 ---
 import Screenshot from "./Screenshot.astro";
+import Tilt from "./Tilt.astro";
 import { screens } from "../screens";
 
 const engines = [
@@ -25,17 +26,19 @@ const engines = [
 		</div>
 
 		<figure class="frame reveal" style="--d:2">
-			<div class="shell">
-				<div class="core stack">
-					{
-						engines.map((e, i) => (
-							<div class:list={["pane", { on: i === 0 }]} data-engine={e.id}>
-								<Screenshot light={e.light} dark={e.dark} alt={e.alt} class="shot" />
-							</div>
-						))
-					}
+			<Tilt>
+				<div class="shell">
+					<div class="core stack">
+						{
+							engines.map((e, i) => (
+								<div class:list={["pane", { on: i === 0 }]} data-engine={e.id}>
+									<Screenshot light={e.light} dark={e.dark} alt={e.alt} class="shot" />
+								</div>
+							))
+						}
+					</div>
 				</div>
-			</div>
+			</Tilt>
 			<figcaption class="stack">
 				{
 					engines.map((e, i) => (
