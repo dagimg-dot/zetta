@@ -11,23 +11,23 @@ import { screens } from "../screens";
 	<div class="backdrop" aria-hidden="true"></div>
 
 	<div class="wrap intro">
-		<a class="release reveal" href={links.releases} target="_blank" rel="noopener">
+		<a class="release enter" href={links.releases} target="_blank" rel="noopener">
 			<Version class="tag" />
 			Try the latest release
 			<Icon name="arrow" size={14} />
 		</a>
 
-		<h1 class="display reveal" style="--d:1">
+		<h1 class="display enter" style="--d:1">
 			Your database,<br />
 			in a <span class="serif ember-text">browser&nbsp;tab.</span>
 		</h1>
 
-		<p class="lede reveal" style="--d:2">
+		<p class="lede enter" style="--d:2">
 			One <code>docker run</code> or one binary under 3&nbsp;MB. Postgres and SQLite, nothing else to
 			install.
 		</p>
 
-		<div class="try reveal" style="--d:3">
+		<div class="try enter" style="--d:3">
 			<div class="switch" role="tablist" aria-label="How to run zetta">
 				<button role="tab" id="try-tab-docker" aria-controls="try-docker" aria-selected="true">
 					Docker
@@ -69,9 +69,9 @@ import { screens } from "../screens";
 		</div>
 	</div>
 
-	<div class="wrap stage">
+	<div class="wrap stage lift">
 		<Tilt>
-			<div class="window shell reveal" style="--d:4">
+			<div class="window shell">
 				<div class="core">
 					<div class="chrome">
 						<span class="dots"><i></i><i></i><i></i></span>
@@ -133,8 +133,8 @@ import { screens } from "../screens";
 		width: min(1400px, 140vw);
 		aspect-ratio: 2.2;
 		transform: translateX(-50%);
-		background: radial-gradient(closest-side, var(--glow), transparent 70%);
-		filter: blur(40px);
+		/* A soft falloff instead of a blur filter, which costs a phone a long first paint. */
+		background: radial-gradient(closest-side, var(--glow), oklch(from var(--glow) l c h / 0.4) 35%, transparent 85%);
 	}
 
 	.intro .lede {
@@ -175,7 +175,8 @@ import { screens } from "../screens";
 	.release :global(.tag) {
 		padding: 3px 10px;
 		border-radius: 999px;
-		background: var(--ember);
+		/* Darker than the ember so 12px white text clears 4.5:1. */
+		background: #c2410c;
 		color: #fff;
 		font-family: var(--font-mono);
 		font-size: 12px;
@@ -328,7 +329,7 @@ import { screens } from "../screens";
 
 	@supports (animation-timeline: view()) {
 		@media (prefers-reduced-motion: no-preference) {
-			.window.in {
+			.window {
 				animation: tilt linear both;
 				animation-timeline: view();
 				animation-range: entry 0% cover 45%;

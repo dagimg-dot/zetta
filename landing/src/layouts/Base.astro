@@ -1,4 +1,5 @@
 ---
+import { Font } from "astro:assets";
 import "../styles/global.css";
 
 interface Props {
@@ -22,6 +23,10 @@ const { title, description } = Astro.props;
 		<meta property="og:description" content={description} />
 		<meta property="og:type" content="website" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<Font cssVariable="--font-lexend" preload />
+		<Font cssVariable="--font-instrument" preload />
+		<Font cssVariable="--font-code" />
+		<link rel="preconnect" href="https://api.github.com" crossorigin />
 		<script is:inline>
 			document.documentElement.classList.remove("no-js");
 			try {
@@ -35,6 +40,21 @@ const { title, description } = Astro.props;
 	<body>
 		<slot />
 		<script>
+			/*
+			 * Screenshots show the app in the opposite theme to the page. Their <source> follows
+			 * the OS; when [data-theme] overrides it, pin the source on or off to match.
+			 */
+			const root = document.documentElement;
+			const syncShots = () => {
+				const t = root.dataset.theme;
+				const media = t === "dark" ? "all" : t === "light" ? "not all" : "(prefers-color-scheme: dark)";
+				for (const s of document.querySelectorAll<HTMLSourceElement>("source[data-dark-page]")) {
+					if (s.media !== media) s.media = media;
+				}
+			};
+			syncShots();
+			new MutationObserver(syncShots).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
 			const io = new IntersectionObserver(
 				(entries) => {
 					for (const e of entries) {
