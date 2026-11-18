@@ -3,6 +3,40 @@
  * The OS picks by default and [data-theme] on <html> overrides it. A subtree
  * can set its own color-scheme (the terminal is always dark).
  */
+/*
+ * Arial, Times New Roman and Courier New have metric twins on Linux (Liberation, and Arimo,
+ * Tinos and Cousine on ChromeOS) that local() does not find by the original name. These take
+ * the overrides Astro computes for the originals, so the web fonts swap in without a shift.
+ */
+@font-face {
+	font-family: "Lexend clone";
+	src: local("Liberation Sans"), local("Arimo");
+	font-weight: 100 900;
+	size-adjust: 109.9146%;
+	ascent-override: 90.9798%;
+	descent-override: 22.7449%;
+	line-gap-override: 0%;
+}
+
+@font-face {
+	font-family: "Instrument Serif clone";
+	src: local("Liberation Serif Italic"), local("Liberation Serif"), local("Tinos Italic"), local("Tinos");
+	font-style: italic;
+	size-adjust: 88.3692%;
+	ascent-override: 112.0299%;
+	descent-override: 35.0801%;
+	line-gap-override: 0%;
+}
+
+@font-face {
+	font-family: "Source Code Pro clone";
+	src: local("Liberation Mono"), local("Cousine");
+	font-weight: 200 900;
+	size-adjust: 99.9837%;
+	ascent-override: 98.416%;
+	descent-override: 27.3044%;
+}
+
 :root {
 	color-scheme: light dark;
 

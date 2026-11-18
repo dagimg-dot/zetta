@@ -1,6 +1,10 @@
 import { defineConfig, fontProviders } from "astro/config";
 
-/** Each family ships only its latin file; other scripts fall back to the system font. */
+/**
+ * Each family ships only its latin file; other scripts fall back to the system font. Astro
+ * sizes a fallback face for each font its last fallback names, so that the swap moves nothing.
+ * The "clone" families in global.css cover Linux, which has Arial's metric twins but not Arial.
+ */
 const latin = (file, weight, style = "normal") => ({
 	src: [file],
 	weight,
@@ -21,7 +25,7 @@ export default defineConfig({
 			provider: fontProviders.local(),
 			name: "Lexend",
 			cssVariable: "--font-lexend",
-			fallbacks: ["system-ui", "sans-serif"],
+			fallbacks: ["Lexend clone", "system-ui"],
 			options: {
 				variants: [latin("@fontsource-variable/lexend/files/lexend-latin-wght-normal.woff2", "100 900")],
 			},
@@ -30,7 +34,7 @@ export default defineConfig({
 			provider: fontProviders.local(),
 			name: "Source Code Pro",
 			cssVariable: "--font-code",
-			fallbacks: ["ui-monospace", "Menlo", "monospace"],
+			fallbacks: ["Source Code Pro clone", "ui-monospace", "Menlo", "monospace"],
 			options: {
 				variants: [
 					latin("@fontsource-variable/source-code-pro/files/source-code-pro-latin-wght-normal.woff2", "200 900"),
@@ -41,7 +45,7 @@ export default defineConfig({
 			provider: fontProviders.local(),
 			name: "Instrument Serif",
 			cssVariable: "--font-instrument",
-			fallbacks: ["Georgia", "serif"],
+			fallbacks: ["Instrument Serif clone", "Georgia", "serif"],
 			options: {
 				variants: [
 					latin("@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2", 400, "italic"),
