@@ -3,6 +3,7 @@ import Base from "../layouts/Base.astro";
 import Bento from "../components/Bento.astro";
 import Compose from "../components/Compose.astro";
 import Engines from "../components/Engines.astro";
+import Faq from "../components/Faq.astro";
 import Finale from "../components/Finale.astro";
 import Hero from "../components/Hero.astro";
 import Install from "../components/Install.astro";
@@ -12,12 +13,77 @@ import Nav from "../components/Nav.astro";
 import Security from "../components/Security.astro";
 import Shell from "../components/Shell.astro";
 import Stats from "../components/Stats.astro";
+import { getImage } from "astro:assets";
+import { faq, links, meta, release } from "../site";
+import { screens } from "../screens";
+
+const site = Astro.site ?? new URL("https://tryzetta.netlify.app");
+const abs = (path: string) => new URL(path, site).href;
+const shots = await Promise.all(
+	[screens.postgres.dark, screens.sqlite.dark].map((src) => getImage({ src, width: 1200, format: "webp" })),
+);
+
+const schema = [
+	{
+		"@type": "WebSite",
+		"@id": abs("/#website"),
+		url: abs("/"),
+		name: meta.name,
+		description: meta.description,
+		inLanguage: "en",
+	},
+	{
+		"@type": "SoftwareApplication",
+		"@id": abs("/#app"),
+		name: meta.name,
+		description: meta.description,
+		url: abs("/"),
+		image: abs(meta.ogImage),
+		screenshot: shots.map((s) => abs(s.src)),
+		applicationCategory: "DeveloperApplication",
+		applicationSubCategory: "Database explorer",
+		operatingSystem: "Linux, macOS, Windows, Docker",
+		...(release && { softwareVersion: release }),
+		downloadUrl: links.releases,
+		installUrl: abs("/#install"),
+		license: "https://opensource.org/licenses/MIT",
+		isAccessibleForFree: true,
+		offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+		featureList: [
+			"Browse schemas, tables, views and functions",
+			"Filter and sort any table without writing SQL",
+			"SQL editor with highlighting and completion",
+			"Follow foreign keys in a row inspector",
+			"Every view lives in the URL",
+			"Copy rows as CSV, TSV, JSON or Markdown",
+			"zetta query prints a table, CSV or JSON from the shell",
+			"Read-only mode enforced in the database adapter",
+			"Native Postgres wire protocol with TLS, SQLite compiled in",
+		],
+		sameAs: [links.repo, links.docker],
+	},
+	{
+		"@type": "SoftwareSourceCode",
+		"@id": abs("/#code"),
+		name: meta.name,
+		codeRepository: links.repo,
+		programmingLanguage: ["Zig", "TypeScript"],
+		license: "https://opensource.org/licenses/MIT",
+		targetProduct: { "@id": abs("/#app") },
+	},
+	{
+		"@type": "FAQPage",
+		"@id": abs("/#faq"),
+		mainEntity: faq.map((f) => ({
+			"@type": "Question",
+			name: f.q,
+			acceptedAnswer: { "@type": "Answer", text: f.a },
+		})),
+	},
+];
 ---
 
-<Base
-	title="zetta · Your database, in a browser tab"
-	description="Browse and query Postgres and SQLite in your browser, or run SQL from the shell. Start it with one docker run or a single binary under 3 MB."
->
+<Base title={meta.title} description={meta.description} schema={schema}>
 	<Nav />
 	<main>
 		<Hero />
@@ -30,6 +96,7 @@ import Stats from "../components/Stats.astro";
 		<Security />
 		<Internals />
 		<Install />
+		<Faq />
 	</main>
 	<Finale />
 </Base>

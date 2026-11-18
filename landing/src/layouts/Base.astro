@@ -1,13 +1,23 @@
 ---
 import { Font } from "astro:assets";
 import "../styles/global.css";
+import { meta } from "../site";
 
 interface Props {
 	title: string;
 	description: string;
+	/** Structured data for this page, as schema.org objects that join one @graph. */
+	schema?: Record<string, unknown>[];
+	noindex?: boolean;
 }
 
-const { title, description } = Astro.props;
+const { title, description, schema = [], noindex = false } = Astro.props;
+const site = Astro.site ?? new URL("https://tryzetta.netlify.app");
+const canonical = new URL(Astro.url.pathname, site).href;
+const ogImage = new URL(meta.ogImage, site).href;
+const ld = schema.length
+	? JSON.stringify({ "@context": "https://schema.org", "@graph": schema }).replace(/</g, "\\u003c")
+	: null;
 ---
 
 <!doctype html>
@@ -15,18 +25,12 @@ const { title, description } = Astro.props;
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#faf8f6" media="(prefers-color-scheme: light)" />
-		<meta name="theme-color" content="#0f0d0c" media="(prefers-color-scheme: dark)" />
 		<title>{title}</title>
 		<meta name="description" content={description} />
-		<meta property="og:title" content={title} />
-		<meta property="og:description" content={description} />
-		<meta property="og:type" content="website" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<Font cssVariable="--font-lexend" preload />
-		<Font cssVariable="--font-instrument" preload />
-		<Font cssVariable="--font-code" />
-		<link rel="preconnect" href="https://api.github.com" crossorigin />
+		{noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+		<meta name="theme-color" content="#faf8f6" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#0f0d0c" media="(prefers-color-scheme: dark)" />
+
 		<script is:inline>
 			document.documentElement.classList.remove("no-js");
 			try {
@@ -36,6 +40,33 @@ const { title, description } = Astro.props;
 				// Storage can be blocked; the page then follows the OS.
 			}
 		</script>
+
+		<Font cssVariable="--font-lexend" preload />
+		<Font cssVariable="--font-instrument" preload />
+		<Font cssVariable="--font-code" />
+		<link rel="preconnect" href="https://api.github.com" crossorigin />
+
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="alternate" type="text/plain" href="/llms.txt" title="zetta for language models" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content={meta.name} />
+		<meta property="og:locale" content="en_US" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:image" content={ogImage} />
+		<meta property="og:image:type" content="image/png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content={meta.ogImageAlt} />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={ogImage} />
+		<meta name="twitter:image:alt" content={meta.ogImageAlt} />
+		{ld && <script type="application/ld+json" set:html={ld} />}
 	</head>
 	<body>
 		<slot />

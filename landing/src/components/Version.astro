@@ -1,4 +1,6 @@
 ---
+import { release } from "../site";
+
 interface Props {
 	class?: string;
 }
@@ -6,13 +8,14 @@ interface Props {
 const { class: cls } = Astro.props;
 ---
 
-<span class:list={["version", cls]} data-version hidden></span>
+<span class:list={["version", cls]} data-version hidden={!release}>{release && `v${release}`}</span>
 
 <script>
 	/*
-	 * Fills every [data-version] with the latest release tag from GitHub. They stay
-	 * hidden until it arrives, so the page never shows a stale or made-up number.
-	 * The tag is kept for an hour to stay well inside GitHub's anonymous rate limit.
+	 * The build fills every [data-version] with the release that was latest then. This checks
+	 * GitHub for a newer one, and keeps the answer an hour to stay well inside the anonymous
+	 * rate limit. Without a build-time tag the slots stay hidden until the answer arrives, so
+	 * the page never shows a made-up number.
 	 */
 	const API = "https://api.github.com/repos/dagimg-dot/zetta/releases/latest";
 	const KEY = "zetta-site.release";
@@ -51,19 +54,22 @@ const { class: cls } = Astro.props;
 			try {
 				tag = await fetchTag();
 			} catch {
-				// Offline or blocked; the version simply stays hidden.
+				// Offline or blocked; the build-time tag, if any, stays.
 				return;
 			}
 		}
 		if (!tag) return;
 		const label = `v${tag.replace(/^v/, "")}`;
 		for (const el of slots) {
+			if (el.textContent === label) continue;
 			el.textContent = label;
 			el.hidden = false;
 		}
 	}
 
-	void fill();
+	// Off the critical path: the tag is already in the page for almost every visit.
+	const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1));
+	idle(() => void fill());
 </script>
 
 <style>

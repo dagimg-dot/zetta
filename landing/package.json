@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "demo": "bun scripts/demo.ts",
+    "og": "bun scripts/og.ts",
     "build": "bun run demo && astro build",
     "preview": "astro preview",
     "serve": "bun scripts/serve.ts",
