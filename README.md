@@ -16,6 +16,8 @@ Browse and query in your browser, or run SQL from the shell.</p>
 </p>
 
 <p>
+<a href="https://tryzetta.netlify.app"><strong>Website</strong></a> ·
+<a href="https://tryzetta.netlify.app/demo/"><strong>Live demo</strong></a> ·
 <a href="#features">Features</a> ·
 <a href="#install">Install</a> ·
 <a href="#usage">Usage</a> ·
