@@ -10,6 +10,7 @@ import { createRequest, createResponseCache } from "../../lib/request";
 import { type Pane, setView, view } from "../../stores/view";
 import { DdlPane } from "./Ddl";
 import { IndexesPane } from "./Indexes";
+import { InsertPane } from "./Insert";
 import { Relationships } from "./Relationships";
 import { RowsPane } from "./RowsPane";
 import { StructurePane } from "./Structure";
@@ -25,6 +26,7 @@ const kindLabel: Record<string, string> = {
 
 const tabs: { pane: Pane; label: string; count?: (d: TableDetail) => number }[] = [
 	{ pane: "rows", label: "Rows" },
+	{ pane: "insert", label: "Insert" },
 	{ pane: "structure", label: "Structure", count: (d) => d.columns.length },
 	{ pane: "indexes", label: "Indexes", count: (d) => d.indexes.length },
 	{
@@ -48,6 +50,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 export function TablePane(props: {
 	active: boolean;
 	approxRows: (schema: string, table: string) => number | null;
+	readOnly: boolean;
 	filterRef?: (el: HTMLInputElement) => void;
 }) {
 	const target = createMemo(
@@ -255,6 +258,9 @@ export function TablePane(props: {
 									>
 										{(d) => (
 											<Switch>
+												<Match when={view().pane === "insert"}>
+													<InsertPane detail={d()} readOnly={props.readOnly} />
+												</Match>
 												<Match when={view().pane === "structure"}>
 													<StructurePane detail={d()} />
 												</Match>

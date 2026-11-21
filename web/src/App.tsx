@@ -220,6 +220,7 @@ export function App() {
 						<TablePane
 							active={view().tab === "data"}
 							approxRows={approxRows}
+							readOnly={meta.data()?.readOnly ?? false}
 							filterRef={(el) => {
 								filter = el;
 							}}

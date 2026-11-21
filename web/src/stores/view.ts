@@ -1,9 +1,24 @@
 import { createSignal } from "solid-js";
 
 export type Tab = "data" | "sql";
-export type Pane = "rows" | "structure" | "indexes" | "relationships" | "triggers" | "ddl";
+export type Pane =
+	| "rows"
+	| "insert"
+	| "structure"
+	| "indexes"
+	| "relationships"
+	| "triggers"
+	| "ddl";
 
-const panes: readonly Pane[] = ["rows", "structure", "indexes", "relationships", "triggers", "ddl"];
+const panes: readonly Pane[] = [
+	"rows",
+	"insert",
+	"structure",
+	"indexes",
+	"relationships",
+	"triggers",
+	"ddl",
+];
 
 /** Page sizes the rows view offers; anything else in the URL falls back to the default. */
 export const pageSizes = [50, 100, 250, 500, 1000] as const;

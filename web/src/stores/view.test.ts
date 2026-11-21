@@ -30,3 +30,10 @@ test("no hide parameter means nothing hidden, and repeats and blanks are dropped
 	expect(parse("?hide=a&hide=&hide=a&hide=b").hide).toEqual(["a", "b"]);
 	expect(serialize({ ...parse(""), table: "t" })).toBe("?table=t");
 });
+
+test("the insert pane is kept in the URL, and an unknown pane falls back to rows", () => {
+	const url = serialize({ ...parse(""), table: "t", pane: "insert" });
+	expect(url).toBe("?table=t&view=insert");
+	expect(parse(url.slice(1)).pane).toBe("insert");
+	expect(parse("?table=t&view=nope").pane).toBe("rows");
+});
