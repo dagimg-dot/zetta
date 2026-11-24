@@ -1,0 +1,56 @@
+/* Insert pane: a field per column, the statement it makes, and what came back */
+.insert-table td {
+	vertical-align: middle;
+}
+
+.insert-table .wide {
+	width: 100%;
+	min-width: 220px;
+}
+
+.insert-table .segmented .seg {
+	font-size: var(--text-xs);
+	padding: var(--space-0-5) var(--space-1-5);
+}
+
+.insert-table input {
+	font-size: var(--text-sm);
+}
+
+/* A refused insert lines up with the sections above it. */
+.insert > .error {
+	margin: 0;
+}
+
+.insert-sql {
+	flex: none;
+}
+
+.insert-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+}
+
+.insert-done {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.insert-done > p {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin: 0;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-md);
+	background: var(--surface-success);
+	color: var(--text-success);
+}
+
+@media (max-width: 760px) {
+	.insert-table .wide {
+		min-width: 160px;
+	}
+}
