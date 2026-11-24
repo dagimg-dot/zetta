@@ -31,6 +31,11 @@ pub const Settings = struct {
     read_only: bool,
 };
 
+/// libpq waits on the kernel when connect_timeout is unset, which is two minutes or more
+/// for a host whose firewall drops packets. zetta gives up sooner and says why; 0 still
+/// waits as long as the kernel does.
+pub const default_connect_timeout_s = 10;
+
 /// Debian, Arch and Fedora patch libpq to /run/postgresql; upstream uses /tmp.
 const default_socket_dirs = [_][]const u8{ "/run/postgresql", "/tmp" };
 
@@ -112,7 +117,7 @@ pub fn resolveOn(
         };
         // libpq treats anything below 2 seconds, other than 0, as 2.
         break :blk if (v == 0) null else @max(v, 2);
-    } else null;
+    } else default_connect_timeout_s;
 
     var password = cfg.password orelse envGet(env, "PGPASSWORD");
     if (password == null) {
@@ -215,6 +220,16 @@ test "environment fills what the string leaves out, and the string wins" {
     try testing.expectEqualStrings("envuser", s.user);
     try testing.expectEqualStrings("app", s.dbname);
     try testing.expectEqual(conninfo.SslMode.require, s.sslmode);
+}
+
+test "connect_timeout defaults to a bound, and 0 waits as long as the kernel does" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var diag: Diagnostic = .{};
+    try testing.expectEqual(default_connect_timeout_s, (try resolve(arena, testing.io, .{}, null, false, &diag)).connect_timeout_s);
+    try testing.expectEqual(null, (try resolve(arena, testing.io, .{ .connect_timeout = "0" }, null, false, &diag)).connect_timeout_s);
+    try testing.expectEqual(2, (try resolve(arena, testing.io, .{ .connect_timeout = "1" }, null, false, &diag)).connect_timeout_s);
 }
 
 test "a socket directory host means a Unix socket" {

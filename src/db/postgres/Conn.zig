@@ -212,43 +212,83 @@ fn attempt(config: Config, ssl: Ssl, diag: *Diagnostic) AttemptError!Conn {
     return conn;
 }
 
-fn openSocket(io: Io, s: *const Settings, diag: *Diagnostic) Error!Io.net.Stream {
-    const timeout: Io.Timeout = if (s.connect_timeout_s) |t|
-        .{ .duration = .{ .raw = Io.Duration.fromSeconds(t), .clock = .awake } }
-    else
-        .none;
+const Dial = union(enum) {
+    stream: Error!Io.net.Stream,
+    timer: Io.Cancelable!void,
+};
 
-    if (s.host) |host| {
-        if (s.hostaddr) |addr_text| {
-            const addr = Io.net.IpAddress.parse(addr_text, s.port) catch {
-                diag.print("could not parse network address \"{s}\"", .{addr_text});
-                return error.ConnectFailed;
-            };
-            return addr.connect(io, .{ .mode = .stream, .timeout = timeout }) catch |err|
-                return connectFailed(diag, addr_text, s.port, err);
-        }
-        if (Io.net.IpAddress.parse(host, s.port)) |addr| {
-            return addr.connect(io, .{ .mode = .stream, .timeout = timeout }) catch |err|
-                return connectFailed(diag, host, s.port, err);
-        } else |_| {}
-        const name = hostName(host) catch {
-            diag.print("could not translate host name \"{s}\" to address: invalid host name", .{host});
+/// Races the TCP connect against connect_timeout. std 0.16 panics when handed a connect
+/// timeout, so the connect itself waits and is canceled when the timer wins.
+fn openSocket(io: Io, s: *const Settings, diag: *Diagnostic) Error!Io.net.Stream {
+    const host = s.host orelse return openUnixSocket(io, s, diag);
+    const seconds = s.connect_timeout_s orelse return dial(io, s, host, diag);
+
+    var buffer: [2]Dial = undefined;
+    var race: Io.Select(Dial) = .init(io, &buffer);
+    defer settle(io, &race);
+    race.concurrent(.timer, Io.sleep, .{ io, .fromSeconds(seconds), .awake }) catch |err| {
+        log.debug("connecting without a timeout: {t}", .{err});
+        return dial(io, s, host, diag);
+    };
+    race.concurrent(.stream, dial, .{ io, s, host, diag }) catch |err| {
+        log.debug("connecting without a timeout: {t}", .{err});
+        settle(io, &race);
+        return dial(io, s, host, diag);
+    };
+    const first = race.await() catch {
+        diag.set("connecting was canceled");
+        return error.ConnectFailed;
+    };
+    switch (first) {
+        .stream => |result| return result,
+        .timer => {
+            // The canceled connect writes its own failure into diag, so it must end first.
+            settle(io, &race);
+            diag.print("connection to server at \"{s}\", port {d} failed: no answer within {d} s (set connect_timeout to wait longer)", .{ s.hostaddr orelse host, s.port, seconds });
+            return error.ConnectFailed;
+        },
+    }
+}
+
+/// Cancels what is still running and closes a connection that arrived too late.
+fn settle(io: Io, race: *Io.Select(Dial)) void {
+    while (race.cancel()) |loser| switch (loser) {
+        .stream => |result| if (result) |stream| stream.close(io) else |_| {},
+        .timer => {},
+    };
+}
+
+fn dial(io: Io, s: *const Settings, host: []const u8, diag: *Diagnostic) Error!Io.net.Stream {
+    const options: Io.net.IpAddress.ConnectOptions = .{ .mode = .stream };
+    if (s.hostaddr) |addr_text| {
+        const addr = Io.net.IpAddress.parse(addr_text, s.port) catch {
+            diag.print("could not parse network address \"{s}\"", .{addr_text});
             return error.ConnectFailed;
         };
-        return name.connect(io, s.port, .{ .mode = .stream, .timeout = timeout }) catch |err| switch (err) {
-            error.UnknownHostName,
-            error.NoAddressReturned,
-            error.NameServerFailure,
-            error.ResolvConfParseFailed,
-            error.DetectingNetworkConfigurationFailed,
-            => {
-                diag.print("could not translate host name \"{s}\" to address: {t}", .{ host, err });
-                return error.ConnectFailed;
-            },
-            else => return connectFailed(diag, host, s.port, err),
-        };
+        return addr.connect(io, options) catch |err| return connectFailed(diag, addr_text, s.port, err);
     }
+    if (Io.net.IpAddress.parse(host, s.port)) |addr| {
+        return addr.connect(io, options) catch |err| return connectFailed(diag, host, s.port, err);
+    } else |_| {}
+    const name = hostName(host) catch {
+        diag.print("could not translate host name \"{s}\" to address: invalid host name", .{host});
+        return error.ConnectFailed;
+    };
+    return name.connect(io, s.port, options) catch |err| switch (err) {
+        error.UnknownHostName,
+        error.NoAddressReturned,
+        error.NameServerFailure,
+        error.ResolvConfParseFailed,
+        error.DetectingNetworkConfigurationFailed,
+        => {
+            diag.print("could not translate host name \"{s}\" to address: {t}", .{ host, err });
+            return error.ConnectFailed;
+        },
+        else => return connectFailed(diag, host, s.port, err),
+    };
+}
 
+fn openUnixSocket(io: Io, s: *const Settings, diag: *Diagnostic) Error!Io.net.Stream {
     var last_path: [256]u8 = undefined;
     var last_len: usize = 0;
     var last_err: anyerror = error.FileNotFound;
@@ -742,4 +782,42 @@ test "container names with underscores are looked up, as libpq does" {
         try std.testing.expectEqualStrings(host, (try hostName(host)).bytes);
     for ([_][]const u8{ "", ".", "a..b", ".db", "has space", "semi;colon", "a" ** 64, ("a" ** 63 ++ ".") ** 4 }) |host|
         try std.testing.expectError(error.InvalidHostName, hostName(host));
+}
+
+test "a host that never answers fails after connect_timeout instead of hanging" {
+    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    const io = std.testing.io;
+    // Linux drops a SYN when the accept queue is full, as a firewall that drops packets does.
+    const local = try Io.net.IpAddress.parse("127.0.0.1", 0);
+    var server = try local.listen(io, .{ .kernel_backlog = 0 });
+    defer server.deinit(io);
+    const port = server.socket.address.getPort();
+    var queued: [2]?Io.net.Stream = .{ null, null };
+    defer for (queued) |q| if (q) |stream| stream.close(io);
+    queued[0] = try server.socket.address.connect(io, .{ .mode = .stream });
+
+    const settings: Settings = .{
+        .host = "127.0.0.1",
+        .hostaddr = null,
+        .socket_dirs = &.{},
+        .port = port,
+        .user = "u",
+        .password = null,
+        .dbname = "d",
+        .sslmode = .disable,
+        .sslrootcert = null,
+        .channel_binding_required = false,
+        .application_name = "zetta",
+        .options = null,
+        .connect_timeout_s = 1,
+        .read_only = false,
+    };
+    var diag: Diagnostic = .{};
+    const started = Io.Clock.awake.now(io);
+    if (openSocket(io, &settings, &diag)) |stream| {
+        queued[1] = stream;
+        return error.TestUnexpectedResult;
+    } else |err| try std.testing.expectEqual(error.ConnectFailed, err);
+    try std.testing.expect(started.durationTo(Io.Clock.awake.now(io)).toSeconds() < 5);
+    try std.testing.expectStringEndsWith(diag.message(), "no answer within 1 s (set connect_timeout to wait longer)");
 }
